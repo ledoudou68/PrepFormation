@@ -382,6 +382,32 @@ function enregistrerSession(donnees) {
       ecritures
     );
 
+    obtenirFeuilleItemsSessions_(classeur);
+
+    const lignesItemsSession =
+      donneesValidees.itemsTravailles.map(
+        function (idItem) {
+          return {
+            ID_SESSION_ITEM: Utilities.getUuid(),
+            ID_SESSION: idSession,
+            ID_ITEM: idItem,
+            DATE_CREATION: maintenant
+          };
+        }
+      );
+
+    ajouterLignesSession_(
+      classeur,
+      'ITEMS_SESSIONS',
+      lignesItemsSession,
+      [
+        'ID_SESSION_ITEM',
+        'ID_SESSION',
+        'ID_ITEM'
+      ],
+      ecritures
+    );
+
     const lignesEvaluations = donneesValidees.validations
       .map(function (validation) {
         return {
@@ -391,9 +417,7 @@ function enregistrerSession(donnees) {
           ID_ITEM: validation.idItem,
           NIVEAU: validation.acquis
             ? 'Acquis'
-            : validation.vu
-              ? 'En cours d’acquisition'
-              : 'Non acquis',
+            : 'Non acquis',
           REMARQUE: validation.commentaire,
           DATE_CREATION: maintenant,
           DATE_MODIFICATION: maintenant
@@ -532,13 +556,49 @@ function verifierSession_(donnees) {
       });
     });
 
+  const validationsRecues = Array.isArray(
+    donnees.validations
+  )
+    ? donnees.validations
+    : [];
+
+  /*
+   * Le repli sur les anciennes validations permet à une
+   * interface encore en cache, qui enverrait VU sans la
+   * nouvelle liste commune, de continuer à enregistrer la
+   * séance sans perdre les items concernés.
+   */
+  const itemsTravailles = valeursUniquesSession_(
+    Array.isArray(donnees.itemsTravailles)
+      ? donnees.itemsTravailles
+      : validationsRecues
+        .filter(function (validation) {
+          return (
+            Boolean(validation.vu) ||
+            Boolean(validation.acquis) ||
+            String(
+              validation.commentaire || ''
+            ).trim()
+          );
+        })
+        .map(function (validation) {
+          return validation.idItem;
+        })
+  );
+
+  itemsTravailles.forEach(function (idItem) {
+    if (!idsItemsAutorises.has(idItem)) {
+      throw new Error(
+        'Un item travaillé est introuvable ou inactif.'
+      );
+    }
+  });
+
   const idsStagiairesSelectionnes = new Set(stagiaires);
+  const idsItemsTravailles = new Set(itemsTravailles);
   const validationsParCle = {};
 
-  (Array.isArray(donnees.validations)
-    ? donnees.validations
-    : []
-  ).forEach(function (validation) {
+  validationsRecues.forEach(function (validation) {
     const idStagiaire = String(
       validation.idStagiaire || ''
     );
@@ -549,7 +609,7 @@ function verifierSession_(donnees) {
 
     if (
       !idsStagiairesSelectionnes.has(idStagiaire) ||
-      !idsItemsAutorises.has(idItem)
+      !idsItemsTravailles.has(idItem)
     ) {
       throw new Error(
         'Une validation reçue ne correspond pas à la séance.'
@@ -561,21 +621,33 @@ function verifierSession_(donnees) {
     ).trim();
 
     const acquis = Boolean(validation.acquis);
-    const vu = Boolean(validation.vu) || acquis;
-
-    if (!vu && !acquis && !commentaire) {
-      return;
-    }
 
     validationsParCle[
       idStagiaire + '::' + idItem
     ] = {
       idStagiaire: idStagiaire,
       idItem: idItem,
-      vu: vu,
       acquis: acquis,
       commentaire: commentaire
     };
+  });
+
+  const validations = [];
+
+  stagiaires.forEach(function (idStagiaire) {
+    itemsTravailles.forEach(function (idItem) {
+      const cle = idStagiaire + '::' + idItem;
+      const validation = validationsParCle[cle];
+
+      validations.push({
+        idStagiaire: idStagiaire,
+        idItem: idItem,
+        acquis: Boolean(validation && validation.acquis),
+        commentaire: validation
+          ? validation.commentaire
+          : ''
+      });
+    });
   });
 
   return {
@@ -588,14 +660,72 @@ function verifierSession_(donnees) {
     ) / 60,
     formateurs: formateurs,
     stagiaires: stagiaires,
+    itemsTravailles: itemsTravailles,
     remarques: String(
       donnees.remarques || ''
     ).trim(),
-    validations: Object.keys(validationsParCle)
-      .map(function (cle) {
-        return validationsParCle[cle];
-      })
+    validations: validations
   };
+}
+
+
+/**
+ * Crée la feuille de liaison des items travaillés si elle
+ * n'existe pas et complète ses entêtes sans effacer de données.
+ */
+function obtenirFeuilleItemsSessions_(classeur) {
+  const nomFeuille = 'ITEMS_SESSIONS';
+  const entetesAttendues = [
+    'ID_SESSION_ITEM',
+    'ID_SESSION',
+    'ID_ITEM',
+    'DATE_CREATION'
+  ];
+
+  let feuille = classeur.getSheetByName(nomFeuille);
+
+  if (!feuille) {
+    feuille = classeur.insertSheet(nomFeuille);
+  }
+
+  if (feuille.getLastRow() < 1) {
+    feuille
+      .getRange(1, 1, 1, entetesAttendues.length)
+      .setValues([entetesAttendues]);
+
+    feuille.setFrozenRows(1);
+    return feuille;
+  }
+
+  const derniereColonne = Math.max(
+    feuille.getLastColumn(),
+    1
+  );
+
+  const entetes = feuille
+    .getRange(1, 1, 1, derniereColonne)
+    .getValues()[0];
+
+  const index = creerIndexSession_(entetes);
+  const entetesManquantes = entetesAttendues.filter(
+    function (entete) {
+      return !Number.isInteger(index[entete]);
+    }
+  );
+
+  if (entetesManquantes.length) {
+    feuille
+      .getRange(
+        1,
+        derniereColonne + 1,
+        1,
+        entetesManquantes.length
+      )
+      .setValues([entetesManquantes]);
+  }
+
+  feuille.setFrozenRows(1);
+  return feuille;
 }
 
 
@@ -956,6 +1086,9 @@ function appliquerFormatsNouvelleSession_(ecritures) {
         DUREE_HEURES: '0.00',
         DATE_CREATION: 'dd/MM/yyyy HH:mm',
         DATE_MODIFICATION: 'dd/MM/yyyy HH:mm'
+      },
+      ITEMS_SESSIONS: {
+        DATE_CREATION: 'dd/MM/yyyy HH:mm'
       },
       EVALUATIONS: {
         DATE_CREATION: 'dd/MM/yyyy HH:mm',

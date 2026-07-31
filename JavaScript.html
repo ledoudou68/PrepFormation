@@ -14,6 +14,7 @@ const etatApplication = {
   formationsSession: [],
   referentielSession: [],
   formationReferentielSession: '',
+  itemsTravaillesSession: {},
   validationsSession: {},
   formationsReferentiel: [],
   categoriesReferentiel: [],
@@ -2748,6 +2749,7 @@ function nouvelleSession() {
 
   etatApplication.referentielSession = [];
   etatApplication.formationReferentielSession = '';
+  etatApplication.itemsTravaillesSession = {};
   etatApplication.validationsSession = {};
 
   document.getElementById('sessionDate').value =
@@ -2761,7 +2763,8 @@ function nouvelleSession() {
 
   preparerFormulaireSession();
   afficherStagiairesSession();
-  afficherReferentielSession();
+  afficherItemsTravaillesSession();
+  afficherValidationsSession();
   mettreAJourDureeSession();
 
   document
@@ -2792,18 +2795,20 @@ function changerFormationSession() {
   ).value;
 
   etatApplication.validationsSession = {};
+  etatApplication.itemsTravaillesSession = {};
   etatApplication.referentielSession = [];
   etatApplication.formationReferentielSession = '';
 
   afficherStagiairesSession();
-  afficherReferentielSession();
+  afficherItemsTravaillesSession();
+  afficherValidationsSession();
 
   if (!formation) {
     return;
   }
 
   const zone = document.getElementById(
-    'zoneReferentielSession'
+    'zoneItemsTravaillesSession'
   );
 
   zone.innerHTML = `
@@ -2828,7 +2833,8 @@ function changerFormationSession() {
       etatApplication.formationReferentielSession =
         formation;
 
-      afficherReferentielSession();
+      afficherItemsTravaillesSession();
+      afficherValidationsSession();
     })
     .withFailureHandler(function (erreur) {
       const formationActuelle = document.getElementById(
@@ -2920,7 +2926,7 @@ function afficherStagiairesSession() {
 function changerStagiairesSession() {
   capturerValidationsSession();
   mettreAJourCompteursParticipantsSession();
-  afficherReferentielSession();
+  afficherValidationsSession();
 }
 
 function mettreAJourCompteursParticipantsSession() {
@@ -2965,13 +2971,33 @@ function obtenirIdsStagiairesSession() {
   });
 }
 
-function afficherReferentielSession() {
+function obtenirItemsTravaillesSession() {
+  const items = [];
+
+  etatApplication.referentielSession.forEach(
+    function (categorie) {
+      categorie.items.forEach(function (item) {
+        if (
+          etatApplication.itemsTravaillesSession[
+            item.idItem
+          ]
+        ) {
+          items.push(item);
+        }
+      });
+    }
+  );
+
+  return items;
+}
+
+function afficherItemsTravaillesSession() {
   const zone = document.getElementById(
-    'zoneReferentielSession'
+    'zoneItemsTravaillesSession'
   );
 
   const aide = document.getElementById(
-    'aideReferentielSession'
+    'aideItemsTravaillesSession'
   );
 
   if (!zone || !aide) {
@@ -2983,15 +3009,13 @@ function afficherReferentielSession() {
       ?.value || ''
   );
 
-  const idsStagiaires = obtenirIdsStagiairesSession();
-
   if (!formation) {
     aide.textContent =
       'Choisis une formation pour charger son référentiel.';
 
     zone.innerHTML = `
       <div class="etat-referentiel-session">
-        Aucun référentiel à afficher.
+        Aucun item à afficher.
       </div>
     `;
     return;
@@ -3007,7 +3031,7 @@ function afficherReferentielSession() {
 
   if (!etatApplication.referentielSession.length) {
     aide.textContent =
-      'La séance peut être enregistrée sans évaluation.';
+      'La séance peut être enregistrée sans item travaillé.';
 
     zone.innerHTML = `
       <div class="etat-referentiel-session">
@@ -3017,20 +3041,206 @@ function afficherReferentielSession() {
     return;
   }
 
+  const nombreSelectionne =
+    obtenirItemsTravaillesSession().length;
+
+  aide.textContent = nombreSelectionne
+    ? nombreSelectionne +
+      (nombreSelectionne > 1
+        ? ' items sélectionnés pour toute la séance.'
+        : ' item sélectionné pour toute la séance.')
+    : 'Coche uniquement les items réellement travaillés pendant la séance.';
+
+  zone.innerHTML = etatApplication.referentielSession
+    .map(function (categorie) {
+      return creerCategorieItemsTravaillesSession(
+        categorie
+      );
+    })
+    .join('');
+}
+
+function creerCategorieItemsTravaillesSession(categorie) {
+  const toutSelectionne = categorie.items.every(
+    function (item) {
+      return Boolean(
+        etatApplication.itemsTravaillesSession[
+          item.idItem
+        ]
+      );
+    }
+  );
+
+  const nombreSelectionne = categorie.items.filter(
+    function (item) {
+      return Boolean(
+        etatApplication.itemsTravaillesSession[
+          item.idItem
+        ]
+      );
+    }
+  ).length;
+
+  const items = categorie.items
+    .map(function (item) {
+      const description = item.description
+        ? `
+          <small>${echapperHtml(item.description)}</small>
+        `
+        : '';
+
+      return `
+        <label class="ligne-item-travaille-session">
+          <input
+            type="checkbox"
+            value="${echapperHtml(item.idItem)}"
+            ${etatApplication.itemsTravaillesSession[item.idItem]
+              ? 'checked'
+              : ''}
+            onchange="changerItemTravailleSession(this)"
+          >
+          <span class="libelle-item-referentiel-session">
+            <span>${echapperHtml(item.libelle)}</span>
+            ${description}
+          </span>
+        </label>
+      `;
+    })
+    .join('');
+
+  return `
+    <div class="categorie-referentiel-session categorie-items-travailles-session">
+      <div class="entete-categorie-items-session">
+        <h4>${echapperHtml(categorie.libelle)}</h4>
+        <div>
+          <span class="compteur-categorie-items-session">
+            ${nombreSelectionne}/${categorie.items.length}
+          </span>
+          <button
+            type="button"
+            class="bouton-lien-session"
+            onclick="basculerCategorieItemsSession('${echapperHtml(categorie.idCategorie)}', ${!toutSelectionne})"
+          >
+            ${toutSelectionne ? 'Tout décocher' : 'Tout cocher'}
+          </button>
+        </div>
+      </div>
+      <div class="liste-items-referentiel-session">
+        ${items}
+      </div>
+    </div>
+  `;
+}
+
+function changerItemTravailleSession(champ) {
+  capturerValidationsSession();
+
+  if (champ.checked) {
+    etatApplication.itemsTravaillesSession[
+      champ.value
+    ] = true;
+  } else {
+    delete etatApplication.itemsTravaillesSession[
+      champ.value
+    ];
+  }
+
+  afficherItemsTravaillesSession();
+  afficherValidationsSession();
+}
+
+function basculerCategorieItemsSession(
+  idCategorie,
+  selectionner
+) {
+  capturerValidationsSession();
+
+  const categorie =
+    etatApplication.referentielSession.find(
+      function (element) {
+        return element.idCategorie === idCategorie;
+      }
+    );
+
+  if (!categorie) {
+    return;
+  }
+
+  categorie.items.forEach(function (item) {
+    if (selectionner) {
+      etatApplication.itemsTravaillesSession[
+        item.idItem
+      ] = true;
+    } else {
+      delete etatApplication.itemsTravaillesSession[
+        item.idItem
+      ];
+    }
+  });
+
+  afficherItemsTravaillesSession();
+  afficherValidationsSession();
+}
+
+function afficherValidationsSession() {
+  const zone = document.getElementById(
+    'zoneValidationsSession'
+  );
+
+  const aide = document.getElementById(
+    'aideValidationsSession'
+  );
+
+  if (!zone || !aide) {
+    return;
+  }
+
+  const idsStagiaires = obtenirIdsStagiairesSession();
+  const itemsTravailles = obtenirItemsTravaillesSession();
+
   if (!idsStagiaires.length) {
     aide.textContent =
-      'Sélectionne un ou plusieurs stagiaires pour saisir les validations.';
+      'Sélectionne les stagiaires présents.';
 
     zone.innerHTML = `
       <div class="etat-referentiel-session">
-        Le référentiel est prêt. Sélectionne au moins un stagiaire.
+        Aucun stagiaire présent sélectionné.
       </div>
     `;
     return;
   }
 
-  aide.textContent =
-    'Les validations sont individuelles et alimenteront chaque fiche stagiaire.';
+  if (!itemsTravailles.length) {
+    aide.textContent =
+      'Sélectionne les items travaillés pendant la séance.';
+
+    zone.innerHTML = `
+      <div class="etat-referentiel-session">
+        Aucun item travaillé sélectionné.
+      </div>
+    `;
+    return;
+  }
+
+  const idsItems = new Set(
+    itemsTravailles.map(function (item) {
+      return item.idItem;
+    })
+  );
+
+  const categories = etatApplication.referentielSession
+    .map(function (categorie) {
+      return {
+        idCategorie: categorie.idCategorie,
+        libelle: categorie.libelle,
+        items: categorie.items.filter(function (item) {
+          return idsItems.has(item.idItem);
+        })
+      };
+    })
+    .filter(function (categorie) {
+      return categorie.items.length;
+    });
 
   const stagiaires = idsStagiaires
     .map(function (idStagiaire) {
@@ -3042,25 +3252,30 @@ function afficherReferentielSession() {
     })
     .filter(Boolean);
 
+  aide.textContent =
+    'Pour chaque présent, indique seulement les acquis et les commentaires utiles.';
+
   zone.innerHTML = stagiaires
     .map(function (stagiaire, indexStagiaire) {
-      return creerReferentielStagiaireSession(
+      return creerValidationsStagiaireSession(
         stagiaire,
+        categories,
         indexStagiaire === 0
       );
     })
     .join('');
 }
 
-function creerReferentielStagiaireSession(
+function creerValidationsStagiaireSession(
   stagiaire,
+  categories,
   ouvert
 ) {
-  const categories = etatApplication.referentielSession
+  const contenu = categories
     .map(function (categorie) {
       const items = categorie.items
         .map(function (item) {
-          return creerItemReferentielSession(
+          return creerItemValidationSession(
             stagiaire.uuid,
             item
           );
@@ -3078,6 +3293,13 @@ function creerReferentielStagiaireSession(
     })
     .join('');
 
+  const nombreItems = categories.reduce(
+    function (total, categorie) {
+      return total + categorie.items.length;
+    },
+    0
+  );
+
   return `
     <details
       class="referentiel-stagiaire-session"
@@ -3090,17 +3312,18 @@ function creerReferentielStagiaireSession(
           <strong>${echapperHtml(stagiaire.nom)}</strong>
         </span>
         <span class="resume-referentiel-stagiaire">
-          ${compterItemsReferentielSession()} items
+          ${nombreItems}
+          ${nombreItems > 1 ? 'items travaillés' : 'item travaillé'}
         </span>
       </summary>
       <div class="contenu-referentiel-stagiaire">
-        ${categories}
+        ${contenu}
       </div>
     </details>
   `;
 }
 
-function creerItemReferentielSession(
+function creerItemValidationSession(
   idStagiaire,
   item
 ) {
@@ -3126,16 +3349,6 @@ function creerItemReferentielSession(
         ${description}
       </div>
 
-      <label class="validation-item-session">
-        <input
-          type="checkbox"
-          class="validation-vu-session"
-          ${validation.vu ? 'checked' : ''}
-          onchange="synchroniserValidationItemSession(this)"
-        >
-        <span>Vu</span>
-      </label>
-
       <label class="validation-item-session validation-acquis-session">
         <input
           type="checkbox"
@@ -3151,19 +3364,10 @@ function creerItemReferentielSession(
         class="champ commentaire-item-session"
         value="${echapperHtml(validation.commentaire || '')}"
         placeholder="Commentaire facultatif"
-        oninput="capturerValidationsSession()"
+        oninput="synchroniserValidationItemSession(this)"
       >
     </div>
   `;
-}
-
-function compterItemsReferentielSession() {
-  return etatApplication.referentielSession.reduce(
-    function (total, categorie) {
-      return total + categorie.items.length;
-    },
-    0
-  );
 }
 
 function synchroniserValidationItemSession(champ) {
@@ -3175,33 +3379,36 @@ function synchroniserValidationItemSession(champ) {
     return;
   }
 
-  const vu = ligne.querySelector(
-    '.validation-vu-session'
+  const blocStagiaire = ligne.closest(
+    '.referentiel-stagiaire-session'
   );
 
+  if (!blocStagiaire) {
+    return;
+  }
+
+  const idStagiaire = blocStagiaire.dataset.stagiaireId;
+  const idItem = ligne.dataset.itemId;
   const acquis = ligne.querySelector(
     '.validation-acquis-session-champ'
-  );
+  ).checked;
 
-  if (
-    champ.classList.contains(
-      'validation-acquis-session-champ'
-    ) &&
-    champ.checked
-  ) {
-    vu.checked = true;
+  const commentaire = ligne.querySelector(
+    '.commentaire-item-session'
+  ).value.trim();
+
+  const cle = idStagiaire + '::' + idItem;
+
+  if (acquis || commentaire) {
+    etatApplication.validationsSession[cle] = {
+      idStagiaire: idStagiaire,
+      idItem: idItem,
+      acquis: acquis,
+      commentaire: commentaire
+    };
+  } else {
+    delete etatApplication.validationsSession[cle];
   }
-
-  if (
-    champ.classList.contains(
-      'validation-vu-session'
-    ) &&
-    !champ.checked
-  ) {
-    acquis.checked = false;
-  }
-
-  capturerValidationsSession();
 }
 
 function capturerValidationsSession() {
@@ -3219,10 +3426,6 @@ function capturerValidationsSession() {
           const idItem = ligne.dataset.itemId;
           const cle = idStagiaire + '::' + idItem;
 
-          const vu = ligne.querySelector(
-            '.validation-vu-session'
-          ).checked;
-
           const acquis = ligne.querySelector(
             '.validation-acquis-session-champ'
           ).checked;
@@ -3231,11 +3434,10 @@ function capturerValidationsSession() {
             '.commentaire-item-session'
           ).value.trim();
 
-          if (vu || acquis || commentaire) {
+          if (acquis || commentaire) {
             etatApplication.validationsSession[cle] = {
               idStagiaire: idStagiaire,
               idItem: idItem,
-              vu: vu || acquis,
               acquis: acquis,
               commentaire: commentaire
             };
@@ -3327,6 +3529,13 @@ function soumettreSession(evenement) {
   }
 
   const idsStagiaires = new Set(stagiaires);
+  const itemsTravailles = obtenirItemsTravaillesSession();
+  const idsItemsTravailles = new Set(
+    itemsTravailles.map(function (item) {
+      return item.idItem;
+    })
+  );
+
   const validations = Object.keys(
     etatApplication.validationsSession
   )
@@ -3334,7 +3543,10 @@ function soumettreSession(evenement) {
       return etatApplication.validationsSession[cle];
     })
     .filter(function (validation) {
-      return idsStagiaires.has(validation.idStagiaire);
+      return (
+        idsStagiaires.has(validation.idStagiaire) &&
+        idsItemsTravailles.has(validation.idItem)
+      );
     });
 
   const donnees = {
@@ -3350,6 +3562,11 @@ function soumettreSession(evenement) {
     ).value,
     formateurs: formateurs,
     stagiaires: stagiaires,
+    itemsTravailles: itemsTravailles.map(
+      function (item) {
+        return item.idItem;
+      }
+    ),
     remarques: document.getElementById(
       'sessionRemarques'
     ).value,

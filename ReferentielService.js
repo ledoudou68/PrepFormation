@@ -448,31 +448,36 @@ function basculerActifCategorieReferentiel(
 
 
 function basculerActifItemReferentiel(idItem, actif) {
-  const preparation = preparerDonneesReferentiel_();
-  const feuille = preparation.feuilleItems;
-  const item = lireItemsReferentiel_(feuille).find(
-    function (element) {
-      return element.idItem === String(idItem);
+  return avecVerrouReferentiel_(function () {
+    const preparation = preparerDonneesReferentiel_();
+    const feuille = preparation.feuilleItems;
+    const item = lireItemsReferentiel_(feuille).find(
+      function (element) {
+        return element.idItem === String(idItem);
+      }
+    );
+
+    if (!item) {
+      throw new Error('Item pédagogique introuvable.');
     }
-  );
 
-  if (!item) {
-    throw new Error('Item pédagogique introuvable.');
-  }
+    const nouvelEtat = convertirActifReferentiel_(actif);
+    const index = obtenirIndexReferentiel_(feuille);
 
-  const nouvelEtat = convertirActifReferentiel_(actif);
-  const index = obtenirIndexReferentiel_(feuille);
+    feuille
+      .getRange(item.numeroLigne, index.ACTIF + 1)
+      .setValue(nouvelEtat ? 'Oui' : 'Non');
 
-  feuille
-    .getRange(item.numeroLigne, index.ACTIF + 1)
-    .setValue(nouvelEtat ? 'Oui' : 'Non');
+    SpreadsheetApp.flush();
 
-  return {
-    succes: true,
-    message: nouvelEtat
-      ? 'Item activé.'
-      : 'Item désactivé.'
-  };
+    return {
+      succes: true,
+      actif: nouvelEtat,
+      message: nouvelEtat
+        ? 'Item activé.'
+        : 'Item désactivé.'
+    };
+  });
 }
 
 
@@ -872,27 +877,36 @@ function lireItemsReferentiel_(feuille) {
 
 function obtenirIdsItemsUtilisesReferentiel_() {
   const classeur = SpreadsheetApp.getActiveSpreadsheet();
-  const feuille = classeur.getSheetByName('EVALUATIONS');
   const ids = new Set();
 
-  if (!feuille || feuille.getLastRow() < 2) {
-    return ids;
-  }
+  ['EVALUATIONS', 'ITEMS_SESSIONS'].forEach(
+    function (nomFeuille) {
+      const feuille = classeur.getSheetByName(
+        nomFeuille
+      );
 
-  const donnees = feuille.getDataRange().getValues();
-  const index = creerIndexReferentiel_(donnees[0]);
+      if (!feuille || feuille.getLastRow() < 2) {
+        return;
+      }
 
-  if (!Number.isInteger(index.ID_ITEM)) {
-    return ids;
-  }
+      const donnees = feuille.getDataRange().getValues();
+      const index = creerIndexReferentiel_(donnees[0]);
 
-  donnees.slice(1).forEach(function (ligne) {
-    const idItem = String(ligne[index.ID_ITEM] || '');
+      if (!Number.isInteger(index.ID_ITEM)) {
+        return;
+      }
 
-    if (idItem) {
-      ids.add(idItem);
+      donnees.slice(1).forEach(function (ligne) {
+        const idItem = String(
+          ligne[index.ID_ITEM] || ''
+        );
+
+        if (idItem) {
+          ids.add(idItem);
+        }
+      });
     }
-  });
+  );
 
   return ids;
 }
