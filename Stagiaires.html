@@ -1,0 +1,469 @@
+<div class="page">
+
+  <div class="entete-page entete-page-actions">
+
+    <div>
+      <h1>Stagiaires</h1>
+      <p>
+        Gestion et suivi des personnes en préparation.
+      </p>
+    </div>
+
+    <button
+      type="button"
+      class="bouton-principal"
+      onclick="nouveauStagiaire()"
+    >
+      + Nouveau stagiaire
+    </button>
+
+  </div>
+
+  <div class="bloc">
+
+    <div class="barre-filtres">
+
+      <input
+        type="search"
+        id="rechercheStagiaire"
+        class="champ"
+        placeholder="Rechercher par nom ou prénom…"
+        oninput="filtrerStagiaires()"
+      >
+
+      <select
+        id="filtreFormationStagiaire"
+        class="champ"
+        onchange="filtrerStagiaires()"
+      >
+        <option value="">Toutes les formations</option>
+      </select>
+
+      <select
+        id="filtreStatutStagiaire"
+        class="champ"
+        onchange="filtrerStagiaires()"
+      >
+        <option value="">Tous les statuts</option>
+      </select>
+
+    </div>
+
+    <div
+      id="compteurStagiaires"
+      class="compteur-resultats"
+    ></div>
+
+    <div class="tableau-responsive">
+
+      <table class="tableau">
+
+        <thead>
+          <tr>
+            <th>Stagiaire</th>
+            <th>Formation</th>
+            <th>Début préparation</th>
+            <th>Date du stage</th>
+            <th>Statut</th>
+            <th class="colonne-actions">Actions</th>
+          </tr>
+        </thead>
+
+        <tbody id="corpsTableauStagiaires">
+
+          <tr>
+            <td colspan="6" class="etat-vide">
+              Chargement des stagiaires…
+            </td>
+          </tr>
+
+        </tbody>
+
+      </table>
+
+    </div>
+
+  </div>
+
+</div>
+
+<div
+  id="modalStagiaire"
+  class="modal-overlay masque"
+  role="dialog"
+  aria-modal="true"
+>
+
+  <div class="modal-contenu modal-tres-large">
+
+    <div class="modal-entete">
+
+      <div>
+        <h2 id="titreModalStagiaire">
+          Nouveau stagiaire
+        </h2>
+
+        <p>
+          Fiche administrative et suivi de préparation.
+        </p>
+      </div>
+
+      <button
+        type="button"
+        class="bouton-fermer-modal"
+        onclick="fermerModalStagiaire()"
+        aria-label="Fermer"
+      >
+        ×
+      </button>
+
+    </div>
+
+    <form
+      id="formulaireStagiaire"
+      onsubmit="soumettreStagiaire(event)"
+    >
+
+      <input
+        type="hidden"
+        id="stagiaireUuid"
+      >
+
+      <div class="onglets-modal">
+
+        <button
+          type="button"
+          class="onglet-modal actif"
+          data-onglet="informations"
+          onclick="changerOngletStagiaire('informations')"
+        >
+          Informations
+        </button>
+
+        <button
+          type="button"
+          class="onglet-modal"
+          data-onglet="preparation"
+          onclick="changerOngletStagiaire('preparation')"
+        >
+          Préparation
+        </button>
+
+        <button
+          type="button"
+          class="onglet-modal"
+          data-onglet="notes"
+          onclick="changerOngletStagiaire('notes')"
+        >
+          Notes
+        </button>
+
+      </div>
+
+      <div class="modal-corps">
+
+        <section
+          id="ongletStagiaireInformations"
+          class="contenu-onglet-stagiaire"
+        >
+
+          <div class="fiche-stagiaire-entete">
+
+            <div class="zone-photo-stagiaire">
+
+              <div
+                id="apercuPhotoStagiaire"
+                class="photo-stagiaire"
+              >
+                <span>Photo</span>
+              </div>
+
+              <div class="groupe-champ">
+
+                <label for="stagiairePhotoUrl">
+                  Lien de la photo
+                </label>
+
+                <input
+                  type="url"
+                  id="stagiairePhotoUrl"
+                  class="champ"
+                  placeholder="https://..."
+                  oninput="mettreAJourApercuPhotoStagiaire()"
+                >
+
+              </div>
+
+            </div>
+
+            <div class="fiche-stagiaire-identite">
+
+              <div class="grille-formulaire">
+
+                <div class="groupe-champ">
+
+                  <label for="stagiaireNom">
+                    Nom *
+                  </label>
+
+                  <input
+                    type="text"
+                    id="stagiaireNom"
+                    class="champ"
+                    required
+                    autocomplete="family-name"
+                  >
+
+                </div>
+
+                <div class="groupe-champ">
+
+                  <label for="stagiairePrenom">
+                    Prénom *
+                  </label>
+
+                  <input
+                    type="text"
+                    id="stagiairePrenom"
+                    class="champ"
+                    required
+                    autocomplete="given-name"
+                  >
+
+                </div>
+
+                <div class="groupe-champ">
+
+                  <label for="stagiaireGrade">
+                    Grade
+                  </label>
+
+                  <input
+                    type="text"
+                    id="stagiaireGrade"
+                    class="champ"
+                    placeholder="Exemple : Caporal"
+                  >
+
+                </div>
+
+                <div class="groupe-champ">
+
+                  <label for="stagiaireTelephone">
+                    Téléphone
+                  </label>
+
+                  <input
+                    type="tel"
+                    id="stagiaireTelephone"
+                    class="champ"
+                    autocomplete="tel"
+                    placeholder="06 00 00 00 00"
+                  >
+
+                </div>
+
+                <div class="groupe-champ groupe-champ-large-grille">
+
+                  <label for="stagiaireEmail">
+                    Adresse e-mail
+                  </label>
+
+                  <input
+                    type="email"
+                    id="stagiaireEmail"
+                    class="champ"
+                    autocomplete="email"
+                    placeholder="prenom.nom@exemple.fr"
+                  >
+
+                </div>
+
+              </div>
+
+            </div>
+
+          </div>
+
+        </section>
+
+        <section
+          id="ongletStagiairePreparation"
+          class="contenu-onglet-stagiaire masque"
+        >
+
+          <div class="grille-formulaire">
+
+            <div class="groupe-champ">
+
+              <label for="stagiaireFormation">
+                Formation *
+              </label>
+
+              <select
+                id="stagiaireFormation"
+                class="champ"
+                required
+              >
+                <option value="">
+                  Sélectionner une formation
+                </option>
+              </select>
+
+            </div>
+
+            <div class="groupe-champ">
+
+              <label for="stagiaireStatut">
+                Statut *
+              </label>
+
+              <select
+                id="stagiaireStatut"
+                class="champ"
+                required
+                onchange="mettreAJourChampsCloture()"
+              ></select>
+
+            </div>
+
+            <div class="groupe-champ">
+
+              <label for="stagiaireDateDebut">
+                Début de préparation *
+              </label>
+
+              <input
+                type="date"
+                id="stagiaireDateDebut"
+                class="champ"
+                required
+              >
+
+            </div>
+
+            <div class="groupe-champ">
+
+              <label for="stagiaireDateStage">
+                Date du stage *
+              </label>
+
+              <input
+                type="date"
+                id="stagiaireDateStage"
+                class="champ"
+                required
+              >
+
+            </div>
+
+            <div class="groupe-champ groupe-champ-large-grille">
+
+              <label for="stagiaireFormateurReferent">
+                Formateur référent
+              </label>
+
+              <input
+                type="text"
+                id="stagiaireFormateurReferent"
+                class="champ"
+                placeholder="Nom du formateur référent"
+              >
+
+            </div>
+
+          </div>
+
+          <div
+            id="zoneClotureStagiaire"
+            class="zone-cloture masque"
+          >
+
+            <h3>Clôture de la préparation</h3>
+
+            <div class="grille-formulaire">
+
+              <div class="groupe-champ">
+
+                <label for="stagiaireDateCloture">
+                  Date de clôture
+                </label>
+
+                <input
+                  type="date"
+                  id="stagiaireDateCloture"
+                  class="champ"
+                >
+
+              </div>
+
+              <div class="groupe-champ">
+
+                <label for="stagiaireMotifCloture">
+                  Motif ou précision
+                </label>
+
+                <input
+                  type="text"
+                  id="stagiaireMotifCloture"
+                  class="champ"
+                  placeholder="Exemple : stage réalisé"
+                >
+
+              </div>
+
+            </div>
+
+          </div>
+
+        </section>
+
+        <section
+          id="ongletStagiaireNotes"
+          class="contenu-onglet-stagiaire masque"
+        >
+
+          <div class="groupe-champ groupe-champ-large">
+
+            <label for="stagiaireNotes">
+              Notes administratives
+            </label>
+
+            <textarea
+              id="stagiaireNotes"
+              class="champ"
+              rows="8"
+              placeholder="Informations administratives utiles…"
+            ></textarea>
+
+          </div>
+
+        </section>
+
+      </div>
+
+      <div class="modal-pied">
+
+        <button
+          type="button"
+          class="bouton-secondaire"
+          onclick="fermerModalStagiaire()"
+        >
+          Annuler
+        </button>
+
+        <button
+          type="submit"
+          id="boutonEnregistrerStagiaire"
+          class="bouton-principal"
+        >
+          Enregistrer
+        </button>
+
+      </div>
+
+    </form>
+
+  </div>
+
+</div>

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+  <base target="_top">
+
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, maximum-scale=1"
+  >
+
+  <?!= include('CSS'); ?>
+</head>
+
+<body>
+
+  <div id="loader" class="loader-overlay masque">
+    <div class="spinner"></div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <header class="topbar">
+
+    <button
+      type="button"
+      class="bouton-menu-mobile"
+      onclick="basculerMenu()"
+      aria-label="Ouvrir le menu"
+    >
+      ☰
+    </button>
+
+    <div>
+      <div class="titre-application">PrepFormation</div>
+      <div class="sous-titre">Suivi des préparations</div>
+    </div>
+
+  </header>
+
+  <div class="application">
+
+    <aside id="menuLateral" class="menu-lateral">
+
+      <button
+        type="button"
+        class="menu-item actif"
+        data-page="Accueil"
+      >
+        <span class="menu-icone">⌂</span>
+        <span>Accueil</span>
+      </button>
+
+      <button
+        type="button"
+        class="menu-item"
+        data-page="Stagiaires"
+      >
+        <span class="menu-icone">👨‍🚒</span>
+        <span>Stagiaires</span>
+      </button>
+
+      <button
+        type="button"
+        class="menu-item"
+        data-page="Formateurs"
+      >
+        <span class="menu-icone">👨‍🏫</span>
+        <span>Formateurs</span>
+      </button>
+
+      <button
+        type="button"
+        class="menu-item"
+        data-page="Sessions"
+      >
+        <span class="menu-icone">📅</span>
+        <span>Sessions</span>
+      </button>
+
+      <button
+        type="button"
+        class="menu-item"
+        data-page="Indemnisation"
+      >
+        <span class="menu-icone">€</span>
+        <span>Indemnisations</span>
+      </button>
+
+    </aside>
+
+    <main id="contenu" class="contenu-principal">
+      <div class="chargement-page">
+        Chargement…
+      </div>
+    </main>
+
+  </div>
+
+  <?!= include('JavaScript'); ?>
+
+</body>
+
+</html>

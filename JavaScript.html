@@ -1,0 +1,684 @@
+<script>
+
+'use strict';
+
+const etatApplication = {
+  pageActive: 'Accueil',
+  stagiaires: [],
+  formations: [],
+  statutsStagiaires: []
+};
+
+document.addEventListener(
+  'DOMContentLoaded',
+  initialiserInterface
+);
+
+function initialiserInterface() {
+  document
+    .querySelectorAll('.menu-item')
+    .forEach(function (bouton) {
+      bouton.addEventListener('click', function () {
+        chargerPage(bouton.dataset.page);
+      });
+    });
+
+  chargerPage('Accueil');
+}
+
+function chargerPage(nomPage) {
+  afficherLoader();
+
+  google.script.run
+    .withSuccessHandler(function (html) {
+      document.getElementById('contenu').innerHTML = html;
+
+      etatApplication.pageActive = nomPage;
+
+      activerBoutonMenu(nomPage);
+      fermerMenuMobile();
+      masquerLoader();
+      initialiserPageActive(nomPage);
+    })
+    .withFailureHandler(gererErreurServeur)
+    .getPage(nomPage);
+}
+
+function initialiserPageActive(nomPage) {
+  if (nomPage === 'Stagiaires') {
+    initialiserPageStagiaires();
+  }
+}
+
+function activerBoutonMenu(nomPage) {
+  document
+    .querySelectorAll('.menu-item')
+    .forEach(function (bouton) {
+      bouton.classList.toggle(
+        'actif',
+        bouton.dataset.page === nomPage
+      );
+    });
+}
+
+function afficherLoader() {
+  document
+    .getElementById('loader')
+    .classList
+    .remove('masque');
+}
+
+function masquerLoader() {
+  document
+    .getElementById('loader')
+    .classList
+    .add('masque');
+}
+
+function afficherToast(message, erreur) {
+  const toast = document.getElementById('toast');
+
+  toast.textContent = message;
+  toast.classList.toggle('erreur', Boolean(erreur));
+  toast.classList.add('visible');
+
+  window.clearTimeout(afficherToast.timer);
+
+  afficherToast.timer = window.setTimeout(function () {
+    toast.classList.remove('visible');
+  }, 3500);
+}
+
+function extraireMessageErreur(erreur) {
+  if (!erreur) {
+    return 'Une erreur inconnue est survenue.';
+  }
+
+  return erreur.message || String(erreur);
+}
+
+function gererErreurServeur(erreur) {
+  masquerLoader();
+
+  afficherToast(
+    extraireMessageErreur(erreur),
+    true
+  );
+}
+
+function basculerMenu() {
+  document
+    .getElementById('menuLateral')
+    .classList
+    .toggle('ouvert');
+}
+
+function fermerMenuMobile() {
+  document
+    .getElementById('menuLateral')
+    .classList
+    .remove('ouvert');
+}
+
+/* =====================================================
+   STAGIAIRES
+===================================================== */
+
+function initialiserPageStagiaires() {
+  afficherLoader();
+
+  let chargementsTermines = 0;
+  let erreurRencontree = false;
+
+  function terminerChargement() {
+    chargementsTermines++;
+
+    if (
+      chargementsTermines === 3 &&
+      !erreurRencontree
+    ) {
+      remplirFiltresStagiaires();
+      afficherListeStagiaires();
+      masquerLoader();
+    }
+  }
+
+  function erreurChargement(erreur) {
+    if (erreurRencontree) {
+      return;
+    }
+
+    erreurRencontree = true;
+    gererErreurServeur(erreur);
+  }
+
+  google.script.run
+    .withSuccessHandler(function (stagiaires) {
+      etatApplication.stagiaires =
+        Array.isArray(stagiaires) ? stagiaires : [];
+
+      terminerChargement();
+    })
+    .withFailureHandler(erreurChargement)
+    .getStagiaires();
+
+  google.script.run
+    .withSuccessHandler(function (formations) {
+      etatApplication.formations =
+        Array.isArray(formations) ? formations : [];
+
+      terminerChargement();
+    })
+    .withFailureHandler(erreurChargement)
+    .getFormations();
+
+  google.script.run
+    .withSuccessHandler(function (statuts) {
+      etatApplication.statutsStagiaires =
+        Array.isArray(statuts) ? statuts : [];
+
+      terminerChargement();
+    })
+    .withFailureHandler(erreurChargement)
+    .getStatutsStagiaires();
+}
+
+function remplirFiltresStagiaires() {
+  remplirSelect(
+    'filtreFormationStagiaire',
+    etatApplication.formations,
+    'Toutes les formations'
+  );
+
+  remplirSelect(
+    'filtreStatutStagiaire',
+    etatApplication.statutsStagiaires,
+    'Tous les statuts'
+  );
+
+  remplirSelect(
+    'stagiaireFormation',
+    etatApplication.formations,
+    'Sélectionner une formation'
+  );
+
+  remplirSelect(
+    'stagiaireStatut',
+    etatApplication.statutsStagiaires,
+    null
+  );
+}
+
+function remplirSelect(
+  identifiant,
+  valeurs,
+  premiereOption
+) {
+  const select = document.getElementById(identifiant);
+
+  if (!select) {
+    return;
+  }
+
+  const valeurActuelle = select.value;
+
+  select.innerHTML = '';
+
+  if (premiereOption !== null) {
+    const optionInitiale =
+      document.createElement('option');
+
+    optionInitiale.value = '';
+    optionInitiale.textContent = premiereOption;
+
+    select.appendChild(optionInitiale);
+  }
+
+  valeurs.forEach(function (valeur) {
+    const option = document.createElement('option');
+
+    option.value = valeur;
+    option.textContent = valeur;
+
+    select.appendChild(option);
+  });
+
+  if (
+    [...select.options].some(function (option) {
+      return option.value === valeurActuelle;
+    })
+  ) {
+    select.value = valeurActuelle;
+  }
+}
+
+function afficherListeStagiaires() {
+  const corps = document.getElementById(
+    'corpsTableauStagiaires'
+  );
+
+  if (!corps) {
+    return;
+  }
+
+  const stagiaires = obtenirStagiairesFiltres();
+
+  const compteur = document.getElementById(
+    'compteurStagiaires'
+  );
+
+  if (compteur) {
+    compteur.textContent =
+      stagiaires.length +
+      (stagiaires.length > 1
+        ? ' stagiaires affichés'
+        : ' stagiaire affiché');
+  }
+
+  if (stagiaires.length === 0) {
+    corps.innerHTML = `
+      <tr>
+        <td colspan="6" class="etat-vide">
+          Aucun stagiaire ne correspond aux critères.
+        </td>
+      </tr>
+    `;
+
+    return;
+  }
+
+  corps.innerHTML = stagiaires
+    .map(function (stagiaire) {
+      return creerLigneStagiaire(stagiaire);
+    })
+    .join('');
+}
+
+function obtenirStagiairesFiltres() {
+  const recherche = String(
+    document.getElementById('rechercheStagiaire')
+      ?.value || ''
+  )
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+  const formation = String(
+    document.getElementById(
+      'filtreFormationStagiaire'
+    )?.value || ''
+  );
+
+  const statut = String(
+    document.getElementById(
+      'filtreStatutStagiaire'
+    )?.value || ''
+  );
+
+  return etatApplication.stagiaires.filter(
+    function (stagiaire) {
+      const identite =
+        (stagiaire.nom + ' ' + stagiaire.prenom)
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '');
+
+      const correspondRecherche =
+        !recherche || identite.includes(recherche);
+
+      const correspondFormation =
+        !formation ||
+        stagiaire.formation === formation;
+
+      const correspondStatut =
+        !statut ||
+        stagiaire.statut === statut;
+
+      return (
+        correspondRecherche &&
+        correspondFormation &&
+        correspondStatut
+      );
+    }
+  );
+}
+
+function filtrerStagiaires() {
+  afficherListeStagiaires();
+}
+
+function creerLigneStagiaire(stagiaire) {
+  const classeStatut =
+    obtenirClasseStatut(stagiaire.statut);
+
+  const dateStage = afficherDateFrancaise(
+    stagiaire.dateStage
+  );
+
+  const dateDebut = afficherDateFrancaise(
+    stagiaire.dateDebutPreparation
+  );
+
+  return `
+    <tr>
+      <td>
+        <div class="nom-principal">
+          ${echapperHtml(stagiaire.nom)}
+          ${echapperHtml(stagiaire.prenom)}
+        </div>
+      </td>
+
+      <td>
+        ${echapperHtml(stagiaire.formation)}
+      </td>
+
+      <td>
+        ${dateDebut || '—'}
+      </td>
+
+      <td>
+        <strong>${dateStage || '—'}</strong>
+      </td>
+
+      <td>
+        <span class="badge-statut ${classeStatut}">
+          ${echapperHtml(stagiaire.statut)}
+        </span>
+      </td>
+
+      <td class="colonne-actions">
+        <button
+          type="button"
+          class="bouton-icone"
+          onclick="modifierStagiaire('${stagiaire.uuid}')"
+          title="Modifier"
+        >
+          ✎
+        </button>
+      </td>
+    </tr>
+  `;
+}
+
+function nouveauStagiaire() {
+  const formulaire = document.getElementById(
+    'formulaireStagiaire'
+  );
+
+  formulaire.reset();
+
+  document.getElementById('stagiaireUuid').value = '';
+  document.getElementById(
+    'titreModalStagiaire'
+  ).textContent = 'Nouveau stagiaire';
+
+  document.getElementById('stagiaireStatut').value =
+    'À préparer';
+
+  document.getElementById(
+    'stagiaireDateDebut'
+  ).value = dateDuJourPourChamp();
+
+  mettreAJourChampsCloture();
+  ouvrirModalStagiaire();
+
+  window.setTimeout(function () {
+    document.getElementById('stagiaireNom').focus();
+  }, 100);
+}
+
+function modifierStagiaire(uuid) {
+  const stagiaire =
+    etatApplication.stagiaires.find(
+      function (element) {
+        return element.uuid === uuid;
+      }
+    );
+
+  if (!stagiaire) {
+    afficherToast('Stagiaire introuvable.', true);
+    return;
+  }
+
+  document.getElementById(
+    'titreModalStagiaire'
+  ).textContent = 'Modifier le stagiaire';
+
+  document.getElementById('stagiaireUuid').value =
+    stagiaire.uuid;
+
+  document.getElementById('stagiaireNom').value =
+    stagiaire.nom;
+
+  document.getElementById('stagiairePrenom').value =
+    stagiaire.prenom;
+
+  document.getElementById(
+    'stagiaireFormation'
+  ).value = stagiaire.formation;
+
+  document.getElementById(
+    'stagiaireStatut'
+  ).value = stagiaire.statut;
+
+  document.getElementById(
+    'stagiaireDateDebut'
+  ).value = stagiaire.dateDebutPreparation;
+
+  document.getElementById(
+    'stagiaireDateStage'
+  ).value = stagiaire.dateStage;
+
+  document.getElementById(
+    'stagiaireDateCloture'
+  ).value = stagiaire.dateCloture;
+
+  document.getElementById(
+    'stagiaireMotifCloture'
+  ).value = stagiaire.motifCloture;
+
+  document.getElementById(
+    'stagiaireNotes'
+  ).value = stagiaire.notesAdministratives;
+
+  mettreAJourChampsCloture();
+  ouvrirModalStagiaire();
+}
+
+function ouvrirModalStagiaire() {
+  document
+    .getElementById('modalStagiaire')
+    .classList
+    .remove('masque');
+
+  document.body.classList.add('modal-ouverte');
+}
+
+function fermerModalStagiaire() {
+  document
+    .getElementById('modalStagiaire')
+    .classList
+    .add('masque');
+
+  document.body.classList.remove('modal-ouverte');
+}
+
+function mettreAJourChampsCloture() {
+  const statut = document.getElementById(
+    'stagiaireStatut'
+  ).value;
+
+  const preparationFermee = [
+    'Préparation terminée',
+    'Préparation abandonnée'
+  ].includes(statut);
+
+  document
+    .getElementById('zoneClotureStagiaire')
+    .classList
+    .toggle('masque', !preparationFermee);
+
+  if (
+    preparationFermee &&
+    !document.getElementById(
+      'stagiaireDateCloture'
+    ).value
+  ) {
+    document.getElementById(
+      'stagiaireDateCloture'
+    ).value = dateDuJourPourChamp();
+  }
+}
+
+function soumettreStagiaire(evenement) {
+  evenement.preventDefault();
+
+  const bouton = document.getElementById(
+    'boutonEnregistrerStagiaire'
+  );
+
+  bouton.disabled = true;
+  bouton.textContent = 'Enregistrement…';
+
+  const donnees = {
+    uuid: document.getElementById(
+      'stagiaireUuid'
+    ).value,
+
+    nom: document.getElementById(
+      'stagiaireNom'
+    ).value,
+
+    prenom: document.getElementById(
+      'stagiairePrenom'
+    ).value,
+
+    formation: document.getElementById(
+      'stagiaireFormation'
+    ).value,
+
+    statut: document.getElementById(
+      'stagiaireStatut'
+    ).value,
+
+    dateDebutPreparation:
+      document.getElementById(
+        'stagiaireDateDebut'
+      ).value,
+
+    dateStage: document.getElementById(
+      'stagiaireDateStage'
+    ).value,
+
+    dateCloture: document.getElementById(
+      'stagiaireDateCloture'
+    ).value,
+
+    motifCloture:
+      document.getElementById(
+        'stagiaireMotifCloture'
+      ).value,
+
+    notesAdministratives:
+      document.getElementById(
+        'stagiaireNotes'
+      ).value
+  };
+
+  google.script.run
+    .withSuccessHandler(function (resultat) {
+      bouton.disabled = false;
+      bouton.textContent = 'Enregistrer';
+
+      fermerModalStagiaire();
+
+      afficherToast(
+        resultat.message ||
+        'Stagiaire enregistré.',
+        false
+      );
+
+      rechargerStagiaires();
+    })
+    .withFailureHandler(function (erreur) {
+      bouton.disabled = false;
+      bouton.textContent = 'Enregistrer';
+
+      afficherToast(
+        extraireMessageErreur(erreur),
+        true
+      );
+    })
+    .enregistrerStagiaire(donnees);
+}
+
+function rechargerStagiaires() {
+  afficherLoader();
+
+  google.script.run
+    .withSuccessHandler(function (stagiaires) {
+      etatApplication.stagiaires =
+        Array.isArray(stagiaires) ? stagiaires : [];
+
+      afficherListeStagiaires();
+      masquerLoader();
+    })
+    .withFailureHandler(gererErreurServeur)
+    .getStagiaires();
+}
+
+function obtenirClasseStatut(statut) {
+  const correspondances = {
+    'À préparer': 'badge-bleu',
+    'Échéance atteinte': 'badge-orange',
+    'Préparation terminée': 'badge-vert',
+    'Préparation abandonnée': 'badge-rouge'
+  };
+
+  return correspondances[statut] || 'badge-gris';
+}
+
+function afficherDateFrancaise(dateIso) {
+  if (!dateIso) {
+    return '';
+  }
+
+  const parties = String(dateIso).split('-');
+
+  if (parties.length !== 3) {
+    return dateIso;
+  }
+
+  return (
+    parties[2] +
+    '/' +
+    parties[1] +
+    '/' +
+    parties[0]
+  );
+}
+
+function dateDuJourPourChamp() {
+  const date = new Date();
+
+  const annee = date.getFullYear();
+  const mois = String(date.getMonth() + 1)
+    .padStart(2, '0');
+
+  const jour = String(date.getDate())
+    .padStart(2, '0');
+
+  return annee + '-' + mois + '-' + jour;
+}
+
+function echapperHtml(valeur) {
+  return String(valeur ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+</script>
