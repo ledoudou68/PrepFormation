@@ -390,6 +390,16 @@ function creerLigneStagiaire(stagiaire) {
       <td class="colonne-actions">
         <button
           type="button"
+          class="bouton-icone bouton-consulter"
+          onclick="consulterStagiaire('${stagiaire.uuid}')"
+          title="Consulter"
+          aria-label="Consulter la fiche de ${echapperHtml(stagiaire.prenom)} ${echapperHtml(stagiaire.nom)}"
+        >
+          👁
+        </button>
+
+        <button
+          type="button"
           class="bouton-icone"
           onclick="modifierStagiaire('${stagiaire.uuid}')"
           title="Modifier"
@@ -399,6 +409,517 @@ function creerLigneStagiaire(stagiaire) {
       </td>
     </tr>
   `;
+}
+
+
+function consulterStagiaire(uuid) {
+  const stagiaire = etatApplication.stagiaires.find(
+    function (element) {
+      return element.uuid === uuid;
+    }
+  );
+
+  if (!stagiaire) {
+    afficherToast('Stagiaire introuvable.', true);
+    return;
+  }
+
+  fermerFicheStagiaire();
+
+  const modal = document.createElement('div');
+
+  modal.id = 'modalFicheStagiaire';
+  modal.className = 'fiche-consultation-overlay';
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+  modal.setAttribute(
+    'aria-labelledby',
+    'titreFicheConsultationStagiaire'
+  );
+  modal.dataset.uuid = uuid;
+
+  const photo = stagiaire.photoUrl
+    ? `
+      <img
+        src="${echapperHtml(stagiaire.photoUrl)}"
+        alt="Photo de ${echapperHtml(stagiaire.prenom)} ${echapperHtml(stagiaire.nom)}"
+        onerror="this.parentElement.innerHTML='<span>Photo indisponible</span>'"
+      >
+    `
+    : `
+      <span class="initiales-stagiaire">
+        ${echapperHtml(
+          (stagiaire.prenom || '').charAt(0) +
+          (stagiaire.nom || '').charAt(0)
+        )}
+      </span>
+    `;
+
+  modal.innerHTML = `
+    <article class="fiche-consultation">
+
+      <header class="fiche-consultation-barre">
+
+        <div class="fiche-consultation-titre">
+          <span class="fiche-consultation-icone">👨‍🚒</span>
+          <div>
+            <h2 id="titreFicheConsultationStagiaire">
+              Fiche stagiaire
+            </h2>
+            <p>Consultation du parcours de préparation</p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          class="bouton-fermer-modal bouton-fermer-fiche"
+          onclick="fermerFicheStagiaire()"
+          aria-label="Fermer"
+        >
+          ×
+        </button>
+
+      </header>
+
+      <main class="fiche-consultation-corps">
+
+        <section class="fiche-profil">
+
+          <div class="fiche-consultation-photo">
+            ${photo}
+          </div>
+
+          <div class="fiche-profil-contenu">
+
+            <div class="fiche-identite-entete">
+              <div>
+                <p class="fiche-sur-titre">
+                  ${echapperHtml(
+                    stagiaire.grade || 'Grade non renseigné'
+                  )}
+                </p>
+                <h1>
+                  ${echapperHtml(stagiaire.prenom)}
+                  ${echapperHtml(stagiaire.nom)}
+                </h1>
+              </div>
+
+              <span class="badge-statut badge-statut-fiche ${obtenirClasseStatut(stagiaire.statut)}">
+                ${echapperHtml(stagiaire.statut)}
+              </span>
+            </div>
+
+            <dl class="fiche-informations">
+
+              ${creerInformationFiche(
+                'Nom',
+                stagiaire.nom
+              )}
+
+              ${creerInformationFiche(
+                'Prénom',
+                stagiaire.prenom
+              )}
+
+              ${creerInformationFiche(
+                'Grade',
+                stagiaire.grade
+              )}
+
+              ${creerInformationFiche(
+                'Téléphone',
+                stagiaire.telephone
+              )}
+
+              ${creerInformationFiche(
+                'E-mail',
+                stagiaire.email
+              )}
+
+              ${creerInformationFiche(
+                'Formation',
+                stagiaire.formation
+              )}
+
+              ${creerInformationFiche(
+                'Début de préparation',
+                afficherDateFrancaise(
+                  stagiaire.dateDebutPreparation
+                )
+              )}
+
+              ${creerInformationFiche(
+                'Date du stage',
+                afficherDateFrancaise(
+                  stagiaire.dateStage
+                )
+              )}
+
+              ${creerInformationFiche(
+                'Échéance',
+                calculerEcheanceStage(
+                  stagiaire.dateStage
+                ),
+                'information-echeance'
+              )}
+
+            </dl>
+
+          </div>
+
+        </section>
+
+        <section
+          class="grille-synthese-stagiaire"
+          aria-label="Synthèse du parcours"
+        >
+
+          ${creerCarteSyntheseStagiaire(
+            '📅',
+            'Sessions réalisées',
+            'valeurSessionsRealisees'
+          )}
+
+          ${creerCarteSyntheseStagiaire(
+            '⏱',
+            'Heures de formation',
+            'valeurHeuresFormation'
+          )}
+
+          ${creerCarteSyntheseStagiaire(
+            '✓',
+            'Taux de présence',
+            'valeurTauxPresence'
+          )}
+
+          ${creerCarteSyntheseStagiaire(
+            '★',
+            'Évaluations',
+            'valeurEvaluations'
+          )}
+
+        </section>
+
+        <section class="bloc fiche-bloc">
+
+          <div class="fiche-bloc-entete">
+            <div>
+              <h2>Sessions suivies</h2>
+              <p>Historique des séances de préparation.</p>
+            </div>
+          </div>
+
+          <div class="tableau-responsive">
+            <table class="tableau tableau-sessions-fiche">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Horaires</th>
+                  <th>Formation</th>
+                  <th>Thème</th>
+                  <th>Durée</th>
+                </tr>
+              </thead>
+              <tbody id="corpsSessionsFicheStagiaire">
+                <tr>
+                  <td colspan="5" class="etat-vide">
+                    Chargement des sessions…
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+        </section>
+
+        <section class="bloc fiche-bloc">
+
+          <div class="fiche-bloc-entete">
+            <div>
+              <h2>Notes administratives</h2>
+              <p>Informations utiles au suivi du stagiaire.</p>
+            </div>
+          </div>
+
+          <div class="fiche-notes-administratives">
+            ${echapperHtml(
+              stagiaire.notesAdministratives ||
+              'Aucune note administrative.'
+            )}
+          </div>
+
+        </section>
+
+      </main>
+
+    </article>
+  `;
+
+  document.body.appendChild(modal);
+  document.body.classList.add('modal-ouverte');
+
+  document.addEventListener(
+    'keydown',
+    gererClavierFicheStagiaire
+  );
+
+  modal
+    .querySelector('.bouton-fermer-fiche')
+    .focus();
+
+  google.script.run
+    .withSuccessHandler(function (suivi) {
+      mettreAJourSuiviFicheStagiaire(
+        uuid,
+        suivi
+      );
+    })
+    .withFailureHandler(function (erreur) {
+      gererErreurSuiviFicheStagiaire(
+        uuid,
+        erreur
+      );
+    })
+    .getSuiviStagiaire(uuid);
+}
+
+function creerInformationFiche(
+  libelle,
+  valeur,
+  classeSupplementaire
+) {
+  return `
+    <div class="fiche-information ${classeSupplementaire || ''}">
+      <dt>${echapperHtml(libelle)}</dt>
+      <dd>${echapperHtml(valeur || '—')}</dd>
+    </div>
+  `;
+}
+
+function creerCarteSyntheseStagiaire(
+  icone,
+  libelle,
+  identifiantValeur
+) {
+  return `
+    <div class="carte carte-synthese-stagiaire">
+      <div class="carte-synthese-icone">
+        ${icone}
+      </div>
+      <div>
+        <div class="carte-titre">
+          ${echapperHtml(libelle)}
+        </div>
+        <div
+          id="${identifiantValeur}"
+          class="carte-valeur"
+        >
+          —
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function mettreAJourSuiviFicheStagiaire(
+  uuid,
+  suivi
+) {
+  const modal = document.getElementById(
+    'modalFicheStagiaire'
+  );
+
+  if (!modal || modal.dataset.uuid !== uuid) {
+    return;
+  }
+
+  const synthese = suivi && suivi.synthese
+    ? suivi.synthese
+    : {};
+
+  document.getElementById(
+    'valeurSessionsRealisees'
+  ).textContent = String(
+    Number(synthese.sessionsRealisees) || 0
+  );
+
+  document.getElementById(
+    'valeurHeuresFormation'
+  ).textContent = formaterHeuresFormation(
+    synthese.heuresFormation
+  );
+
+  document.getElementById(
+    'valeurTauxPresence'
+  ).textContent = synthese.tauxPresence === null ||
+    synthese.tauxPresence === undefined
+    ? '—'
+    : Math.round(Number(synthese.tauxPresence)) + ' %';
+
+  document.getElementById(
+    'valeurEvaluations'
+  ).textContent = String(
+    Number(synthese.evaluations) || 0
+  );
+
+  afficherSessionsFicheStagiaire(
+    Array.isArray(suivi && suivi.sessions)
+      ? suivi.sessions
+      : []
+  );
+}
+
+function afficherSessionsFicheStagiaire(sessions) {
+  const corps = document.getElementById(
+    'corpsSessionsFicheStagiaire'
+  );
+
+  if (!corps) {
+    return;
+  }
+
+  if (sessions.length === 0) {
+    corps.innerHTML = `
+      <tr>
+        <td colspan="5" class="etat-vide">
+          Aucune session suivie pour le moment.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  corps.innerHTML = sessions
+    .map(function (session) {
+      const horaires = [
+        session.heureDebut,
+        session.heureFin
+      ]
+        .filter(Boolean)
+        .join(' – ');
+
+      return `
+        <tr>
+          <td>
+            <strong>
+              ${echapperHtml(
+                afficherDateFrancaise(session.date) ||
+                '—'
+              )}
+            </strong>
+          </td>
+          <td>${echapperHtml(horaires || '—')}</td>
+          <td>${echapperHtml(session.formation || '—')}</td>
+          <td>${echapperHtml(session.theme || '—')}</td>
+          <td>
+            ${echapperHtml(
+              formaterHeuresFormation(
+                session.dureeHeures
+              )
+            )}
+          </td>
+        </tr>
+      `;
+    })
+    .join('');
+}
+
+function gererErreurSuiviFicheStagiaire(
+  uuid,
+  erreur
+) {
+  const modal = document.getElementById(
+    'modalFicheStagiaire'
+  );
+
+  if (!modal || modal.dataset.uuid !== uuid) {
+    return;
+  }
+
+  afficherSessionsFicheStagiaire([]);
+
+  afficherToast(
+    'Le suivi des sessions n’a pas pu être chargé : ' +
+    extraireMessageErreur(erreur),
+    true
+  );
+}
+
+function formaterHeuresFormation(valeur) {
+  const nombre = Number(valeur);
+
+  if (!Number.isFinite(nombre)) {
+    return '0 h';
+  }
+
+  return nombre.toLocaleString(
+    'fr-FR',
+    {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2
+    }
+  ) + ' h';
+}
+
+function gererClavierFicheStagiaire(evenement) {
+  if (evenement.key === 'Escape') {
+    fermerFicheStagiaire();
+  }
+}
+
+function fermerFicheStagiaire() {
+  const modal = document.getElementById(
+    'modalFicheStagiaire'
+  );
+
+  if (modal) {
+    modal.remove();
+  }
+
+  document.removeEventListener(
+    'keydown',
+    gererClavierFicheStagiaire
+  );
+
+  document.body.classList.remove('modal-ouverte');
+}
+
+function calculerEcheanceStage(dateIso) {
+  if (!dateIso) {
+    return '—';
+  }
+
+  const parties = String(dateIso).split('-');
+
+  if (parties.length !== 3) {
+    return '—';
+  }
+
+  const dateStage = new Date(
+    Number(parties[0]),
+    Number(parties[1]) - 1,
+    Number(parties[2])
+  );
+
+  const aujourdHui = new Date();
+  aujourdHui.setHours(0, 0, 0, 0);
+
+  const difference = Math.ceil(
+    (
+      dateStage.getTime() -
+      aujourdHui.getTime()
+    ) / 86400000
+  );
+
+  if (difference > 0) {
+    return 'J-' + difference;
+  }
+
+  if (difference === 0) {
+    return 'J';
+  }
+
+  return 'J+' + Math.abs(difference);
 }
 
 function nouveauStagiaire() {

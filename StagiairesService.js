@@ -151,6 +151,225 @@ function getStagiaire(uuid) {
 
 
 /**
+ * Retourne les indicateurs et les sessions suivies
+ * affichés dans la fiche de consultation.
+ */
+function getSuiviStagiaire(uuid) {
+  const stagiaire = getStagiaire(uuid);
+  const classeur =
+    SpreadsheetApp.getActiveSpreadsheet();
+
+  const tableSessions = lireFeuillePourSuivi_(
+    classeur,
+    'SESSIONS'
+  );
+
+  const tablePresences = lireFeuillePourSuivi_(
+    classeur,
+    'PRESENCES_STAGIAIRES'
+  );
+
+  const tableEvaluations = lireFeuillePourSuivi_(
+    classeur,
+    'EVALUATIONS'
+  );
+
+  const idsSessionsSuivies = new Set();
+  const indexPresences = tablePresences.index;
+
+  if (
+    Number.isInteger(indexPresences.ID_STAGIAIRE) &&
+    Number.isInteger(indexPresences.ID_SESSION)
+  ) {
+    tablePresences.lignes.forEach(function (ligne) {
+      const idStagiaire = String(
+        ligne[indexPresences.ID_STAGIAIRE] || ''
+      );
+
+      const idSession = String(
+        ligne[indexPresences.ID_SESSION] || ''
+      );
+
+      if (idStagiaire === String(uuid) && idSession) {
+        idsSessionsSuivies.add(idSession);
+      }
+    });
+  }
+
+  const maintenant = new Date();
+  maintenant.setHours(12, 0, 0, 0);
+
+  const debutPreparation = obtenirDateSansHeure_(
+    stagiaire.dateDebutPreparation
+  );
+
+  const dateStage = obtenirDateSansHeure_(
+    stagiaire.dateStage
+  );
+
+  const indexSessions = tableSessions.index;
+  const sessionsConcernees = [];
+  const sessionsSuivies = [];
+
+  if (Number.isInteger(indexSessions.ID_SESSION)) {
+    tableSessions.lignes.forEach(function (ligne) {
+      const idSession = String(
+        ligne[indexSessions.ID_SESSION] || ''
+      );
+
+      if (!idSession) {
+        return;
+      }
+
+      const dateSession = Number.isInteger(
+        indexSessions.DATE_SESSION
+      )
+        ? obtenirDateSansHeure_(
+          ligne[indexSessions.DATE_SESSION]
+        )
+        : null;
+
+      const formation = Number.isInteger(
+        indexSessions.FORMATION
+      )
+        ? String(
+          ligne[indexSessions.FORMATION] || ''
+        ).trim()
+        : '';
+
+      const sessionPassee =
+        !dateSession || dateSession <= maintenant;
+
+      const sessionDansPeriode =
+        dateSession &&
+        (!debutPreparation ||
+          dateSession >= debutPreparation) &&
+        (!dateStage || dateSession <= dateStage) &&
+        dateSession <= maintenant;
+
+      if (
+        sessionDansPeriode &&
+        formation === stagiaire.formation
+      ) {
+        sessionsConcernees.push(idSession);
+      }
+
+      if (
+        !idsSessionsSuivies.has(idSession) ||
+        !sessionPassee
+      ) {
+        return;
+      }
+
+      sessionsSuivies.push({
+        idSession: idSession,
+
+        date: convertirDatePourInterface_(
+          dateSession
+        ),
+
+        heureDebut: Number.isInteger(
+          indexSessions.HEURE_DEBUT
+        )
+          ? convertirHeurePourInterface_(
+            ligne[indexSessions.HEURE_DEBUT]
+          )
+          : '',
+
+        heureFin: Number.isInteger(
+          indexSessions.HEURE_FIN
+        )
+          ? convertirHeurePourInterface_(
+            ligne[indexSessions.HEURE_FIN]
+          )
+          : '',
+
+        formation: formation,
+
+        theme: Number.isInteger(indexSessions.THEME)
+          ? String(
+            ligne[indexSessions.THEME] || ''
+          ).trim()
+          : '',
+
+        dureeHeures: Number.isInteger(
+          indexSessions.DUREE_HEURES
+        )
+          ? convertirNombre_(
+            ligne[indexSessions.DUREE_HEURES]
+          )
+          : 0
+      });
+    });
+  }
+
+  sessionsSuivies.sort(function (a, b) {
+    return (
+      String(b.date).localeCompare(String(a.date)) ||
+      String(b.heureDebut).localeCompare(
+        String(a.heureDebut)
+      )
+    );
+  });
+
+  const idsSessionsConcernees = new Set(
+    sessionsConcernees
+  );
+
+  let nombrePresences = 0;
+
+  idsSessionsSuivies.forEach(function (idSession) {
+    if (idsSessionsConcernees.has(idSession)) {
+      nombrePresences++;
+    }
+  });
+
+  const indexEvaluations = tableEvaluations.index;
+  let nombreEvaluations = 0;
+
+  if (Number.isInteger(indexEvaluations.ID_STAGIAIRE)) {
+    tableEvaluations.lignes.forEach(function (ligne) {
+      if (
+        String(
+          ligne[indexEvaluations.ID_STAGIAIRE] || ''
+        ) === String(uuid)
+      ) {
+        nombreEvaluations++;
+      }
+    });
+  }
+
+  const heuresFormation = sessionsSuivies.reduce(
+    function (total, session) {
+      return total + session.dureeHeures;
+    },
+    0
+  );
+
+  return {
+    sessions: sessionsSuivies,
+
+    synthese: {
+      sessionsRealisees: sessionsSuivies.length,
+      heuresFormation: Math.round(
+        heuresFormation * 100
+      ) / 100,
+
+      tauxPresence: sessionsConcernees.length
+        ? Math.round(
+          nombrePresences /
+          sessionsConcernees.length *
+          100
+        )
+        : null,
+
+      evaluations: nombreEvaluations
+    }
+  };
+}
+
+
+/**
  * Ajoute ou modifie un stagiaire.
  */
 function enregistrerStagiaire(donnees) {
@@ -701,6 +920,135 @@ function nettoyerTelephone_(valeur) {
   return String(valeur || '')
     .trim()
     .replace(/\s+/g, ' ');
+}
+
+
+/**
+ * Lit une feuille facultative utilisée par la synthèse.
+ */
+function lireFeuillePourSuivi_(classeur, nomFeuille) {
+  const feuille = classeur.getSheetByName(nomFeuille);
+
+  if (!feuille || feuille.getLastRow() < 1) {
+    return {
+      index: {},
+      lignes: []
+    };
+  }
+
+  const donnees = feuille.getDataRange().getValues();
+
+  return {
+    index: creerIndexEntetes_(donnees[0]),
+    lignes: donnees.slice(1)
+  };
+}
+
+
+/**
+ * Retourne une date locale normalisée à midi.
+ */
+function obtenirDateSansHeure_(valeur) {
+  if (!valeur) {
+    return null;
+  }
+
+  let date;
+
+  if (
+    Object.prototype.toString.call(valeur) ===
+    '[object Date]'
+  ) {
+    date = new Date(valeur.getTime());
+  } else {
+    const elements = String(valeur).split('-');
+
+    if (elements.length === 3) {
+      date = new Date(
+        Number(elements[0]),
+        Number(elements[1]) - 1,
+        Number(elements[2]),
+        12,
+        0,
+        0
+      );
+    } else {
+      date = new Date(valeur);
+    }
+  }
+
+  if (isNaN(date.getTime())) {
+    return null;
+  }
+
+  date.setHours(12, 0, 0, 0);
+  return date;
+}
+
+
+/**
+ * Convertit une heure Sheets pour l'interface.
+ */
+function convertirHeurePourInterface_(valeur) {
+  if (valeur === '' || valeur === null) {
+    return '';
+  }
+
+  if (
+    Object.prototype.toString.call(valeur) ===
+    '[object Date]'
+  ) {
+    return Utilities.formatDate(
+      valeur,
+      Session.getScriptTimeZone(),
+      'HH:mm'
+    );
+  }
+
+  if (typeof valeur === 'number') {
+    const minutes = Math.round(valeur * 24 * 60);
+    const heures = Math.floor(minutes / 60) % 24;
+    const resteMinutes = minutes % 60;
+
+    return (
+      String(heures).padStart(2, '0') +
+      ':' +
+      String(resteMinutes).padStart(2, '0')
+    );
+  }
+
+  const texte = String(valeur).trim();
+  const correspondance = texte.match(
+    /^(\d{1,2}):(\d{2})/
+  );
+
+  if (!correspondance) {
+    return texte;
+  }
+
+  return (
+    correspondance[1].padStart(2, '0') +
+    ':' +
+    correspondance[2]
+  );
+}
+
+
+/**
+ * Convertit une valeur numérique issue de Sheets.
+ */
+function convertirNombre_(valeur) {
+  if (typeof valeur === 'number') {
+    return isNaN(valeur) ? 0 : valeur;
+  }
+
+  const nombre = Number(
+    String(valeur || '')
+      .trim()
+      .replace(',', '.')
+  );
+
+  return isNaN(nombre) ? 0 : nombre;
 }
 
 
