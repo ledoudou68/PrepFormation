@@ -967,7 +967,79 @@ button:disabled {
 }
 
 .tableau-sessions-fiche {
-  min-width: 720px;
+  min-width: 980px;
+}
+
+.etat-suivi-pedagogique {
+  padding: 30px 18px;
+  border: 1px dashed var(--bordure);
+  border-radius: 10px;
+  background: #fafbfc;
+  color: var(--texte-secondaire);
+  text-align: center;
+}
+
+.categorie-suivi-pedagogique {
+  overflow: hidden;
+  border: 1px solid var(--bordure);
+  border-radius: 10px;
+  background: var(--blanc);
+}
+
+.categorie-suivi-pedagogique +
+.categorie-suivi-pedagogique {
+  margin-top: 16px;
+}
+
+.categorie-suivi-pedagogique h3 {
+  margin: 0;
+  padding: 13px 16px;
+  background: #f8f9fa;
+  border-bottom: 1px solid var(--bordure);
+  color: var(--rouge-fonce);
+  font-size: 16px;
+}
+
+.tableau-suivi-pedagogique {
+  min-width: 850px;
+}
+
+.tableau-suivi-pedagogique th:first-child {
+  width: 30%;
+}
+
+.nombre-seances-item-fiche {
+  text-align: center !important;
+  font-weight: 800;
+}
+
+.item-historique-fiche {
+  margin-top: 4px;
+  display: block;
+  color: var(--texte-secondaire);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.commentaire-item-fiche {
+  max-width: 320px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.items-session-fiche {
+  min-width: 230px;
+}
+
+.item-session-fiche {
+  margin: 2px 4px 2px 0;
+  padding: 4px 7px;
+  display: inline-block;
+  border-radius: 999px;
+  background: #eef5fc;
+  color: var(--bleu-fonce);
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .fiche-notes-administratives {
@@ -1244,7 +1316,7 @@ button:disabled {
 }
 
 .colonne-actions-referentiel {
-  width: 250px;
+  width: 330px;
   text-align: right !important;
   white-space: nowrap;
 }
@@ -1261,6 +1333,32 @@ button:disabled {
 
 .action-referentiel:disabled {
   cursor: not-allowed;
+}
+
+.bouton-action-statut-referentiel {
+  min-width: 116px;
+  height: 36px;
+  padding: 0 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--bordure);
+  border-radius: 8px;
+  background: var(--blanc);
+  color: var(--bleu);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.bouton-action-statut-referentiel:hover {
+  border-color: var(--bleu);
+  background: #eef5fc;
+}
+
+.bouton-action-statut-referentiel:disabled {
+  opacity: 0.7;
 }
 
 .bouton-supprimer-item {

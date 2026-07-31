@@ -174,6 +174,11 @@ function getSuiviStagiaire(uuid) {
     'EVALUATIONS'
   );
 
+  const tableItemsSessions = lireFeuillePourSuivi_(
+    classeur,
+    'ITEMS_SESSIONS'
+  );
+
   const idsSessionsSuivies = new Set();
   const indexPresences = tablePresences.index;
 
@@ -210,6 +215,7 @@ function getSuiviStagiaire(uuid) {
   const indexSessions = tableSessions.index;
   const sessionsConcernees = [];
   const sessionsSuivies = [];
+  const sessionsParId = {};
 
   if (Number.isInteger(indexSessions.ID_SESSION)) {
     tableSessions.lignes.forEach(function (ligne) {
@@ -246,6 +252,15 @@ function getSuiviStagiaire(uuid) {
           dateSession >= debutPreparation) &&
         (!dateStage || dateSession <= dateStage) &&
         dateSession <= maintenant;
+
+      sessionsParId[idSession] = {
+        idSession: idSession,
+        date: convertirDatePourInterface_(
+          dateSession
+        ),
+        dateObjet: dateSession,
+        formation: formation
+      };
 
       if (
         sessionDansPeriode &&
@@ -303,6 +318,169 @@ function getSuiviStagiaire(uuid) {
     });
   }
 
+  const idsItemsParSession = {};
+
+  function ajouterItemTravaille(idSession, idItem) {
+    if (
+      !idsSessionsSuivies.has(idSession) ||
+      !idItem
+    ) {
+      return;
+    }
+
+    if (!idsItemsParSession[idSession]) {
+      idsItemsParSession[idSession] = new Set();
+    }
+
+    idsItemsParSession[idSession].add(idItem);
+  }
+
+  const indexItemsSessions = tableItemsSessions.index;
+
+  if (
+    Number.isInteger(indexItemsSessions.ID_SESSION) &&
+    Number.isInteger(indexItemsSessions.ID_ITEM)
+  ) {
+    tableItemsSessions.lignes.forEach(function (ligne) {
+      ajouterItemTravaille(
+        String(
+          ligne[indexItemsSessions.ID_SESSION] || ''
+        ),
+        String(
+          ligne[indexItemsSessions.ID_ITEM] || ''
+        )
+      );
+    });
+  }
+
+  const indexEvaluations = tableEvaluations.index;
+  const evaluationsParItem = {};
+  let nombreEvaluations = 0;
+
+  if (
+    Number.isInteger(indexEvaluations.ID_STAGIAIRE) &&
+    Number.isInteger(indexEvaluations.ID_ITEM)
+  ) {
+    tableEvaluations.lignes.forEach(
+      function (ligne) {
+        const idStagiaire = String(
+          ligne[indexEvaluations.ID_STAGIAIRE] || ''
+        );
+
+        if (idStagiaire !== String(uuid)) {
+          return;
+        }
+
+        nombreEvaluations++;
+
+        const idItem = String(
+          ligne[indexEvaluations.ID_ITEM] || ''
+        );
+
+        const idSession = Number.isInteger(
+          indexEvaluations.ID_SESSION
+        )
+          ? String(
+            ligne[indexEvaluations.ID_SESSION] || ''
+          )
+          : '';
+
+        if (!idItem) {
+          return;
+        }
+
+        if (
+          evaluationIndiqueTravailSuivi_(
+            ligne,
+            indexEvaluations
+          )
+        ) {
+          ajouterItemTravaille(idSession, idItem);
+        }
+
+        if (!evaluationsParItem[idItem]) {
+          evaluationsParItem[idItem] = {
+            acquis: false,
+            dernierCommentaire: '',
+            ordreDernierCommentaire: -1
+          };
+        }
+
+        const evaluation = evaluationsParItem[idItem];
+
+        if (
+          evaluationEstAcquiseSuivi_(
+            ligne,
+            indexEvaluations
+          )
+        ) {
+          evaluation.acquis = true;
+        }
+
+        const commentaire = Number.isInteger(
+          indexEvaluations.REMARQUE
+        )
+          ? String(
+            ligne[indexEvaluations.REMARQUE] || ''
+          ).trim()
+          : '';
+
+        if (!commentaire) {
+          return;
+        }
+
+        const ordreCommentaire =
+          obtenirOrdreEvaluationSuivi_(
+            ligne,
+            indexEvaluations,
+            sessionsParId[idSession]
+          );
+
+        if (
+          ordreCommentaire >=
+          evaluation.ordreDernierCommentaire
+        ) {
+          evaluation.dernierCommentaire = commentaire;
+          evaluation.ordreDernierCommentaire =
+            ordreCommentaire;
+        }
+      }
+    );
+  }
+
+  const categoriesReferentiel =
+    getCategoriesReferentiel(stagiaire.formation);
+
+  const itemsReferentiel =
+    getItemsReferentiel(stagiaire.formation);
+
+  const itemsParId = {};
+  const positionItems = {};
+
+  itemsReferentiel.forEach(function (item, position) {
+    itemsParId[item.idItem] = item;
+    positionItems[item.idItem] = position;
+  });
+
+  sessionsSuivies.forEach(function (session) {
+    const idsItems = idsItemsParSession[
+      session.idSession
+    ];
+
+    session.itemsTravailles = idsItems
+      ? [...idsItems]
+        .filter(function (idItem) {
+          return Boolean(itemsParId[idItem]);
+        })
+        .sort(function (a, b) {
+          return positionItems[a] - positionItems[b];
+        })
+        .map(function (idItem) {
+          return itemsParId[idItem].intitule;
+        })
+      : [];
+  });
+
   sessionsSuivies.sort(function (a, b) {
     return (
       String(b.date).localeCompare(String(a.date)) ||
@@ -324,21 +502,6 @@ function getSuiviStagiaire(uuid) {
     }
   });
 
-  const indexEvaluations = tableEvaluations.index;
-  let nombreEvaluations = 0;
-
-  if (Number.isInteger(indexEvaluations.ID_STAGIAIRE)) {
-    tableEvaluations.lignes.forEach(function (ligne) {
-      if (
-        String(
-          ligne[indexEvaluations.ID_STAGIAIRE] || ''
-        ) === String(uuid)
-      ) {
-        nombreEvaluations++;
-      }
-    });
-  }
-
   const heuresFormation = sessionsSuivies.reduce(
     function (total, session) {
       return total + session.dureeHeures;
@@ -346,8 +509,18 @@ function getSuiviStagiaire(uuid) {
     0
   );
 
+  const suiviPedagogique =
+    construireSuiviPedagogiqueStagiaire_(
+      categoriesReferentiel,
+      itemsReferentiel,
+      idsItemsParSession,
+      sessionsParId,
+      evaluationsParItem
+    );
+
   return {
     sessions: sessionsSuivies,
+    suiviPedagogique: suiviPedagogique,
 
     synthese: {
       sessionsRealisees: sessionsSuivies.length,
@@ -366,6 +539,222 @@ function getSuiviStagiaire(uuid) {
       evaluations: nombreEvaluations
     }
   };
+}
+
+
+function construireSuiviPedagogiqueStagiaire_(
+  categories,
+  items,
+  idsItemsParSession,
+  sessionsParId,
+  evaluationsParItem
+) {
+  const groupesParId = {};
+
+  categories.forEach(function (categorie) {
+    groupesParId[categorie.idCategorie] = {
+      idCategorie: categorie.idCategorie,
+      intitule: categorie.intitule,
+      ordre: categorie.ordre,
+      items: []
+    };
+  });
+
+  items.forEach(function (item) {
+    const idsSessionsTravaillees = [];
+
+    Object.keys(idsItemsParSession).forEach(
+      function (idSession) {
+        if (
+          idsItemsParSession[idSession].has(item.idItem)
+        ) {
+          idsSessionsTravaillees.push(idSession);
+        }
+      }
+    );
+
+    const evaluation = evaluationsParItem[item.idItem];
+    const historiquementUtilise = Boolean(
+      item.utilise ||
+      idsSessionsTravaillees.length ||
+      evaluation
+    );
+
+    if (!item.actif && !historiquementUtilise) {
+      return;
+    }
+
+    let derniereDate = null;
+
+    idsSessionsTravaillees.forEach(function (idSession) {
+      const session = sessionsParId[idSession];
+
+      if (
+        session &&
+        session.dateObjet &&
+        (!derniereDate ||
+          session.dateObjet > derniereDate)
+      ) {
+        derniereDate = session.dateObjet;
+      }
+    });
+
+    const acquis = Boolean(evaluation && evaluation.acquis);
+    const nombreSeances = idsSessionsTravaillees.length;
+
+    const itemSuivi = {
+      idItem: item.idItem,
+      intitule: item.intitule,
+      ordre: item.ordre,
+      actif: item.actif,
+      nombreSeances: nombreSeances,
+      statut: acquis
+        ? 'Acquis'
+        : nombreSeances
+          ? 'Travaillé'
+          : 'Non travaillé',
+      derniereDate: convertirDatePourInterface_(
+        derniereDate
+      ),
+      dernierCommentaire: evaluation
+        ? evaluation.dernierCommentaire
+        : ''
+    };
+
+    if (!groupesParId[item.idCategorie]) {
+      groupesParId[item.idCategorie] = {
+        idCategorie: item.idCategorie,
+        intitule: item.categorie ||
+          'Catégorie historique',
+        ordre: item.ordreCategorie || 999999,
+        items: []
+      };
+    }
+
+    groupesParId[item.idCategorie].items.push(itemSuivi);
+  });
+
+  return Object.keys(groupesParId)
+    .map(function (idCategorie) {
+      const groupe = groupesParId[idCategorie];
+
+      groupe.items.sort(function (a, b) {
+        return (
+          a.ordre - b.ordre ||
+          a.intitule.localeCompare(
+            b.intitule,
+            'fr',
+            { sensitivity: 'base' }
+          )
+        );
+      });
+
+      return groupe;
+    })
+    .filter(function (groupe) {
+      return groupe.items.length;
+    })
+    .sort(function (a, b) {
+      return (
+        a.ordre - b.ordre ||
+        a.intitule.localeCompare(
+          b.intitule,
+          'fr',
+          { sensitivity: 'base' }
+        )
+      );
+    });
+}
+
+
+function evaluationIndiqueTravailSuivi_(ligne, index) {
+  if (evaluationEstAcquiseSuivi_(ligne, index)) {
+    return true;
+  }
+
+  if (Number.isInteger(index.VU)) {
+    const valeurVu = ligne[index.VU];
+
+    if (
+      valeurVu !== '' &&
+      valeurVu !== null &&
+      valeurVu !== undefined
+    ) {
+      return estValeurPositiveSuivi_(valeurVu);
+    }
+  }
+
+  if (Number.isInteger(index.NIVEAU)) {
+    return Boolean(
+      String(ligne[index.NIVEAU] || '').trim()
+    );
+  }
+
+  return Number.isInteger(index.REMARQUE) && Boolean(
+    String(ligne[index.REMARQUE] || '').trim()
+  );
+}
+
+
+function evaluationEstAcquiseSuivi_(ligne, index) {
+  if (
+    Number.isInteger(index.ACQUIS) &&
+    estValeurPositiveSuivi_(ligne[index.ACQUIS])
+  ) {
+    return true;
+  }
+
+  if (!Number.isInteger(index.NIVEAU)) {
+    return false;
+  }
+
+  return normaliserEntete_(ligne[index.NIVEAU]) ===
+    'ACQUIS';
+}
+
+
+function estValeurPositiveSuivi_(valeur) {
+  if (valeur === true || valeur === 1) {
+    return true;
+  }
+
+  return [
+    'oui',
+    'true',
+    '1',
+    'vu',
+    'acquis'
+  ].includes(
+    String(valeur || '').trim().toLowerCase()
+  );
+}
+
+
+function obtenirOrdreEvaluationSuivi_(
+  ligne,
+  index,
+  session
+) {
+  const dateSession = session && session.dateObjet
+    ? session.dateObjet.getTime()
+    : 0;
+
+  const valeurDate = [
+    'DATE_MODIFICATION',
+    'DATE_CREATION'
+  ].reduce(function (dateTrouvee, colonne) {
+    if (dateTrouvee || !Number.isInteger(index[colonne])) {
+      return dateTrouvee;
+    }
+
+    return obtenirDateSansHeure_(ligne[index[colonne]]);
+  }, null);
+
+  const dateEvaluation = valeurDate
+    ? valeurDate.getTime()
+    : 0;
+
+  return Math.max(dateSession, dateEvaluation);
 }
 
 

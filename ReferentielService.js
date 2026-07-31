@@ -451,27 +451,82 @@ function basculerActifItemReferentiel(idItem, actif) {
   return avecVerrouReferentiel_(function () {
     const preparation = preparerDonneesReferentiel_();
     const feuille = preparation.feuilleItems;
-    const item = lireItemsReferentiel_(feuille).find(
-      function (element) {
-        return element.idItem === String(idItem);
-      }
-    );
+    const identifiant = String(idItem || '').trim();
 
-    if (!item) {
+    if (!identifiant) {
+      throw new Error(
+        'L’identifiant ID_ITEM est obligatoire.'
+      );
+    }
+
+    const index = obtenirIndexReferentiel_(feuille);
+
+    if (
+      !Number.isInteger(index.ID_ITEM) ||
+      !Number.isInteger(index.ACTIF)
+    ) {
+      throw new Error(
+        'Les colonnes ID_ITEM et ACTIF sont obligatoires dans REFERENTIEL.'
+      );
+    }
+
+    const nombreLignes = feuille.getLastRow() - 1;
+
+    if (nombreLignes < 1) {
       throw new Error('Item pédagogique introuvable.');
     }
 
-    const nouvelEtat = convertirActifReferentiel_(actif);
-    const index = obtenirIndexReferentiel_(feuille);
+    const ids = feuille
+      .getRange(
+        2,
+        index.ID_ITEM + 1,
+        nombreLignes,
+        1
+      )
+      .getValues();
 
-    feuille
-      .getRange(item.numeroLigne, index.ACTIF + 1)
-      .setValue(nouvelEtat ? 'Oui' : 'Non');
+    const lignesCorrespondantes = [];
+
+    ids.forEach(function (ligne, position) {
+      if (String(ligne[0] || '').trim() === identifiant) {
+        lignesCorrespondantes.push(position + 2);
+      }
+    });
+
+    if (!lignesCorrespondantes.length) {
+      throw new Error('Item pédagogique introuvable.');
+    }
+
+    if (lignesCorrespondantes.length > 1) {
+      throw new Error(
+        'Plusieurs lignes REFERENTIEL utilisent le même ID_ITEM. Corrige les doublons avant de continuer.'
+      );
+    }
+
+    const numeroLigne = lignesCorrespondantes[0];
+    const nouvelEtat = convertirActifReferentiel_(actif);
+    const celluleActif = feuille.getRange(
+      numeroLigne,
+      index.ACTIF + 1
+    );
+
+    celluleActif.setValue(nouvelEtat ? 'Oui' : 'Non');
 
     SpreadsheetApp.flush();
 
+    const etatEnregistre = convertirActifReferentiel_(
+      celluleActif.getValue()
+    );
+
+    if (etatEnregistre !== nouvelEtat) {
+      throw new Error(
+        'La mise à jour de la colonne ACTIF n’a pas été confirmée.'
+      );
+    }
+
     return {
       succes: true,
+      idItem: identifiant,
       actif: nouvelEtat,
       message: nouvelEtat
         ? 'Item activé.'

@@ -19,6 +19,7 @@ const etatApplication = {
   formationsReferentiel: [],
   categoriesReferentiel: [],
   itemsReferentiel: [],
+  itemsReferentielEnCours: {},
   formationReferentielActive: ''
 };
 
@@ -629,6 +630,25 @@ function consulterStagiaire(uuid) {
 
           <div class="fiche-bloc-entete">
             <div>
+              <h2>Suivi pédagogique</h2>
+              <p>
+                Progression par catégorie et item du référentiel.
+              </p>
+            </div>
+          </div>
+
+          <div id="suiviPedagogiqueFicheStagiaire">
+            <div class="etat-suivi-pedagogique">
+              Chargement du suivi pédagogique…
+            </div>
+          </div>
+
+        </section>
+
+        <section class="bloc fiche-bloc">
+
+          <div class="fiche-bloc-entete">
+            <div>
               <h2>Sessions suivies</h2>
               <p>Historique des séances de préparation.</p>
             </div>
@@ -642,12 +662,13 @@ function consulterStagiaire(uuid) {
                   <th>Horaires</th>
                   <th>Formation</th>
                   <th>Thème</th>
+                  <th>Items travaillés</th>
                   <th>Durée</th>
                 </tr>
               </thead>
               <tbody id="corpsSessionsFicheStagiaire">
                 <tr>
-                  <td colspan="5" class="etat-vide">
+                  <td colspan="6" class="etat-vide">
                     Chargement des sessions…
                   </td>
                 </tr>
@@ -792,6 +813,98 @@ function mettreAJourSuiviFicheStagiaire(
       ? suivi.sessions
       : []
   );
+
+  afficherSuiviPedagogiqueFicheStagiaire(
+    Array.isArray(suivi && suivi.suiviPedagogique)
+      ? suivi.suiviPedagogique
+      : []
+  );
+}
+
+function afficherSuiviPedagogiqueFicheStagiaire(
+  categories
+) {
+  const zone = document.getElementById(
+    'suiviPedagogiqueFicheStagiaire'
+  );
+
+  if (!zone) {
+    return;
+  }
+
+  if (!categories.length) {
+    zone.innerHTML = `
+      <div class="etat-suivi-pedagogique">
+        Aucun item pédagogique configuré pour cette formation.
+      </div>
+    `;
+    return;
+  }
+
+  zone.innerHTML = categories
+    .map(function (categorie) {
+      const lignes = categorie.items
+        .map(function (item) {
+          const classeStatut = item.statut === 'Acquis'
+            ? 'badge-vert'
+            : item.statut === 'Travaillé'
+              ? 'badge-orange'
+              : 'badge-gris';
+
+          return `
+            <tr>
+              <td>
+                <strong>${echapperHtml(item.intitule)}</strong>
+                ${item.actif
+                  ? ''
+                  : '<small class="item-historique-fiche">Item inactif conservé dans l’historique</small>'}
+              </td>
+              <td class="nombre-seances-item-fiche">
+                ${Number(item.nombreSeances) || 0}
+              </td>
+              <td>
+                <span class="badge-statut ${classeStatut}">
+                  ${echapperHtml(item.statut)}
+                </span>
+              </td>
+              <td>
+                ${echapperHtml(
+                  afficherDateFrancaise(
+                    item.derniereDate
+                  ) || '—'
+                )}
+              </td>
+              <td class="commentaire-item-fiche">
+                ${echapperHtml(
+                  item.dernierCommentaire || '—'
+                )}
+              </td>
+            </tr>
+          `;
+        })
+        .join('');
+
+      return `
+        <section class="categorie-suivi-pedagogique">
+          <h3>${echapperHtml(categorie.intitule)}</h3>
+          <div class="tableau-responsive">
+            <table class="tableau tableau-suivi-pedagogique">
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Séances</th>
+                  <th>Statut</th>
+                  <th>Dernier travail</th>
+                  <th>Dernier commentaire</th>
+                </tr>
+              </thead>
+              <tbody>${lignes}</tbody>
+            </table>
+          </div>
+        </section>
+      `;
+    })
+    .join('');
 }
 
 function afficherSessionsFicheStagiaire(sessions) {
@@ -806,7 +919,7 @@ function afficherSessionsFicheStagiaire(sessions) {
   if (sessions.length === 0) {
     corps.innerHTML = `
       <tr>
-        <td colspan="5" class="etat-vide">
+        <td colspan="6" class="etat-vide">
           Aucune session suivie pour le moment.
         </td>
       </tr>
@@ -823,6 +936,20 @@ function afficherSessionsFicheStagiaire(sessions) {
         .filter(Boolean)
         .join(' – ');
 
+      const itemsTravailles = Array.isArray(
+        session.itemsTravailles
+      ) && session.itemsTravailles.length
+        ? session.itemsTravailles
+          .map(function (item) {
+            return `
+              <span class="item-session-fiche">
+                ${echapperHtml(item)}
+              </span>
+            `;
+          })
+          .join('')
+        : '—';
+
       return `
         <tr>
           <td>
@@ -836,6 +963,9 @@ function afficherSessionsFicheStagiaire(sessions) {
           <td>${echapperHtml(horaires || '—')}</td>
           <td>${echapperHtml(session.formation || '—')}</td>
           <td>${echapperHtml(session.theme || '—')}</td>
+          <td class="items-session-fiche">
+            ${itemsTravailles}
+          </td>
           <td>
             ${echapperHtml(
               formaterHeuresFormation(
@@ -862,6 +992,7 @@ function gererErreurSuiviFicheStagiaire(
   }
 
   afficherSessionsFicheStagiaire([]);
+  afficherSuiviPedagogiqueFicheStagiaire([]);
 
   afficherToast(
     'Le suivi des sessions n’a pas pu être chargé : ' +
@@ -1913,6 +2044,12 @@ function afficherListeItemsReferentiel() {
       const itemDisponible =
         item.actif && item.categorieActive;
 
+      const actionEnCours = Boolean(
+        etatApplication.itemsReferentielEnCours[
+          item.idItem
+        ]
+      );
+
       const libelleStatut = !item.categorieActive
         ? 'Catégorie inactive'
         : item.actif
@@ -1980,12 +2117,22 @@ function afficherListeItemsReferentiel() {
 
             <button
               type="button"
-              class="bouton-icone action-referentiel"
-              onclick="basculerItemReferentiel('${item.idItem}', ${!item.actif})"
+              class="bouton-action-statut-referentiel action-referentiel"
+              data-item-id="${echapperHtml(item.idItem)}"
+              data-actif-cible="${item.actif ? 'false' : 'true'}"
+              onclick="basculerItemReferentiel(this)"
               title="${item.actif ? 'Désactiver' : 'Activer'}"
               aria-label="${item.actif ? 'Désactiver' : 'Activer'} ${echapperHtml(item.intitule)}"
+              ${actionEnCours ? 'disabled' : ''}
             >
-              ${item.actif ? '⏸' : '▶'}
+              <span aria-hidden="true">
+                ${actionEnCours ? '…' : item.actif ? '⏸' : '▶'}
+              </span>
+              ${actionEnCours
+                ? 'Mise à jour…'
+                : item.actif
+                  ? 'Désactiver'
+                  : 'Activer'}
             </button>
 
             ${suppression}
@@ -2395,11 +2542,73 @@ function basculerCategorieReferentiel(
   );
 }
 
-function basculerItemReferentiel(idItem, actif) {
-  executerActionReferentiel(
-    'basculerActifItemReferentiel',
-    [idItem, actif]
+function basculerItemReferentiel(cible, actifExplicite) {
+  const element = cible && cible.dataset
+    ? cible
+    : null;
+
+  const idItem = String(
+    element ? element.dataset.itemId : cible || ''
+  ).trim();
+
+  const item = etatApplication.itemsReferentiel.find(
+    function (elementItem) {
+      return elementItem.idItem === idItem;
+    }
   );
+
+  if (!item) {
+    afficherToast('Item pédagogique introuvable.', true);
+    return;
+  }
+
+  if (etatApplication.itemsReferentielEnCours[idItem]) {
+    return;
+  }
+
+  const nouvelEtat = element
+    ? element.dataset.actifCible === 'true'
+    : Boolean(actifExplicite);
+
+  const ancienEtat = Boolean(item.actif);
+
+  etatApplication.itemsReferentielEnCours[idItem] = true;
+  item.actif = nouvelEtat;
+  afficherListeItemsReferentiel();
+
+  google.script.run
+    .withSuccessHandler(function (resultat) {
+      delete etatApplication.itemsReferentielEnCours[
+        idItem
+      ];
+
+      item.actif = Boolean(resultat.actif);
+      afficherListeItemsReferentiel();
+
+      afficherToast(
+        resultat.message || 'Item mis à jour.',
+        false
+      );
+
+      chargerDonneesReferentiel();
+    })
+    .withFailureHandler(function (erreur) {
+      delete etatApplication.itemsReferentielEnCours[
+        idItem
+      ];
+
+      item.actif = ancienEtat;
+      afficherListeItemsReferentiel();
+
+      afficherToast(
+        extraireMessageErreur(erreur),
+        true
+      );
+    })
+    .basculerActifItemReferentiel(
+      idItem,
+      nouvelEtat
+    );
 }
 
 function supprimerCategorieReferentielInterface(
@@ -2495,14 +2704,6 @@ function executerActionReferentiel(nomFonction, parametres) {
 
   if (nomFonction === 'deplacerCategorieReferentiel') {
     execution.deplacerCategorieReferentiel(
-      parametres[0],
-      parametres[1]
-    );
-    return;
-  }
-
-  if (nomFonction === 'basculerActifItemReferentiel') {
-    execution.basculerActifItemReferentiel(
       parametres[0],
       parametres[1]
     );
