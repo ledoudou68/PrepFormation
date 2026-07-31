@@ -421,6 +421,8 @@ function nouveauStagiaire() {
   ).value = dateDuJourPourChamp();
 
   mettreAJourChampsCloture();
+  mettreAJourApercuPhotoStagiaire();
+  changerOngletStagiaire('informations');
   ouvrirModalStagiaire();
 
   window.setTimeout(function () {
@@ -482,8 +484,94 @@ function modifierStagiaire(uuid) {
     'stagiaireNotes'
   ).value = stagiaire.notesAdministratives;
 
+  document.getElementById(
+    'stagiaireGrade'
+  ).value = stagiaire.grade || '';
+
+  document.getElementById(
+    'stagiaireTelephone'
+  ).value = stagiaire.telephone || '';
+
+  document.getElementById(
+    'stagiaireEmail'
+  ).value = stagiaire.email || '';
+
+  document.getElementById(
+    'stagiairePhotoUrl'
+  ).value = stagiaire.photoUrl || '';
+
+  document.getElementById(
+    'stagiaireFormateurReferent'
+  ).value = stagiaire.formateurReferent || '';
+
   mettreAJourChampsCloture();
+  mettreAJourApercuPhotoStagiaire();
+  changerOngletStagiaire('informations');
   ouvrirModalStagiaire();
+}
+
+function changerOngletStagiaire(nomOnglet) {
+  document
+    .querySelectorAll('.onglet-modal')
+    .forEach(function (bouton) {
+      bouton.classList.toggle(
+        'actif',
+        bouton.dataset.onglet === nomOnglet
+      );
+    });
+
+  document
+    .querySelectorAll('.contenu-onglet-stagiaire')
+    .forEach(function (contenu) {
+      contenu.classList.add('masque');
+    });
+
+  const identifiant =
+    'ongletStagiaire' +
+    nomOnglet.charAt(0).toUpperCase() +
+    nomOnglet.slice(1);
+
+  const contenuActif = document.getElementById(
+    identifiant
+  );
+
+  if (contenuActif) {
+    contenuActif.classList.remove('masque');
+  }
+}
+
+function mettreAJourApercuPhotoStagiaire() {
+  const zone = document.getElementById(
+    'apercuPhotoStagiaire'
+  );
+
+  const champ = document.getElementById(
+    'stagiairePhotoUrl'
+  );
+
+  if (!zone || !champ) {
+    return;
+  }
+
+  const url = champ.value.trim();
+
+  if (!url) {
+    zone.innerHTML = '<span>Photo</span>';
+    return;
+  }
+
+  const image = document.createElement('img');
+
+  image.src = url;
+  image.alt = 'Photo du stagiaire';
+
+  image.addEventListener('error', function () {
+    zone.innerHTML =
+      '<span>Photo indisponible</span>';
+  });
+
+  zone.innerHTML = '';
+  zone.appendChild(image);
 }
 
 function ouvrirModalStagiaire() {
@@ -583,6 +671,27 @@ function soumettreStagiaire(evenement) {
     notesAdministratives:
       document.getElementById(
         'stagiaireNotes'
+      ).value,
+
+    grade: document.getElementById(
+      'stagiaireGrade'
+    ).value,
+
+    telephone: document.getElementById(
+      'stagiaireTelephone'
+    ).value,
+
+    email: document.getElementById(
+      'stagiaireEmail'
+    ).value,
+
+    photoUrl: document.getElementById(
+      'stagiairePhotoUrl'
+    ).value,
+
+    formateurReferent:
+      document.getElementById(
+        'stagiaireFormateurReferent'
       ).value
   };
 
