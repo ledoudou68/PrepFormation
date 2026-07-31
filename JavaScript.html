@@ -6,7 +6,14 @@ const etatApplication = {
   pageActive: 'Accueil',
   stagiaires: [],
   formations: [],
-  statutsStagiaires: []
+  statutsStagiaires: [],
+  sessions: [],
+  stagiairesSession: [],
+  formateursSession: [],
+  formationsSession: [],
+  referentielSession: [],
+  formationReferentielSession: '',
+  validationsSession: {}
 };
 
 document.addEventListener(
@@ -47,6 +54,10 @@ function chargerPage(nomPage) {
 function initialiserPageActive(nomPage) {
   if (nomPage === 'Stagiaires') {
     initialiserPageStagiaires();
+  }
+
+  if (nomPage === 'Sessions') {
+    initialiserPageSessions();
   }
 }
 
@@ -1309,6 +1320,872 @@ function echapperHtml(valeur) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+/* =====================================================
+   SESSIONS
+===================================================== */
+
+function initialiserPageSessions() {
+  afficherLoader();
+
+  let chargementsTermines = 0;
+  let erreurRencontree = false;
+
+  function terminerChargementSession() {
+    chargementsTermines++;
+
+    if (
+      chargementsTermines === 2 &&
+      !erreurRencontree
+    ) {
+      afficherListeSessions();
+      preparerFormulaireSession();
+      masquerLoader();
+    }
+  }
+
+  function erreurChargementSession(erreur) {
+    if (erreurRencontree) {
+      return;
+    }
+
+    erreurRencontree = true;
+    gererErreurServeur(erreur);
+  }
+
+  google.script.run
+    .withSuccessHandler(function (sessions) {
+      etatApplication.sessions =
+        Array.isArray(sessions) ? sessions : [];
+
+      terminerChargementSession();
+    })
+    .withFailureHandler(erreurChargementSession)
+    .getSessions();
+
+  google.script.run
+    .withSuccessHandler(function (preparation) {
+      const donnees = preparation || {};
+
+      etatApplication.stagiairesSession =
+        Array.isArray(donnees.stagiaires)
+          ? donnees.stagiaires
+          : [];
+
+      etatApplication.formateursSession =
+        Array.isArray(donnees.formateurs)
+          ? donnees.formateurs
+          : [];
+
+      etatApplication.formationsSession =
+        Array.isArray(donnees.formations)
+          ? donnees.formations
+          : [];
+
+      terminerChargementSession();
+    })
+    .withFailureHandler(erreurChargementSession)
+    .getPreparationSession();
+}
+
+function afficherListeSessions() {
+  const corps = document.getElementById(
+    'corpsTableauSessions'
+  );
+
+  if (!corps) {
+    return;
+  }
+
+  const sessions = etatApplication.sessions;
+  const compteur = document.getElementById(
+    'compteurSessions'
+  );
+
+  if (compteur) {
+    compteur.textContent =
+      sessions.length +
+      (sessions.length > 1
+        ? ' séances enregistrées'
+        : ' séance enregistrée');
+  }
+
+  if (!sessions.length) {
+    corps.innerHTML = `
+      <tr>
+        <td colspan="7" class="etat-vide">
+          Aucune séance enregistrée pour le moment.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  corps.innerHTML = sessions
+    .map(function (session) {
+      const horaires = [
+        session.heureDebut,
+        session.heureFin
+      ]
+        .filter(Boolean)
+        .join(' – ');
+
+      const formateurs = Array.isArray(
+        session.formateurs
+      ) && session.formateurs.length
+        ? session.formateurs
+          .map(echapperHtml)
+          .join('<br>')
+        : '—';
+
+      return `
+        <tr>
+          <td>
+            <strong>
+              ${echapperHtml(
+                afficherDateFrancaise(session.date) || '—'
+              )}
+            </strong>
+          </td>
+          <td>${echapperHtml(horaires || '—')}</td>
+          <td>
+            <span class="badge-formation-session">
+              ${echapperHtml(session.formation || '—')}
+            </span>
+          </td>
+          <td>${formateurs}</td>
+          <td>
+            <span class="nombre-participants-session">
+              ${Number(session.nombreStagiaires) || 0}
+            </span>
+          </td>
+          <td>
+            ${echapperHtml(
+              formaterHeuresFormation(
+                session.dureeHeures
+              )
+            )}
+          </td>
+          <td class="remarques-tableau-session">
+            ${echapperHtml(session.remarques || '—')}
+          </td>
+        </tr>
+      `;
+    })
+    .join('');
+}
+
+function preparerFormulaireSession() {
+  remplirSelect(
+    'sessionFormation',
+    etatApplication.formationsSession,
+    'Sélectionner une formation'
+  );
+
+  afficherFormateursSession();
+}
+
+function afficherFormateursSession() {
+  const zone = document.getElementById(
+    'listeFormateursSession'
+  );
+
+  if (!zone) {
+    return;
+  }
+
+  const formateurs = etatApplication.formateursSession;
+
+  if (!formateurs.length) {
+    zone.innerHTML = `
+      <div class="etat-selection-session">
+        Aucun formateur actif disponible.
+      </div>
+    `;
+    mettreAJourCompteursParticipantsSession();
+    return;
+  }
+
+  zone.innerHTML = formateurs
+    .map(function (formateur) {
+      const identite = [
+        formateur.prenom,
+        formateur.nom
+      ]
+        .filter(Boolean)
+        .join(' ');
+
+      return `
+        <label class="option-selection-session">
+          <input
+            type="checkbox"
+            name="formateurSession"
+            value="${echapperHtml(formateur.idFormateur)}"
+            onchange="mettreAJourCompteursParticipantsSession()"
+          >
+          <span>${echapperHtml(identite)}</span>
+        </label>
+      `;
+    })
+    .join('');
+
+  mettreAJourCompteursParticipantsSession();
+}
+
+function nouvelleSession() {
+  const formulaire = document.getElementById(
+    'formulaireSession'
+  );
+
+  formulaire.reset();
+
+  etatApplication.referentielSession = [];
+  etatApplication.formationReferentielSession = '';
+  etatApplication.validationsSession = {};
+
+  document.getElementById('sessionDate').value =
+    dateDuJourPourChamp();
+
+  document.getElementById('sessionHeureDebut').value =
+    '09:00';
+
+  document.getElementById('sessionHeureFin').value =
+    '11:00';
+
+  preparerFormulaireSession();
+  afficherStagiairesSession();
+  afficherReferentielSession();
+  mettreAJourDureeSession();
+
+  document
+    .getElementById('modalSession')
+    .classList
+    .remove('masque');
+
+  document.body.classList.add('modal-ouverte');
+
+  window.setTimeout(function () {
+    document.getElementById('sessionDate').focus();
+  }, 100);
+}
+
+function fermerModalSession() {
+  const modal = document.getElementById('modalSession');
+
+  if (modal) {
+    modal.classList.add('masque');
+  }
+
+  document.body.classList.remove('modal-ouverte');
+}
+
+function changerFormationSession() {
+  const formation = document.getElementById(
+    'sessionFormation'
+  ).value;
+
+  etatApplication.validationsSession = {};
+  etatApplication.referentielSession = [];
+  etatApplication.formationReferentielSession = '';
+
+  afficherStagiairesSession();
+  afficherReferentielSession();
+
+  if (!formation) {
+    return;
+  }
+
+  const zone = document.getElementById(
+    'zoneReferentielSession'
+  );
+
+  zone.innerHTML = `
+    <div class="etat-referentiel-session">
+      Chargement du référentiel…
+    </div>
+  `;
+
+  google.script.run
+    .withSuccessHandler(function (referentiel) {
+      const formationActuelle = document.getElementById(
+        'sessionFormation'
+      )?.value;
+
+      if (formationActuelle !== formation) {
+        return;
+      }
+
+      etatApplication.referentielSession =
+        Array.isArray(referentiel) ? referentiel : [];
+
+      etatApplication.formationReferentielSession =
+        formation;
+
+      afficherReferentielSession();
+    })
+    .withFailureHandler(function (erreur) {
+      const formationActuelle = document.getElementById(
+        'sessionFormation'
+      )?.value;
+
+      if (formationActuelle !== formation) {
+        return;
+      }
+
+      zone.innerHTML = `
+        <div class="etat-referentiel-session erreur">
+          Impossible de charger le référentiel.
+        </div>
+      `;
+
+      afficherToast(
+        extraireMessageErreur(erreur),
+        true
+      );
+    })
+    .getReferentielFormation(formation);
+}
+
+function afficherStagiairesSession() {
+  const zone = document.getElementById(
+    'listeStagiairesSession'
+  );
+
+  if (!zone) {
+    return;
+  }
+
+  const formation = String(
+    document.getElementById('sessionFormation')
+      ?.value || ''
+  );
+
+  if (!formation) {
+    zone.innerHTML = `
+      <div class="etat-selection-session">
+        Choisis d’abord une formation.
+      </div>
+    `;
+    mettreAJourCompteursParticipantsSession();
+    return;
+  }
+
+  const stagiaires = etatApplication.stagiairesSession
+    .filter(function (stagiaire) {
+      return (
+        stagiaire.statut === 'À préparer' &&
+        stagiaire.formation === formation
+      );
+    });
+
+  if (!stagiaires.length) {
+    zone.innerHTML = `
+      <div class="etat-selection-session">
+        Aucun stagiaire « À préparer » pour cette formation.
+      </div>
+    `;
+    mettreAJourCompteursParticipantsSession();
+    return;
+  }
+
+  zone.innerHTML = stagiaires
+    .map(function (stagiaire) {
+      return `
+        <label class="option-selection-session">
+          <input
+            type="checkbox"
+            name="stagiaireSession"
+            value="${echapperHtml(stagiaire.uuid)}"
+            onchange="changerStagiairesSession()"
+          >
+          <span>
+            <strong>${echapperHtml(stagiaire.nom)}</strong>
+            ${echapperHtml(stagiaire.prenom)}
+          </span>
+        </label>
+      `;
+    })
+    .join('');
+
+  mettreAJourCompteursParticipantsSession();
+}
+
+function changerStagiairesSession() {
+  capturerValidationsSession();
+  mettreAJourCompteursParticipantsSession();
+  afficherReferentielSession();
+}
+
+function mettreAJourCompteursParticipantsSession() {
+  const nombreFormateurs = document.querySelectorAll(
+    'input[name="formateurSession"]:checked'
+  ).length;
+
+  const nombreStagiaires = document.querySelectorAll(
+    'input[name="stagiaireSession"]:checked'
+  ).length;
+
+  const compteurFormateurs = document.getElementById(
+    'compteurFormateursSession'
+  );
+
+  const compteurStagiaires = document.getElementById(
+    'compteurStagiairesSession'
+  );
+
+  if (compteurFormateurs) {
+    compteurFormateurs.textContent =
+      nombreFormateurs +
+      (nombreFormateurs > 1
+        ? ' sélectionnés'
+        : ' sélectionné');
+  }
+
+  if (compteurStagiaires) {
+    compteurStagiaires.textContent =
+      nombreStagiaires +
+      (nombreStagiaires > 1
+        ? ' sélectionnés'
+        : ' sélectionné');
+  }
+}
+
+function obtenirIdsStagiairesSession() {
+  return [...document.querySelectorAll(
+    'input[name="stagiaireSession"]:checked'
+  )].map(function (champ) {
+    return champ.value;
+  });
+}
+
+function afficherReferentielSession() {
+  const zone = document.getElementById(
+    'zoneReferentielSession'
+  );
+
+  const aide = document.getElementById(
+    'aideReferentielSession'
+  );
+
+  if (!zone || !aide) {
+    return;
+  }
+
+  const formation = String(
+    document.getElementById('sessionFormation')
+      ?.value || ''
+  );
+
+  const idsStagiaires = obtenirIdsStagiairesSession();
+
+  if (!formation) {
+    aide.textContent =
+      'Choisis une formation pour charger son référentiel.';
+
+    zone.innerHTML = `
+      <div class="etat-referentiel-session">
+        Aucun référentiel à afficher.
+      </div>
+    `;
+    return;
+  }
+
+  if (
+    etatApplication.formationReferentielSession !==
+    formation
+  ) {
+    aide.textContent = 'Chargement du référentiel…';
+    return;
+  }
+
+  if (!etatApplication.referentielSession.length) {
+    aide.textContent =
+      'Aucun item actif n’est configuré pour cette formation.';
+
+    zone.innerHTML = `
+      <div class="etat-referentiel-session">
+        Référentiel vide pour ${echapperHtml(formation)}.
+      </div>
+    `;
+    return;
+  }
+
+  if (!idsStagiaires.length) {
+    aide.textContent =
+      'Sélectionne un ou plusieurs stagiaires pour saisir les validations.';
+
+    zone.innerHTML = `
+      <div class="etat-referentiel-session">
+        Le référentiel est prêt. Sélectionne au moins un stagiaire.
+      </div>
+    `;
+    return;
+  }
+
+  aide.textContent =
+    'Les validations sont individuelles et alimenteront chaque fiche stagiaire.';
+
+  const stagiaires = idsStagiaires
+    .map(function (idStagiaire) {
+      return etatApplication.stagiairesSession.find(
+        function (stagiaire) {
+          return stagiaire.uuid === idStagiaire;
+        }
+      );
+    })
+    .filter(Boolean);
+
+  zone.innerHTML = stagiaires
+    .map(function (stagiaire, indexStagiaire) {
+      return creerReferentielStagiaireSession(
+        stagiaire,
+        indexStagiaire === 0
+      );
+    })
+    .join('');
+}
+
+function creerReferentielStagiaireSession(
+  stagiaire,
+  ouvert
+) {
+  const categories = etatApplication.referentielSession
+    .map(function (categorie) {
+      const items = categorie.items
+        .map(function (item) {
+          return creerItemReferentielSession(
+            stagiaire.uuid,
+            item
+          );
+        })
+        .join('');
+
+      return `
+        <div class="categorie-referentiel-session">
+          <h4>${echapperHtml(categorie.libelle)}</h4>
+          <div class="liste-items-referentiel-session">
+            ${items}
+          </div>
+        </div>
+      `;
+    })
+    .join('');
+
+  return `
+    <details
+      class="referentiel-stagiaire-session"
+      data-stagiaire-id="${echapperHtml(stagiaire.uuid)}"
+      ${ouvert ? 'open' : ''}
+    >
+      <summary>
+        <span>
+          ${echapperHtml(stagiaire.prenom)}
+          <strong>${echapperHtml(stagiaire.nom)}</strong>
+        </span>
+        <span class="resume-referentiel-stagiaire">
+          ${compterItemsReferentielSession()} items
+        </span>
+      </summary>
+      <div class="contenu-referentiel-stagiaire">
+        ${categories}
+      </div>
+    </details>
+  `;
+}
+
+function creerItemReferentielSession(
+  idStagiaire,
+  item
+) {
+  const cle = idStagiaire + '::' + item.idItem;
+  const validation =
+    etatApplication.validationsSession[cle] || {};
+
+  return `
+    <div
+      class="ligne-item-referentiel-session"
+      data-item-id="${echapperHtml(item.idItem)}"
+    >
+      <div class="libelle-item-referentiel-session">
+        ${echapperHtml(item.libelle)}
+      </div>
+
+      <label class="validation-item-session">
+        <input
+          type="checkbox"
+          class="validation-vu-session"
+          ${validation.vu ? 'checked' : ''}
+          onchange="synchroniserValidationItemSession(this)"
+        >
+        <span>Vu</span>
+      </label>
+
+      <label class="validation-item-session validation-acquis-session">
+        <input
+          type="checkbox"
+          class="validation-acquis-session-champ"
+          ${validation.acquis ? 'checked' : ''}
+          onchange="synchroniserValidationItemSession(this)"
+        >
+        <span>Acquis</span>
+      </label>
+
+      <input
+        type="text"
+        class="champ commentaire-item-session"
+        value="${echapperHtml(validation.commentaire || '')}"
+        placeholder="Commentaire facultatif"
+        oninput="capturerValidationsSession()"
+      >
+    </div>
+  `;
+}
+
+function compterItemsReferentielSession() {
+  return etatApplication.referentielSession.reduce(
+    function (total, categorie) {
+      return total + categorie.items.length;
+    },
+    0
+  );
+}
+
+function synchroniserValidationItemSession(champ) {
+  const ligne = champ.closest(
+    '.ligne-item-referentiel-session'
+  );
+
+  if (!ligne) {
+    return;
+  }
+
+  const vu = ligne.querySelector(
+    '.validation-vu-session'
+  );
+
+  const acquis = ligne.querySelector(
+    '.validation-acquis-session-champ'
+  );
+
+  if (
+    champ.classList.contains(
+      'validation-acquis-session-champ'
+    ) &&
+    champ.checked
+  ) {
+    vu.checked = true;
+  }
+
+  if (
+    champ.classList.contains(
+      'validation-vu-session'
+    ) &&
+    !champ.checked
+  ) {
+    acquis.checked = false;
+  }
+
+  capturerValidationsSession();
+}
+
+function capturerValidationsSession() {
+  document
+    .querySelectorAll('.referentiel-stagiaire-session')
+    .forEach(function (blocStagiaire) {
+      const idStagiaire =
+        blocStagiaire.dataset.stagiaireId;
+
+      blocStagiaire
+        .querySelectorAll(
+          '.ligne-item-referentiel-session'
+        )
+        .forEach(function (ligne) {
+          const idItem = ligne.dataset.itemId;
+          const cle = idStagiaire + '::' + idItem;
+
+          const vu = ligne.querySelector(
+            '.validation-vu-session'
+          ).checked;
+
+          const acquis = ligne.querySelector(
+            '.validation-acquis-session-champ'
+          ).checked;
+
+          const commentaire = ligne.querySelector(
+            '.commentaire-item-session'
+          ).value.trim();
+
+          if (vu || acquis || commentaire) {
+            etatApplication.validationsSession[cle] = {
+              idStagiaire: idStagiaire,
+              idItem: idItem,
+              vu: vu || acquis,
+              acquis: acquis,
+              commentaire: commentaire
+            };
+          } else {
+            delete etatApplication.validationsSession[cle];
+          }
+        });
+    });
+}
+
+function mettreAJourDureeSession() {
+  const zone = document.getElementById(
+    'indicationDureeSession'
+  );
+
+  if (!zone) {
+    return;
+  }
+
+  const debut = String(
+    document.getElementById('sessionHeureDebut')
+      ?.value || ''
+  );
+
+  const fin = String(
+    document.getElementById('sessionHeureFin')
+      ?.value || ''
+  );
+
+  if (!debut || !fin) {
+    zone.textContent = 'Durée calculée : —';
+    zone.classList.remove('erreur');
+    return;
+  }
+
+  const minutesDebut = convertirHeureEnMinutes(debut);
+  const minutesFin = convertirHeureEnMinutes(fin);
+  const duree = (minutesFin - minutesDebut) / 60;
+
+  if (duree <= 0) {
+    zone.textContent =
+      'L’heure de fin doit être postérieure au début.';
+    zone.classList.add('erreur');
+    return;
+  }
+
+  zone.textContent =
+    'Durée calculée : ' +
+    formaterHeuresFormation(duree);
+
+  zone.classList.remove('erreur');
+}
+
+function convertirHeureEnMinutes(heure) {
+  const parties = String(heure).split(':');
+
+  return (
+    Number(parties[0]) * 60 +
+    Number(parties[1])
+  );
+}
+
+function soumettreSession(evenement) {
+  evenement.preventDefault();
+  capturerValidationsSession();
+
+  const formateurs = [...document.querySelectorAll(
+    'input[name="formateurSession"]:checked'
+  )].map(function (champ) {
+    return champ.value;
+  });
+
+  const stagiaires = obtenirIdsStagiairesSession();
+
+  if (!formateurs.length) {
+    afficherToast(
+      'Sélectionne au moins un formateur.',
+      true
+    );
+    return;
+  }
+
+  if (!stagiaires.length) {
+    afficherToast(
+      'Sélectionne au moins un stagiaire.',
+      true
+    );
+    return;
+  }
+
+  const idsStagiaires = new Set(stagiaires);
+  const validations = Object.keys(
+    etatApplication.validationsSession
+  )
+    .map(function (cle) {
+      return etatApplication.validationsSession[cle];
+    })
+    .filter(function (validation) {
+      return idsStagiaires.has(validation.idStagiaire);
+    });
+
+  const donnees = {
+    date: document.getElementById('sessionDate').value,
+    formation: document.getElementById(
+      'sessionFormation'
+    ).value,
+    heureDebut: document.getElementById(
+      'sessionHeureDebut'
+    ).value,
+    heureFin: document.getElementById(
+      'sessionHeureFin'
+    ).value,
+    formateurs: formateurs,
+    stagiaires: stagiaires,
+    remarques: document.getElementById(
+      'sessionRemarques'
+    ).value,
+    validations: validations
+  };
+
+  const bouton = document.getElementById(
+    'boutonEnregistrerSession'
+  );
+
+  bouton.disabled = true;
+  bouton.textContent = 'Enregistrement…';
+
+  google.script.run
+    .withSuccessHandler(function (resultat) {
+      bouton.disabled = false;
+      bouton.textContent = 'Enregistrer la séance';
+
+      fermerModalSession();
+      afficherToast(
+        resultat.message || 'Séance enregistrée.',
+        false
+      );
+
+      rechargerSessions();
+    })
+    .withFailureHandler(function (erreur) {
+      bouton.disabled = false;
+      bouton.textContent = 'Enregistrer la séance';
+
+      afficherToast(
+        extraireMessageErreur(erreur),
+        true
+      );
+    })
+    .enregistrerSession(donnees);
+}
+
+function rechargerSessions() {
+  afficherLoader();
+
+  google.script.run
+    .withSuccessHandler(function (sessions) {
+      etatApplication.sessions =
+        Array.isArray(sessions) ? sessions : [];
+
+      afficherListeSessions();
+      masquerLoader();
+    })
+    .withFailureHandler(gererErreurServeur)
+    .getSessions();
 }
 
 </script>

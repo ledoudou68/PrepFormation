@@ -1,10 +1,292 @@
 <div class="page">
-  <div class="entete-page">
-    <h1>Sessions</h1>
-    <p>Enregistrement et consultation des séances de préparation.</p>
+
+  <div class="entete-page entete-page-actions">
+
+    <div>
+      <h1>Sessions</h1>
+      <p>
+        Enregistrement et consultation des séances de préparation.
+      </p>
+    </div>
+
+    <button
+      type="button"
+      class="bouton-principal"
+      onclick="nouvelleSession()"
+    >
+      + Nouvelle séance
+    </button>
+
   </div>
 
   <div class="bloc">
-    Module à venir.
+
+    <div
+      id="compteurSessions"
+      class="compteur-resultats"
+    ></div>
+
+    <div class="tableau-responsive">
+
+      <table class="tableau tableau-sessions">
+
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Horaires</th>
+            <th>Formation</th>
+            <th>Formateur(s)</th>
+            <th>Stagiaires</th>
+            <th>Durée</th>
+            <th>Remarques</th>
+          </tr>
+        </thead>
+
+        <tbody id="corpsTableauSessions">
+          <tr>
+            <td colspan="7" class="etat-vide">
+              Chargement des séances…
+            </td>
+          </tr>
+        </tbody>
+
+      </table>
+
+    </div>
+
   </div>
+
+</div>
+
+<div
+  id="modalSession"
+  class="modal-overlay masque"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="titreModalSession"
+>
+
+  <div class="modal-contenu modal-tres-large modal-session">
+
+    <div class="modal-entete">
+
+      <div>
+        <h2 id="titreModalSession">
+          Nouvelle séance
+        </h2>
+        <p>
+          Participants, horaires et validations du référentiel.
+        </p>
+      </div>
+
+      <button
+        type="button"
+        class="bouton-fermer-modal"
+        onclick="fermerModalSession()"
+        aria-label="Fermer"
+      >
+        ×
+      </button>
+
+    </div>
+
+    <form
+      id="formulaireSession"
+      onsubmit="soumettreSession(event)"
+    >
+
+      <div class="modal-corps modal-corps-session">
+
+        <section class="section-formulaire-session">
+
+          <div class="section-formulaire-titre">
+            <span>1</span>
+            <div>
+              <h3>Informations générales</h3>
+              <p>Date, horaires et formation concernée.</p>
+            </div>
+          </div>
+
+          <div class="grille-formulaire grille-session-principale">
+
+            <div class="groupe-champ">
+              <label for="sessionDate">Date *</label>
+              <input
+                type="date"
+                id="sessionDate"
+                class="champ"
+                required
+              >
+            </div>
+
+            <div class="groupe-champ">
+              <label for="sessionFormation">Formation *</label>
+              <select
+                id="sessionFormation"
+                class="champ"
+                required
+                onchange="changerFormationSession()"
+              >
+                <option value="">
+                  Sélectionner une formation
+                </option>
+              </select>
+            </div>
+
+            <div class="groupe-champ">
+              <label for="sessionHeureDebut">Heure de début *</label>
+              <input
+                type="time"
+                id="sessionHeureDebut"
+                class="champ"
+                required
+                onchange="mettreAJourDureeSession()"
+              >
+            </div>
+
+            <div class="groupe-champ">
+              <label for="sessionHeureFin">Heure de fin *</label>
+              <input
+                type="time"
+                id="sessionHeureFin"
+                class="champ"
+                required
+                onchange="mettreAJourDureeSession()"
+              >
+            </div>
+
+          </div>
+
+          <div
+            id="indicationDureeSession"
+            class="indication-duree-session"
+          >
+            Durée calculée : —
+          </div>
+
+        </section>
+
+        <section class="section-formulaire-session">
+
+          <div class="section-formulaire-titre">
+            <span>2</span>
+            <div>
+              <h3>Participants</h3>
+              <p>
+                Sélectionne au moins un formateur et un stagiaire.
+              </p>
+            </div>
+          </div>
+
+          <div class="grille-participants-session">
+
+            <div class="groupe-selection-session">
+
+              <div class="groupe-selection-entete">
+                <strong>Formateurs *</strong>
+                <span id="compteurFormateursSession">0 sélectionné</span>
+              </div>
+
+              <div
+                id="listeFormateursSession"
+                class="liste-selection-session"
+              >
+                <div class="etat-selection-session">
+                  Chargement des formateurs…
+                </div>
+              </div>
+
+            </div>
+
+            <div class="groupe-selection-session">
+
+              <div class="groupe-selection-entete">
+                <strong>Stagiaires à préparer *</strong>
+                <span id="compteurStagiairesSession">0 sélectionné</span>
+              </div>
+
+              <div
+                id="listeStagiairesSession"
+                class="liste-selection-session"
+              >
+                <div class="etat-selection-session">
+                  Choisis d’abord une formation.
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+
+        </section>
+
+        <section class="section-formulaire-session">
+
+          <div class="section-formulaire-titre">
+            <span>3</span>
+            <div>
+              <h3>Référentiel de la formation</h3>
+              <p id="aideReferentielSession">
+                Le référentiel apparaîtra après le choix de la formation
+                et des stagiaires.
+              </p>
+            </div>
+          </div>
+
+          <div id="zoneReferentielSession">
+            <div class="etat-referentiel-session">
+              Aucun référentiel à afficher.
+            </div>
+          </div>
+
+        </section>
+
+        <section class="section-formulaire-session">
+
+          <div class="section-formulaire-titre">
+            <span>4</span>
+            <div>
+              <h3>Remarques générales</h3>
+              <p>Informations utiles concernant la séance.</p>
+            </div>
+          </div>
+
+          <div class="groupe-champ">
+            <label for="sessionRemarques">Remarques</label>
+            <textarea
+              id="sessionRemarques"
+              class="champ"
+              rows="4"
+              placeholder="Déroulement, points particuliers, suites à donner…"
+            ></textarea>
+          </div>
+
+        </section>
+
+      </div>
+
+      <div class="modal-pied">
+
+        <button
+          type="button"
+          class="bouton-secondaire"
+          onclick="fermerModalSession()"
+        >
+          Annuler
+        </button>
+
+        <button
+          type="submit"
+          id="boutonEnregistrerSession"
+          class="bouton-principal"
+        >
+          Enregistrer la séance
+        </button>
+
+      </div>
+
+    </form>
+
+  </div>
+
 </div>

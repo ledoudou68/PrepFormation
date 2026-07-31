@@ -1051,4 +1051,346 @@ button:disabled {
   }
 
 }
+
+/* =====================================================
+   MODULE SESSIONS
+===================================================== */
+
+.tableau-sessions {
+  min-width: 1080px;
+}
+
+.badge-formation-session {
+  display: inline-block;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: #eef5fc;
+  color: var(--bleu-fonce);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.nombre-participants-session {
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #edf0f2;
+  font-weight: 700;
+}
+
+.remarques-tableau-session {
+  max-width: 260px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.modal-session {
+  max-width: 1240px;
+}
+
+.modal-corps-session {
+  background: #f7f8fa;
+}
+
+.section-formulaire-session {
+  padding: 20px;
+  background: var(--blanc);
+  border: 1px solid var(--bordure);
+  border-radius: 12px;
+}
+
+.section-formulaire-session +
+.section-formulaire-session {
+  margin-top: 18px;
+}
+
+.section-formulaire-titre {
+  margin-bottom: 19px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.section-formulaire-titre > span {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--rouge);
+  color: var(--blanc);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.section-formulaire-titre h3 {
+  margin: 1px 0 4px;
+  font-size: 18px;
+}
+
+.section-formulaire-titre p {
+  margin: 0;
+  color: var(--texte-secondaire);
+  font-size: 14px;
+}
+
+.grille-session-principale {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.indication-duree-session {
+  margin-top: 13px;
+  color: var(--bleu-fonce);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.indication-duree-session.erreur {
+  color: var(--rouge);
+}
+
+.grille-participants-session {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.groupe-selection-session {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--bordure);
+  border-radius: 10px;
+}
+
+.groupe-selection-entete {
+  padding: 12px 14px;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  background: #f8f9fa;
+  border-bottom: 1px solid var(--bordure);
+  font-size: 14px;
+}
+
+.groupe-selection-entete span {
+  color: var(--texte-secondaire);
+  font-size: 12px;
+}
+
+.liste-selection-session {
+  max-height: 235px;
+  padding: 8px;
+  overflow-y: auto;
+  background: var(--blanc);
+}
+
+.option-selection-session {
+  min-height: 44px;
+  padding: 9px 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.option-selection-session:hover {
+  background: #f1f6fb;
+}
+
+.option-selection-session input {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  accent-color: var(--bleu);
+}
+
+.etat-selection-session,
+.etat-referentiel-session {
+  padding: 26px 16px;
+  color: var(--texte-secondaire);
+  text-align: center;
+}
+
+.etat-referentiel-session {
+  border: 1px dashed var(--bordure);
+  border-radius: 10px;
+  background: #fafbfc;
+}
+
+.etat-referentiel-session.erreur {
+  border-color: #efbcbc;
+  background: #fff7f7;
+  color: var(--rouge);
+}
+
+.referentiel-stagiaire-session {
+  overflow: hidden;
+  border: 1px solid var(--bordure);
+  border-radius: 11px;
+  background: var(--blanc);
+}
+
+.referentiel-stagiaire-session +
+.referentiel-stagiaire-session {
+  margin-top: 12px;
+}
+
+.referentiel-stagiaire-session > summary {
+  padding: 15px 17px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  background: #f8f9fa;
+  cursor: pointer;
+  font-size: 15px;
+  list-style-position: inside;
+}
+
+.referentiel-stagiaire-session[open] > summary {
+  border-bottom: 1px solid var(--bordure);
+}
+
+.resume-referentiel-stagiaire {
+  color: var(--texte-secondaire);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.contenu-referentiel-stagiaire {
+  padding: 16px;
+}
+
+.categorie-referentiel-session +
+.categorie-referentiel-session {
+  margin-top: 20px;
+}
+
+.categorie-referentiel-session h4 {
+  margin: 0 0 9px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #eef1f4;
+  color: var(--rouge-fonce);
+  font-size: 15px;
+}
+
+.liste-items-referentiel-session {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.ligne-item-referentiel-session {
+  min-width: 0;
+  padding: 9px 10px;
+  display: grid;
+  grid-template-columns:
+    minmax(220px, 1.6fr)
+    74px
+    90px
+    minmax(210px, 1fr);
+  gap: 10px;
+  align-items: center;
+  border: 1px solid #edf0f2;
+  border-radius: 8px;
+}
+
+.ligne-item-referentiel-session:hover {
+  background: #fafbfc;
+}
+
+.libelle-item-referentiel-session {
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.validation-item-session {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.validation-item-session input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--bleu);
+}
+
+.validation-acquis-session input {
+  accent-color: #2e7d32;
+}
+
+.commentaire-item-session {
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+@media (max-width: 950px) {
+
+  .grille-session-principale {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ligne-item-referentiel-session {
+    grid-template-columns:
+      minmax(180px, 1fr)
+      70px
+      84px;
+  }
+
+  .commentaire-item-session {
+    grid-column: 1 / -1;
+  }
+
+}
+
+@media (max-width: 700px) {
+
+  .modal-session {
+    max-width: none;
+  }
+
+  .modal-corps-session {
+    padding: 14px;
+  }
+
+  .section-formulaire-session {
+    padding: 16px;
+  }
+
+  .grille-session-principale,
+  .grille-participants-session {
+    grid-template-columns: 1fr;
+  }
+
+  .ligne-item-referentiel-session {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .libelle-item-referentiel-session,
+  .commentaire-item-session {
+    grid-column: 1 / -1;
+  }
+
+  .referentiel-stagiaire-session > summary {
+    padding: 13px;
+  }
+
+  .contenu-referentiel-stagiaire {
+    padding: 12px;
+  }
+
+}
 </style>
