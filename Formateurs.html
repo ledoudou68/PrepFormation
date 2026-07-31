@@ -1,10 +1,165 @@
 <div class="page">
-  <div class="entete-page">
-    <h1>Formateurs</h1>
-    <p>Gestion de la liste des formateurs.</p>
+
+  <div class="entete-page entete-page-actions">
+
+    <div>
+      <h1>Formateurs</h1>
+      <p>Gestion de la liste des formateurs.</p>
+    </div>
+
+    <button
+      type="button"
+      class="bouton-principal"
+      onclick="nouveauFormateur()"
+    >
+      + Nouveau formateur
+    </button>
+
   </div>
 
   <div class="bloc">
-    Module à venir.
+
+    <div
+      id="compteurFormateurs"
+      class="compteur-resultats"
+    ></div>
+
+    <div class="tableau-responsive">
+
+      <table class="tableau tableau-formateurs">
+
+        <thead>
+          <tr>
+            <th>Nom</th>
+            <th>Prénom</th>
+            <th>Statut</th>
+            <th class="colonne-actions">Actions</th>
+          </tr>
+        </thead>
+
+        <tbody id="corpsTableauFormateurs">
+          <tr>
+            <td colspan="4" class="etat-vide">
+              Chargement des formateurs…
+            </td>
+          </tr>
+        </tbody>
+
+      </table>
+
+    </div>
+
   </div>
+
+</div>
+
+<div
+  id="modalFormateur"
+  class="modal-overlay masque"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="titreModalFormateur"
+>
+
+  <div class="modal-contenu modal-formateur">
+
+    <div class="modal-entete">
+
+      <div>
+        <h2 id="titreModalFormateur">
+          Nouveau formateur
+        </h2>
+        <p>Identité et disponibilité dans les séances.</p>
+      </div>
+
+      <button
+        type="button"
+        class="bouton-fermer-modal"
+        onclick="fermerModalFormateur()"
+        aria-label="Fermer"
+      >
+        ×
+      </button>
+
+    </div>
+
+    <form
+      id="formulaireFormateur"
+      onsubmit="soumettreFormateur(event)"
+    >
+
+      <div class="modal-corps">
+
+        <input
+          type="hidden"
+          id="formateurId"
+        >
+
+        <div class="grille-formulaire">
+
+          <div class="groupe-champ">
+            <label for="formateurNom">Nom *</label>
+            <input
+              type="text"
+              id="formateurNom"
+              class="champ"
+              required
+              autocomplete="family-name"
+            >
+          </div>
+
+          <div class="groupe-champ">
+            <label for="formateurPrenom">Prénom *</label>
+            <input
+              type="text"
+              id="formateurPrenom"
+              class="champ"
+              required
+              autocomplete="given-name"
+            >
+          </div>
+
+        </div>
+
+        <label class="interrupteur-formateur">
+          <input
+            type="checkbox"
+            id="formateurActif"
+            checked
+          >
+          <span class="interrupteur-visuel"></span>
+          <span>
+            <strong>Formateur actif</strong>
+            <small>
+              Un formateur inactif n’est plus proposé dans les nouvelles séances.
+            </small>
+          </span>
+        </label>
+
+      </div>
+
+      <div class="modal-pied">
+
+        <button
+          type="button"
+          class="bouton-secondaire"
+          onclick="fermerModalFormateur()"
+        >
+          Annuler
+        </button>
+
+        <button
+          type="submit"
+          id="boutonEnregistrerFormateur"
+          class="bouton-principal"
+        >
+          Enregistrer
+        </button>
+
+      </div>
+
+    </form>
+
+  </div>
+
 </div>

@@ -229,24 +229,10 @@ function getPreparationSession() {
       return stagiaire.statut === 'À préparer';
     });
 
-  const formations = [...new Set(
-    stagiaires
-      .map(function (stagiaire) {
-        return String(stagiaire.formation || '').trim();
-      })
-      .filter(Boolean)
-  )].sort(function (a, b) {
-    return a.localeCompare(
-      b,
-      'fr',
-      { sensitivity: 'base' }
-    );
-  });
-
   return {
     stagiaires: stagiaires,
     formateurs: getFormateursActifsSession_(),
-    formations: formations
+    formations: getFormations()
   };
 }
 
@@ -263,154 +249,41 @@ function getReferentielFormation(formation) {
     return [];
   }
 
-  const classeur = SpreadsheetApp.getActiveSpreadsheet();
-  const tableCategories = lireFeuilleSession_(
-    classeur,
-    'CATEGORIES'
-  );
+  const categories = getCategoriesReferentiel(
+    formationDemandee
+  ).filter(function (categorie) {
+    return categorie.actif;
+  });
 
-  const tableReferentiel = lireFeuilleSession_(
-    classeur,
-    'REFERENTIEL'
-  );
-
-  const categoriesParId = {};
-  const categories = [];
-  const indexCategories = tableCategories.index;
-
-  if (
-    Number.isInteger(indexCategories.ID_CATEGORIE) &&
-    Number.isInteger(indexCategories.CATEGORIE)
-  ) {
-    tableCategories.lignes.forEach(function (ligne) {
-      const formationCategorie = String(
-        valeurColonneSession_(
-          ligne,
-          indexCategories,
-          'FORMATION'
-        ) || ''
-      ).trim();
-
-      if (
-        formationCategorie !== formationDemandee ||
-        !estLigneActiveSession_(
-          ligne,
-          indexCategories.ACTIF
-        )
-      ) {
-        return;
-      }
-
-      const idCategorie = String(
-        ligne[indexCategories.ID_CATEGORIE] || ''
-      );
-
-      if (!idCategorie) {
-        return;
-      }
-
-      const categorie = {
-        idCategorie: idCategorie,
-        libelle: String(
-          ligne[indexCategories.CATEGORIE] || ''
-        ).trim(),
-        ordre: convertirNombreSession_(
-          valeurColonneSession_(
-            ligne,
-            indexCategories,
-            'ORDRE'
-          )
-        ),
-        items: []
-      };
-
-      categoriesParId[idCategorie] = categorie;
-      categories.push(categorie);
+  const items = getItemsReferentiel(formationDemandee)
+    .filter(function (item) {
+      return item.actif && item.categorieActive;
     });
-  }
-
-  const categorieSansClassement = {
-    idCategorie: '',
-    libelle: 'Autres items',
-    ordre: 999999,
-    items: []
-  };
-
-  const indexReferentiel = tableReferentiel.index;
-
-  if (
-    Number.isInteger(indexReferentiel.ID_ITEM) &&
-    Number.isInteger(indexReferentiel.ITEM)
-  ) {
-    tableReferentiel.lignes.forEach(function (ligne) {
-      const formationItem = String(
-        valeurColonneSession_(
-          ligne,
-          indexReferentiel,
-          'FORMATION'
-        ) || ''
-      ).trim();
-
-      if (
-        formationItem !== formationDemandee ||
-        !estLigneActiveSession_(
-          ligne,
-          indexReferentiel.ACTIF
-        )
-      ) {
-        return;
-      }
-
-      const idItem = String(
-        ligne[indexReferentiel.ID_ITEM] || ''
-      );
-
-      if (!idItem) {
-        return;
-      }
-
-      const idCategorie = String(
-        valeurColonneSession_(
-          ligne,
-          indexReferentiel,
-          'ID_CATEGORIE'
-        ) || ''
-      );
-
-      const item = {
-        idItem: idItem,
-        libelle: String(
-          ligne[indexReferentiel.ITEM] || ''
-        ).trim(),
-        ordre: convertirNombreSession_(
-          valeurColonneSession_(
-            ligne,
-            indexReferentiel,
-            'ORDRE'
-          )
-        )
-      };
-
-      const categorie = categoriesParId[idCategorie] ||
-        categorieSansClassement;
-
-      categorie.items.push(item);
-    });
-  }
-
-  if (categorieSansClassement.items.length) {
-    categories.push(categorieSansClassement);
-  }
 
   return categories
+    .map(function (categorie) {
+      return {
+        idCategorie: categorie.idCategorie,
+        libelle: categorie.intitule,
+        ordre: categorie.ordre,
+        items: items
+          .filter(function (item) {
+            return item.idCategorie ===
+              categorie.idCategorie;
+          })
+          .map(function (item) {
+            return {
+              idItem: item.idItem,
+              libelle: item.intitule,
+              description: item.description,
+              ordre: item.ordre
+            };
+          })
+      };
+    })
     .filter(function (categorie) {
       return categorie.items.length > 0;
-    })
-    .map(function (categorie) {
-      categorie.items.sort(trierElementsSession_);
-      return categorie;
-    })
-    .sort(trierElementsSession_);
+    });
 }
 
 
@@ -853,18 +726,6 @@ function estLigneActiveSession_(ligne, indexActif) {
     'active'
   ].includes(
     String(valeur || '').trim().toLowerCase()
-  );
-}
-
-
-function trierElementsSession_(a, b) {
-  return (
-    a.ordre - b.ordre ||
-    a.libelle.localeCompare(
-      b.libelle,
-      'fr',
-      { sensitivity: 'base' }
-    )
   );
 }
 

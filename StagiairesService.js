@@ -534,6 +534,9 @@ function getFormations() {
   const indexActif =
     entetes.indexOf('ACTIF');
 
+  const indexOrdre =
+    entetes.indexOf('ORDRE');
+
   if (indexLibelle === -1) {
     throw new Error(
       'La colonne LIBELLE est absente de la feuille FORMATIONS.'
@@ -570,16 +573,27 @@ function getFormations() {
       ].includes(actif);
     })
     .map(function (ligne) {
-      return String(
-        ligne[indexLibelle] || ''
-      ).trim();
+      return {
+        libelle: String(
+          ligne[indexLibelle] || ''
+        ).trim(),
+        ordre: indexOrdre === -1
+          ? 999999
+          : Number(ligne[indexOrdre]) || 999999
+      };
     })
     .sort(function (a, b) {
-      return a.localeCompare(
-        b,
-        'fr',
-        { sensitivity: 'base' }
+      return (
+        a.ordre - b.ordre ||
+        a.libelle.localeCompare(
+          b.libelle,
+          'fr',
+          { sensitivity: 'base' }
+        )
       );
+    })
+    .map(function (formation) {
+      return formation.libelle;
     });
 }
 

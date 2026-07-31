@@ -1,0 +1,304 @@
+<div class="page">
+
+  <div class="entete-page">
+    <h1>Référentiel</h1>
+    <p>Gestion des catégories et items pédagogiques par formation.</p>
+  </div>
+
+  <div class="bloc bloc-selection-formation-referentiel">
+    <div class="groupe-champ">
+      <label for="formationReferentiel">Formation</label>
+      <select
+        id="formationReferentiel"
+        class="champ"
+        onchange="changerFormationReferentiel()"
+      >
+        <option value="">Sélectionner une formation</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="bloc">
+
+    <div class="entete-section-referentiel">
+      <div>
+        <h2>Catégories pédagogiques</h2>
+        <p id="compteurCategoriesReferentiel"></p>
+      </div>
+      <button
+        type="button"
+        id="boutonNouvelleCategorieReferentiel"
+        class="bouton-principal"
+        onclick="nouvelleCategorieReferentiel()"
+        disabled
+      >
+        + Nouvelle catégorie
+      </button>
+    </div>
+
+    <div class="tableau-responsive">
+      <table class="tableau tableau-categories-referentiel">
+        <thead>
+          <tr>
+            <th class="colonne-ordre-referentiel">Ordre</th>
+            <th>Intitulé</th>
+            <th>Items</th>
+            <th>Statut</th>
+            <th class="colonne-actions-referentiel">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="corpsTableauCategoriesReferentiel">
+          <tr>
+            <td colspan="5" class="etat-vide">
+              Sélectionne une formation.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <div class="bloc">
+
+    <div class="entete-section-referentiel">
+      <div>
+        <h2>Items pédagogiques</h2>
+        <p id="compteurItemsReferentiel"></p>
+      </div>
+      <button
+        type="button"
+        id="boutonNouvelItemReferentiel"
+        class="bouton-principal"
+        onclick="nouvelItemReferentiel()"
+        disabled
+      >
+        + Ajouter un item
+      </button>
+    </div>
+
+    <div class="tableau-responsive">
+      <table class="tableau tableau-referentiel">
+        <thead>
+          <tr>
+            <th class="colonne-ordre-referentiel">Ordre</th>
+            <th>Catégorie</th>
+            <th>Intitulé</th>
+            <th>Description</th>
+            <th>Statut</th>
+            <th class="colonne-actions-referentiel">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="corpsTableauReferentiel">
+          <tr>
+            <td colspan="6" class="etat-vide">
+              Sélectionne une formation.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+
+</div>
+
+<div
+  id="modalCategorieReferentiel"
+  class="modal-overlay masque"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="titreModalCategorieReferentiel"
+>
+  <div class="modal-contenu modal-item-referentiel">
+    <div class="modal-entete">
+      <div>
+        <h2 id="titreModalCategorieReferentiel">
+          Nouvelle catégorie
+        </h2>
+        <p id="sousTitreModalCategorieReferentiel"></p>
+      </div>
+      <button
+        type="button"
+        class="bouton-fermer-modal"
+        onclick="fermerModalCategorieReferentiel()"
+        aria-label="Fermer"
+      >×</button>
+    </div>
+
+    <form
+      id="formulaireCategorieReferentiel"
+      onsubmit="soumettreCategorieReferentiel(event)"
+    >
+      <div class="modal-corps">
+        <input type="hidden" id="categorieReferentielId">
+
+        <div class="grille-formulaire">
+          <div class="groupe-champ groupe-champ-large-grille">
+            <label for="categorieReferentielIntitule">
+              Intitulé *
+            </label>
+            <input
+              type="text"
+              id="categorieReferentielIntitule"
+              class="champ"
+              required
+            >
+          </div>
+
+          <div class="groupe-champ">
+            <label for="categorieReferentielOrdre">Ordre *</label>
+            <input
+              type="number"
+              id="categorieReferentielOrdre"
+              class="champ"
+              min="1"
+              step="1"
+              required
+            >
+          </div>
+        </div>
+
+        <label class="interrupteur-referentiel">
+          <input
+            type="checkbox"
+            id="categorieReferentielActif"
+            checked
+          >
+          <span class="interrupteur-visuel"></span>
+          <span>
+            <strong>Catégorie active</strong>
+            <small>
+              Une catégorie inactive et ses items ne sont pas proposés en séance.
+            </small>
+          </span>
+        </label>
+      </div>
+
+      <div class="modal-pied">
+        <button
+          type="button"
+          class="bouton-secondaire"
+          onclick="fermerModalCategorieReferentiel()"
+        >Annuler</button>
+        <button
+          type="submit"
+          id="boutonEnregistrerCategorieReferentiel"
+          class="bouton-principal"
+        >Enregistrer</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div
+  id="modalItemReferentiel"
+  class="modal-overlay masque"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="titreModalItemReferentiel"
+>
+  <div class="modal-contenu modal-item-referentiel">
+    <div class="modal-entete">
+      <div>
+        <h2 id="titreModalItemReferentiel">
+          Nouvel item pédagogique
+        </h2>
+        <p id="sousTitreModalItemReferentiel"></p>
+      </div>
+      <button
+        type="button"
+        class="bouton-fermer-modal"
+        onclick="fermerModalItemReferentiel()"
+        aria-label="Fermer"
+      >×</button>
+    </div>
+
+    <form
+      id="formulaireItemReferentiel"
+      onsubmit="soumettreItemReferentiel(event)"
+    >
+      <div class="modal-corps">
+        <input type="hidden" id="itemReferentielId">
+
+        <div class="grille-formulaire grille-item-referentiel">
+          <div class="groupe-champ groupe-champ-large-grille">
+            <label for="itemReferentielCategorie">
+              Catégorie *
+            </label>
+            <select
+              id="itemReferentielCategorie"
+              class="champ"
+              required
+              onchange="mettreAJourOrdreItemReferentiel()"
+            ></select>
+          </div>
+
+          <div class="groupe-champ groupe-champ-large-grille">
+            <label for="itemReferentielIntitule">
+              Intitulé *
+            </label>
+            <input
+              type="text"
+              id="itemReferentielIntitule"
+              class="champ"
+              required
+            >
+          </div>
+
+          <div class="groupe-champ">
+            <label for="itemReferentielOrdre">Ordre *</label>
+            <input
+              type="number"
+              id="itemReferentielOrdre"
+              class="champ"
+              min="1"
+              step="1"
+              required
+            >
+          </div>
+
+          <div class="groupe-champ groupe-champ-large-grille">
+            <label for="itemReferentielDescription">
+              Description
+            </label>
+            <textarea
+              id="itemReferentielDescription"
+              class="champ"
+              rows="5"
+              placeholder="Précisions pédagogiques facultatives…"
+            ></textarea>
+          </div>
+        </div>
+
+        <label class="interrupteur-referentiel">
+          <input
+            type="checkbox"
+            id="itemReferentielActif"
+            checked
+          >
+          <span class="interrupteur-visuel"></span>
+          <span>
+            <strong>Item actif</strong>
+            <small>
+              Seuls les items actifs d’une catégorie active sont proposés en séance.
+            </small>
+          </span>
+        </label>
+      </div>
+
+      <div class="modal-pied">
+        <button
+          type="button"
+          class="bouton-secondaire"
+          onclick="fermerModalItemReferentiel()"
+        >Annuler</button>
+        <button
+          type="submit"
+          id="boutonEnregistrerItemReferentiel"
+          class="bouton-principal"
+        >Enregistrer</button>
+      </div>
+    </form>
+  </div>
+</div>

@@ -9,6 +9,13 @@ function initialiserApplication() {
       'Actif'
     ],
 
+    FORMATIONS: [
+      'ID_FORMATION',
+      'LIBELLE',
+      'ORDRE',
+      'ACTIF'
+    ],
+
     STAGIAIRES: [
       'ID_STAGIAIRE',
       'NOM',
@@ -80,6 +87,7 @@ function initialiserApplication() {
       'FORMATION',
       'ID_CATEGORIE',
       'ITEM',
+      'DESCRIPTION',
       'ORDRE',
       'ACTIF'
     ],
@@ -122,6 +130,7 @@ function initialiserApplication() {
       .createFilter();
   });
 
+  remplirFormations(classeur);
   remplirParametres(classeur);
   appliquerFormats(classeur);
 
@@ -138,10 +147,6 @@ function remplirParametres(classeur) {
   const feuille = classeur.getSheetByName('PARAMETRES');
 
   const donnees = [
-    ['FORMATION', 'EQ PS', 1, 'Oui'],
-    ['FORMATION', 'EQ SUAP', 2, 'Oui'],
-    ['FORMATION', 'CA SUAP', 3, 'Oui'],
-
     ['STATUT_STAGIAIRE', 'À préparer', 1, 'Oui'],
     ['STATUT_STAGIAIRE', 'Échéance atteinte', 2, 'Oui'],
     ['STATUT_STAGIAIRE', 'Préparation terminée', 3, 'Oui'],
@@ -155,6 +160,20 @@ function remplirParametres(classeur) {
     ['STATUT_INDEMNISATION', 'Demande envoyée', 2, 'Oui'],
     ['STATUT_INDEMNISATION', 'Indemnisée', 3, 'Oui'],
     ['STATUT_INDEMNISATION', 'À corriger', 4, 'Oui']
+  ];
+
+  feuille
+    .getRange(2, 1, donnees.length, donnees[0].length)
+    .setValues(donnees);
+}
+
+function remplirFormations(classeur) {
+  const feuille = classeur.getSheetByName('FORMATIONS');
+
+  const donnees = [
+    ['EQ_PS', 'EQ PS', 1, 'Oui'],
+    ['EQ_SUAP', 'EQ SUAP', 2, 'Oui'],
+    ['CA_SUAP', 'CA SUAP', 3, 'Oui']
   ];
 
   feuille
@@ -218,17 +237,4 @@ function getPage(page) {
   return HtmlService.createTemplateFromFile(page)
 .evaluate()
 .getContent();
-}
-
-function getFormations(){
-
-const sh=SpreadsheetApp.getActive()
-.getSheetByName("PARAMETRES");
-
-const data=sh.getDataRange().getValues();
-
-return data
-.filter(r=>r[0]=="FORMATION" && r[3]=="Oui")
-.map(r=>r[1]);
-
 }

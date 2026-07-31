@@ -1053,6 +1053,269 @@ button:disabled {
 }
 
 /* =====================================================
+   MODULE FORMATEURS
+===================================================== */
+
+.tableau-formateurs {
+  min-width: 620px;
+}
+
+.tableau-formateurs .colonne-actions {
+  width: 80px;
+}
+
+.modal-formateur {
+  max-width: 680px;
+}
+
+.interrupteur-formateur,
+.interrupteur-referentiel {
+  margin-top: 22px;
+  padding: 15px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--bordure);
+  border-radius: 10px;
+  background: #f8f9fa;
+  cursor: pointer;
+}
+
+.interrupteur-formateur > input,
+.interrupteur-referentiel > input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.interrupteur-visuel {
+  position: relative;
+  width: 46px;
+  height: 26px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: #aeb6bf;
+  transition: background 0.18s;
+}
+
+.interrupteur-visuel::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--blanc);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  transition: transform 0.18s;
+}
+
+.interrupteur-formateur > input:checked +
+.interrupteur-visuel,
+.interrupteur-referentiel > input:checked +
+.interrupteur-visuel {
+  background: #2e7d32;
+}
+
+.interrupteur-formateur > input:checked +
+.interrupteur-visuel::after,
+.interrupteur-referentiel > input:checked +
+.interrupteur-visuel::after {
+  transform: translateX(20px);
+}
+
+.interrupteur-formateur > input:focus-visible +
+.interrupteur-visuel,
+.interrupteur-referentiel > input:focus-visible +
+.interrupteur-visuel {
+  outline: 3px solid rgba(21, 101, 192, 0.22);
+  outline-offset: 2px;
+}
+
+.interrupteur-formateur strong,
+.interrupteur-formateur small,
+.interrupteur-referentiel strong,
+.interrupteur-referentiel small {
+  display: block;
+}
+
+.interrupteur-formateur small,
+.interrupteur-referentiel small {
+  margin-top: 3px;
+  color: var(--texte-secondaire);
+  line-height: 1.35;
+}
+
+/* =====================================================
+   MODULE REFERENTIEL
+===================================================== */
+
+.barre-outils-referentiel {
+  margin-bottom: 16px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.barre-outils-referentiel .groupe-champ {
+  width: min(380px, 100%);
+}
+
+.bloc-selection-formation-referentiel {
+  margin-top: 0;
+}
+
+.bloc-selection-formation-referentiel .groupe-champ {
+  width: min(420px, 100%);
+}
+
+.entete-section-referentiel {
+  margin-bottom: 16px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.entete-section-referentiel h2 {
+  margin: 0 0 5px;
+}
+
+.entete-section-referentiel p {
+  margin: 0;
+  color: var(--texte-secondaire);
+  font-size: 14px;
+}
+
+.compteur-referentiel {
+  margin-bottom: 11px;
+  text-align: right;
+}
+
+.tableau-referentiel {
+  min-width: 1080px;
+}
+
+.tableau-categories-referentiel {
+  min-width: 760px;
+}
+
+.colonne-ordre-referentiel {
+  width: 76px;
+  text-align: center !important;
+}
+
+.ordre-item-referentiel {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: #eef1f4;
+  font-weight: 800;
+}
+
+.description-item-referentiel {
+  max-width: 360px;
+  color: var(--texte-secondaire);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.badge-categorie-referentiel {
+  display: inline-block;
+  padding: 5px 9px;
+  border-radius: 7px;
+  background: #fff3e0;
+  color: #8a4b00;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.indicateur-historique-referentiel {
+  margin-top: 5px;
+  display: block;
+  color: var(--texte-secondaire);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.colonne-actions-referentiel {
+  width: 250px;
+  text-align: right !important;
+  white-space: nowrap;
+}
+
+.action-referentiel {
+  width: 36px;
+  height: 36px;
+  font-size: 16px;
+}
+
+.action-referentiel + .action-referentiel {
+  margin-left: 3px;
+}
+
+.action-referentiel:disabled {
+  cursor: not-allowed;
+}
+
+.bouton-supprimer-item {
+  color: var(--rouge);
+}
+
+.bouton-supprimer-item:hover {
+  border-color: var(--rouge);
+  background: #fff1f1;
+}
+
+.modal-item-referentiel {
+  max-width: 760px;
+}
+
+.libelle-item-referentiel-session span,
+.libelle-item-referentiel-session small {
+  display: block;
+}
+
+.libelle-item-referentiel-session small {
+  margin-top: 4px;
+  color: var(--texte-secondaire);
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+@media (max-width: 700px) {
+
+  .barre-outils-referentiel {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .compteur-referentiel {
+    margin-bottom: 0;
+    text-align: left;
+  }
+
+  .modal-item-referentiel {
+    max-width: none;
+  }
+
+  .entete-section-referentiel {
+    flex-direction: column;
+  }
+
+  .entete-section-referentiel .bouton-principal {
+    width: 100%;
+  }
+
+}
+
+/* =====================================================
    MODULE SESSIONS
 ===================================================== */
 

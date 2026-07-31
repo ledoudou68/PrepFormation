@@ -5,6 +5,7 @@
 const etatApplication = {
   pageActive: 'Accueil',
   stagiaires: [],
+  formateurs: [],
   formations: [],
   statutsStagiaires: [],
   sessions: [],
@@ -13,7 +14,11 @@ const etatApplication = {
   formationsSession: [],
   referentielSession: [],
   formationReferentielSession: '',
-  validationsSession: {}
+  validationsSession: {},
+  formationsReferentiel: [],
+  categoriesReferentiel: [],
+  itemsReferentiel: [],
+  formationReferentielActive: ''
 };
 
 document.addEventListener(
@@ -56,8 +61,16 @@ function initialiserPageActive(nomPage) {
     initialiserPageStagiaires();
   }
 
+  if (nomPage === 'Formateurs') {
+    initialiserPageFormateurs();
+  }
+
   if (nomPage === 'Sessions') {
     initialiserPageSessions();
+  }
+
+  if (nomPage === 'Referentiel') {
+    initialiserPageReferentiel();
   }
 }
 
@@ -1323,6 +1336,1199 @@ function echapperHtml(valeur) {
 }
 
 /* =====================================================
+   FORMATEURS
+===================================================== */
+
+function initialiserPageFormateurs() {
+  afficherLoader();
+
+  google.script.run
+    .withSuccessHandler(function (formateurs) {
+      etatApplication.formateurs =
+        Array.isArray(formateurs) ? formateurs : [];
+
+      afficherListeFormateurs();
+      masquerLoader();
+    })
+    .withFailureHandler(gererErreurServeur)
+    .getFormateurs();
+}
+
+function afficherListeFormateurs() {
+  const corps = document.getElementById(
+    'corpsTableauFormateurs'
+  );
+
+  if (!corps) {
+    return;
+  }
+
+  const formateurs = etatApplication.formateurs;
+  const compteur = document.getElementById(
+    'compteurFormateurs'
+  );
+
+  if (compteur) {
+    const nombreActifs = formateurs.filter(
+      function (formateur) {
+        return formateur.actif;
+      }
+    ).length;
+
+    compteur.textContent =
+      formateurs.length +
+      (formateurs.length > 1
+        ? ' formateurs enregistrés'
+        : ' formateur enregistré') +
+      ' · ' +
+      nombreActifs +
+      (nombreActifs > 1 ? ' actifs' : ' actif');
+  }
+
+  if (!formateurs.length) {
+    corps.innerHTML = `
+      <tr>
+        <td colspan="4" class="etat-vide">
+          Aucun formateur enregistré pour le moment.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  corps.innerHTML = formateurs
+    .map(function (formateur) {
+      return `
+        <tr>
+          <td>
+            <strong>${echapperHtml(formateur.nom)}</strong>
+          </td>
+          <td>${echapperHtml(formateur.prenom)}</td>
+          <td>
+            <span class="badge-statut ${formateur.actif ? 'badge-vert' : 'badge-gris'}">
+              ${formateur.actif ? 'Actif' : 'Inactif'}
+            </span>
+          </td>
+          <td class="colonne-actions">
+            <button
+              type="button"
+              class="bouton-icone"
+              onclick="modifierFormateur('${formateur.idFormateur}')"
+              title="Modifier"
+              aria-label="Modifier ${echapperHtml(formateur.prenom)} ${echapperHtml(formateur.nom)}"
+            >
+              ✎
+            </button>
+          </td>
+        </tr>
+      `;
+    })
+    .join('');
+}
+
+function nouveauFormateur() {
+  document
+    .getElementById('formulaireFormateur')
+    .reset();
+
+  document.getElementById('formateurId').value = '';
+  document.getElementById('formateurActif').checked = true;
+  document.getElementById(
+    'titreModalFormateur'
+  ).textContent = 'Nouveau formateur';
+
+  ouvrirModalFormateur();
+
+  window.setTimeout(function () {
+    document.getElementById('formateurNom').focus();
+  }, 100);
+}
+
+function modifierFormateur(idFormateur) {
+  const formateur = etatApplication.formateurs.find(
+    function (element) {
+      return element.idFormateur === idFormateur;
+    }
+  );
+
+  if (!formateur) {
+    afficherToast('Formateur introuvable.', true);
+    return;
+  }
+
+  document.getElementById('formateurId').value =
+    formateur.idFormateur;
+
+  document.getElementById('formateurNom').value =
+    formateur.nom;
+
+  document.getElementById('formateurPrenom').value =
+    formateur.prenom;
+
+  document.getElementById('formateurActif').checked =
+    Boolean(formateur.actif);
+
+  document.getElementById(
+    'titreModalFormateur'
+  ).textContent = 'Modifier le formateur';
+
+  ouvrirModalFormateur();
+}
+
+function ouvrirModalFormateur() {
+  document
+    .getElementById('modalFormateur')
+    .classList
+    .remove('masque');
+
+  document.body.classList.add('modal-ouverte');
+}
+
+function fermerModalFormateur() {
+  const modal = document.getElementById(
+    'modalFormateur'
+  );
+
+  if (modal) {
+    modal.classList.add('masque');
+  }
+
+  document.body.classList.remove('modal-ouverte');
+}
+
+function soumettreFormateur(evenement) {
+  evenement.preventDefault();
+
+  const bouton = document.getElementById(
+    'boutonEnregistrerFormateur'
+  );
+
+  const donnees = {
+    idFormateur: document.getElementById(
+      'formateurId'
+    ).value,
+    nom: document.getElementById(
+      'formateurNom'
+    ).value,
+    prenom: document.getElementById(
+      'formateurPrenom'
+    ).value,
+    actif: document.getElementById(
+      'formateurActif'
+    ).checked
+  };
+
+  bouton.disabled = true;
+  bouton.textContent = 'Enregistrement…';
+
+  google.script.run
+    .withSuccessHandler(function (resultat) {
+      bouton.disabled = false;
+      bouton.textContent = 'Enregistrer';
+
+      fermerModalFormateur();
+      afficherToast(
+        resultat.message || 'Formateur enregistré.',
+        false
+      );
+
+      rechargerFormateurs();
+    })
+    .withFailureHandler(function (erreur) {
+      bouton.disabled = false;
+      bouton.textContent = 'Enregistrer';
+
+      afficherToast(
+        extraireMessageErreur(erreur),
+        true
+      );
+    })
+    .enregistrerFormateur(donnees);
+}
+
+function rechargerFormateurs() {
+  afficherLoader();
+
+  google.script.run
+    .withSuccessHandler(function (formateurs) {
+      etatApplication.formateurs =
+        Array.isArray(formateurs) ? formateurs : [];
+
+      afficherListeFormateurs();
+      masquerLoader();
+    })
+    .withFailureHandler(gererErreurServeur)
+    .getFormateurs();
+}
+
+/* =====================================================
+   REFERENTIEL
+===================================================== */
+
+function initialiserPageReferentiel() {
+  afficherLoader();
+
+  google.script.run
+    .withSuccessHandler(function (formations) {
+      etatApplication.formationsReferentiel =
+        Array.isArray(formations) ? formations : [];
+
+      remplirSelect(
+        'formationReferentiel',
+        etatApplication.formationsReferentiel,
+        'Sélectionner une formation'
+      );
+
+      const select = document.getElementById(
+        'formationReferentiel'
+      );
+
+      if (!etatApplication.formationsReferentiel.length) {
+        etatApplication.formationReferentielActive = '';
+        etatApplication.categoriesReferentiel = [];
+        etatApplication.itemsReferentiel = [];
+        afficherListeCategoriesReferentiel();
+        afficherListeItemsReferentiel();
+        masquerLoader();
+        return;
+      }
+
+      select.value =
+        etatApplication.formationsReferentiel[0];
+
+      changerFormationReferentiel();
+    })
+    .withFailureHandler(gererErreurServeur)
+    .getFormations();
+}
+
+function changerFormationReferentiel() {
+  const formation = String(
+    document.getElementById('formationReferentiel')
+      ?.value || ''
+  );
+
+  etatApplication.formationReferentielActive = formation;
+  etatApplication.categoriesReferentiel = [];
+  etatApplication.itemsReferentiel = [];
+
+  const boutonCategorie = document.getElementById(
+    'boutonNouvelleCategorieReferentiel'
+  );
+
+  const boutonItem = document.getElementById(
+    'boutonNouvelItemReferentiel'
+  );
+
+  if (boutonCategorie) {
+    boutonCategorie.disabled = !formation;
+  }
+
+  if (boutonItem) {
+    boutonItem.disabled = true;
+  }
+
+  if (!formation) {
+    afficherListeCategoriesReferentiel();
+    afficherListeItemsReferentiel();
+    masquerLoader();
+    return;
+  }
+
+  chargerDonneesReferentiel();
+}
+
+function chargerDonneesReferentiel() {
+  const formation =
+    etatApplication.formationReferentielActive;
+
+  if (!formation) {
+    return;
+  }
+
+  afficherLoader();
+
+  let chargementsTermines = 0;
+  let erreurRencontree = false;
+
+  function terminerChargementReferentiel() {
+    chargementsTermines++;
+
+    if (
+      chargementsTermines === 2 &&
+      !erreurRencontree &&
+      etatApplication.formationReferentielActive ===
+        formation
+    ) {
+      afficherListeCategoriesReferentiel();
+      afficherListeItemsReferentiel();
+
+      const boutonItem = document.getElementById(
+        'boutonNouvelItemReferentiel'
+      );
+
+      if (boutonItem) {
+        boutonItem.disabled =
+          !etatApplication.categoriesReferentiel.length;
+      }
+
+      masquerLoader();
+    }
+  }
+
+  function erreurChargementReferentiel(erreur) {
+    if (erreurRencontree) {
+      return;
+    }
+
+    erreurRencontree = true;
+    gererErreurServeur(erreur);
+  }
+
+  google.script.run
+    .withSuccessHandler(function (categories) {
+      if (
+        etatApplication.formationReferentielActive !==
+        formation
+      ) {
+        return;
+      }
+
+      etatApplication.categoriesReferentiel =
+        Array.isArray(categories) ? categories : [];
+
+      terminerChargementReferentiel();
+    })
+    .withFailureHandler(erreurChargementReferentiel)
+    .getCategoriesReferentiel(formation);
+
+  google.script.run
+    .withSuccessHandler(function (items) {
+      if (
+        etatApplication.formationReferentielActive !==
+        formation
+      ) {
+        return;
+      }
+
+      etatApplication.itemsReferentiel =
+        Array.isArray(items) ? items : [];
+
+      terminerChargementReferentiel();
+    })
+    .withFailureHandler(erreurChargementReferentiel)
+    .getItemsReferentiel(formation);
+}
+
+function afficherListeCategoriesReferentiel() {
+  const corps = document.getElementById(
+    'corpsTableauCategoriesReferentiel'
+  );
+
+  if (!corps) {
+    return;
+  }
+
+  const formation =
+    etatApplication.formationReferentielActive;
+
+  const categories =
+    etatApplication.categoriesReferentiel;
+
+  const compteur = document.getElementById(
+    'compteurCategoriesReferentiel'
+  );
+
+  if (compteur) {
+    compteur.textContent = formation
+      ? categories.length +
+        (categories.length > 1
+          ? ' catégories'
+          : ' catégorie')
+      : '';
+  }
+
+  if (!formation || !categories.length) {
+    corps.innerHTML = `
+      <tr>
+        <td colspan="5" class="etat-vide">
+          ${formation
+            ? 'Aucune catégorie pédagogique configurée.'
+            : 'Sélectionne une formation.'}
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  corps.innerHTML = categories
+    .map(function (categorie, position) {
+      const suppression = categorie.utilisee
+        ? ''
+        : `
+          <button
+            type="button"
+            class="bouton-icone bouton-supprimer-item action-referentiel"
+            onclick="supprimerCategorieReferentielInterface('${categorie.idCategorie}')"
+            title="Supprimer"
+            aria-label="Supprimer ${echapperHtml(categorie.intitule)}"
+          >🗑</button>
+        `;
+
+      return `
+        <tr>
+          <td class="colonne-ordre-referentiel">
+            <span class="ordre-item-referentiel">
+              ${categorie.ordre}
+            </span>
+          </td>
+          <td>
+            <strong>${echapperHtml(categorie.intitule)}</strong>
+            ${categorie.utilisee
+              ? '<small class="indicateur-historique-referentiel">Utilisée dans l’historique</small>'
+              : ''}
+          </td>
+          <td>${categorie.nombreItems}</td>
+          <td>
+            <span class="badge-statut ${categorie.actif ? 'badge-vert' : 'badge-gris'}">
+              ${categorie.actif ? 'Active' : 'Inactive'}
+            </span>
+          </td>
+          <td class="colonne-actions-referentiel">
+            <button
+              type="button"
+              class="bouton-icone action-referentiel"
+              onclick="deplacerCategorieReferentielInterface('${categorie.idCategorie}', -1)"
+              title="Monter"
+              ${position === 0 ? 'disabled' : ''}
+            >↑</button>
+            <button
+              type="button"
+              class="bouton-icone action-referentiel"
+              onclick="deplacerCategorieReferentielInterface('${categorie.idCategorie}', 1)"
+              title="Descendre"
+              ${position === categories.length - 1 ? 'disabled' : ''}
+            >↓</button>
+            <button
+              type="button"
+              class="bouton-icone action-referentiel"
+              onclick="modifierCategorieReferentiel('${categorie.idCategorie}')"
+              title="Modifier"
+            >✎</button>
+            <button
+              type="button"
+              class="bouton-icone action-referentiel"
+              onclick="basculerCategorieReferentiel('${categorie.idCategorie}', ${!categorie.actif})"
+              title="${categorie.actif ? 'Désactiver' : 'Activer'}"
+            >${categorie.actif ? '⏸' : '▶'}</button>
+            ${suppression}
+          </td>
+        </tr>
+      `;
+    })
+    .join('');
+}
+
+function afficherListeItemsReferentiel() {
+  const corps = document.getElementById(
+    'corpsTableauReferentiel'
+  );
+
+  if (!corps) {
+    return;
+  }
+
+  const formation =
+    etatApplication.formationReferentielActive;
+
+  const items = etatApplication.itemsReferentiel;
+  const compteur = document.getElementById(
+    'compteurItemsReferentiel'
+  );
+
+  if (compteur) {
+    if (!formation) {
+      compteur.textContent = '';
+    } else {
+      const nombreActifs = items.filter(function (item) {
+        return item.actif && item.categorieActive;
+      }).length;
+
+      compteur.textContent =
+        items.length +
+        (items.length > 1 ? ' items' : ' item') +
+        ' · ' +
+        nombreActifs +
+        (nombreActifs > 1 ? ' actifs' : ' actif');
+    }
+  }
+
+  if (!formation) {
+    corps.innerHTML = `
+      <tr>
+        <td colspan="6" class="etat-vide">
+          Sélectionne une formation pour afficher ses items.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  if (!items.length) {
+    corps.innerHTML = `
+      <tr>
+        <td colspan="6" class="etat-vide">
+          Aucun item pédagogique configuré pour cette formation.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  corps.innerHTML = items
+    .map(function (item) {
+      const itemsCategorie = items.filter(function (element) {
+        return element.idCategorie === item.idCategorie;
+      });
+
+      const position = itemsCategorie.findIndex(
+        function (element) {
+          return element.idItem === item.idItem;
+        }
+      );
+
+      const suppression = item.utilise
+        ? ''
+        : `
+          <button
+            type="button"
+            class="bouton-icone bouton-supprimer-item action-referentiel"
+            onclick="supprimerItemReferentielInterface('${item.idItem}')"
+            title="Supprimer"
+            aria-label="Supprimer ${echapperHtml(item.intitule)}"
+          >🗑</button>
+        `;
+
+      const itemDisponible =
+        item.actif && item.categorieActive;
+
+      const libelleStatut = !item.categorieActive
+        ? 'Catégorie inactive'
+        : item.actif
+          ? 'Actif'
+          : 'Inactif';
+
+      return `
+        <tr>
+          <td class="colonne-ordre-referentiel">
+            <span class="ordre-item-referentiel">
+              ${item.ordre}
+            </span>
+          </td>
+          <td>
+            <span class="badge-categorie-referentiel">
+              ${echapperHtml(item.categorie)}
+            </span>
+          </td>
+          <td>
+            <strong>${echapperHtml(item.intitule)}</strong>
+            ${item.utilise
+              ? '<small class="indicateur-historique-referentiel">Utilisé dans l’historique</small>'
+              : ''}
+          </td>
+          <td class="description-item-referentiel">
+            ${echapperHtml(item.description || '—')}
+          </td>
+          <td>
+            <span class="badge-statut ${itemDisponible ? 'badge-vert' : 'badge-gris'}">
+              ${libelleStatut}
+            </span>
+          </td>
+          <td class="colonne-actions-referentiel">
+            <button
+              type="button"
+              class="bouton-icone action-referentiel"
+              onclick="deplacerItemReferentiel('${item.idItem}', -1)"
+              title="Monter"
+              aria-label="Monter ${echapperHtml(item.intitule)}"
+              ${position === 0 ? 'disabled' : ''}
+            >
+              ↑
+            </button>
+
+            <button
+              type="button"
+              class="bouton-icone action-referentiel"
+              onclick="deplacerItemReferentiel('${item.idItem}', 1)"
+              title="Descendre"
+              aria-label="Descendre ${echapperHtml(item.intitule)}"
+              ${position === itemsCategorie.length - 1 ? 'disabled' : ''}
+            >
+              ↓
+            </button>
+
+            <button
+              type="button"
+              class="bouton-icone action-referentiel"
+              onclick="modifierItemReferentiel('${item.idItem}')"
+              title="Modifier"
+              aria-label="Modifier ${echapperHtml(item.intitule)}"
+            >
+              ✎
+            </button>
+
+            <button
+              type="button"
+              class="bouton-icone action-referentiel"
+              onclick="basculerItemReferentiel('${item.idItem}', ${!item.actif})"
+              title="${item.actif ? 'Désactiver' : 'Activer'}"
+              aria-label="${item.actif ? 'Désactiver' : 'Activer'} ${echapperHtml(item.intitule)}"
+            >
+              ${item.actif ? '⏸' : '▶'}
+            </button>
+
+            ${suppression}
+          </td>
+        </tr>
+      `;
+    })
+    .join('');
+}
+
+function nouvelleCategorieReferentiel() {
+  const formation =
+    etatApplication.formationReferentielActive;
+
+  if (!formation) {
+    afficherToast('Sélectionne une formation.', true);
+    return;
+  }
+
+  document
+    .getElementById('formulaireCategorieReferentiel')
+    .reset();
+
+  document.getElementById(
+    'categorieReferentielId'
+  ).value = '';
+
+  document.getElementById(
+    'categorieReferentielOrdre'
+  ).value =
+    etatApplication.categoriesReferentiel.length + 1;
+
+  document.getElementById(
+    'categorieReferentielActif'
+  ).checked = true;
+
+  document.getElementById(
+    'titreModalCategorieReferentiel'
+  ).textContent = 'Nouvelle catégorie';
+
+  document.getElementById(
+    'sousTitreModalCategorieReferentiel'
+  ).textContent = formation;
+
+  ouvrirModalCategorieReferentiel();
+}
+
+function modifierCategorieReferentiel(idCategorie) {
+  const categorie =
+    etatApplication.categoriesReferentiel.find(
+      function (element) {
+        return element.idCategorie === idCategorie;
+      }
+    );
+
+  if (!categorie) {
+    afficherToast('Catégorie introuvable.', true);
+    return;
+  }
+
+  document.getElementById(
+    'categorieReferentielId'
+  ).value = categorie.idCategorie;
+
+  document.getElementById(
+    'categorieReferentielIntitule'
+  ).value = categorie.intitule;
+
+  document.getElementById(
+    'categorieReferentielOrdre'
+  ).value = categorie.ordre;
+
+  document.getElementById(
+    'categorieReferentielActif'
+  ).checked = Boolean(categorie.actif);
+
+  document.getElementById(
+    'titreModalCategorieReferentiel'
+  ).textContent = 'Modifier la catégorie';
+
+  document.getElementById(
+    'sousTitreModalCategorieReferentiel'
+  ).textContent = categorie.formation;
+
+  ouvrirModalCategorieReferentiel();
+}
+
+function ouvrirModalCategorieReferentiel() {
+  document
+    .getElementById('modalCategorieReferentiel')
+    .classList
+    .remove('masque');
+
+  document.body.classList.add('modal-ouverte');
+}
+
+function fermerModalCategorieReferentiel() {
+  const modal = document.getElementById(
+    'modalCategorieReferentiel'
+  );
+
+  if (modal) {
+    modal.classList.add('masque');
+  }
+
+  document.body.classList.remove('modal-ouverte');
+}
+
+function soumettreCategorieReferentiel(evenement) {
+  evenement.preventDefault();
+
+  const bouton = document.getElementById(
+    'boutonEnregistrerCategorieReferentiel'
+  );
+
+  const donnees = {
+    idCategorie: document.getElementById(
+      'categorieReferentielId'
+    ).value,
+    formation:
+      etatApplication.formationReferentielActive,
+    ordre: document.getElementById(
+      'categorieReferentielOrdre'
+    ).value,
+    intitule: document.getElementById(
+      'categorieReferentielIntitule'
+    ).value,
+    actif: document.getElementById(
+      'categorieReferentielActif'
+    ).checked
+  };
+
+  bouton.disabled = true;
+  bouton.textContent = 'Enregistrement…';
+
+  google.script.run
+    .withSuccessHandler(function (resultat) {
+      bouton.disabled = false;
+      bouton.textContent = 'Enregistrer';
+      fermerModalCategorieReferentiel();
+      afficherToast(resultat.message, false);
+      chargerDonneesReferentiel();
+    })
+    .withFailureHandler(function (erreur) {
+      bouton.disabled = false;
+      bouton.textContent = 'Enregistrer';
+      afficherToast(extraireMessageErreur(erreur), true);
+    })
+    .enregistrerCategorieReferentiel(donnees);
+}
+
+function nouvelItemReferentiel() {
+  const formation =
+    etatApplication.formationReferentielActive;
+
+  if (!formation) {
+    afficherToast('Sélectionne une formation.', true);
+    return;
+  }
+
+  if (!etatApplication.categoriesReferentiel.length) {
+    afficherToast(
+      'Crée d’abord une catégorie pédagogique.',
+      true
+    );
+    return;
+  }
+
+  document
+    .getElementById('formulaireItemReferentiel')
+    .reset();
+
+  document.getElementById('itemReferentielId').value = '';
+
+  remplirCategoriesItemReferentiel();
+
+  const premiereCategorie =
+    etatApplication.categoriesReferentiel.find(
+      function (categorie) {
+        return categorie.actif;
+      }
+    ) || etatApplication.categoriesReferentiel[0];
+
+  document.getElementById(
+    'itemReferentielCategorie'
+  ).value = premiereCategorie.idCategorie;
+
+  document.getElementById(
+    'itemReferentielOrdre'
+  ).value = compterItemsCategorieReferentiel_(
+    premiereCategorie.idCategorie
+  ) + 1;
+
+  document.getElementById(
+    'itemReferentielActif'
+  ).checked = true;
+
+  document.getElementById(
+    'titreModalItemReferentiel'
+  ).textContent = 'Nouvel item pédagogique';
+
+  document.getElementById(
+    'sousTitreModalItemReferentiel'
+  ).textContent = formation;
+
+  ouvrirModalItemReferentiel();
+
+  window.setTimeout(function () {
+    document.getElementById(
+      'itemReferentielIntitule'
+    ).focus();
+  }, 100);
+}
+
+function modifierItemReferentiel(idItem) {
+  const item = etatApplication.itemsReferentiel.find(
+    function (element) {
+      return element.idItem === idItem;
+    }
+  );
+
+  if (!item) {
+    afficherToast('Item pédagogique introuvable.', true);
+    return;
+  }
+
+  document.getElementById('itemReferentielId').value =
+    item.idItem;
+
+  remplirCategoriesItemReferentiel();
+
+  const selectCategorie = document.getElementById(
+    'itemReferentielCategorie'
+  );
+
+  selectCategorie.value = item.idCategorie;
+  selectCategorie.disabled = Boolean(item.utilise);
+
+  document.getElementById(
+    'itemReferentielIntitule'
+  ).value = item.intitule;
+
+  document.getElementById(
+    'itemReferentielDescription'
+  ).value = item.description || '';
+
+  document.getElementById(
+    'itemReferentielOrdre'
+  ).value = item.ordre;
+
+  document.getElementById(
+    'itemReferentielActif'
+  ).checked = Boolean(item.actif);
+
+  document.getElementById(
+    'titreModalItemReferentiel'
+  ).textContent = 'Modifier l’item pédagogique';
+
+  document.getElementById(
+    'sousTitreModalItemReferentiel'
+  ).textContent =
+    etatApplication.formationReferentielActive;
+
+  ouvrirModalItemReferentiel();
+}
+
+function remplirCategoriesItemReferentiel() {
+  const select = document.getElementById(
+    'itemReferentielCategorie'
+  );
+
+  select.disabled = false;
+  select.innerHTML = etatApplication.categoriesReferentiel
+    .map(function (categorie) {
+      return `
+        <option value="${echapperHtml(categorie.idCategorie)}">
+          ${echapperHtml(categorie.intitule)}${categorie.actif ? '' : ' (inactive)'}
+        </option>
+      `;
+    })
+    .join('');
+}
+
+function mettreAJourOrdreItemReferentiel() {
+  const idCategorie = document.getElementById(
+    'itemReferentielCategorie'
+  ).value;
+
+  document.getElementById(
+    'itemReferentielOrdre'
+  ).value = compterItemsCategorieReferentiel_(
+    idCategorie
+  ) + 1;
+}
+
+function compterItemsCategorieReferentiel_(idCategorie) {
+  return etatApplication.itemsReferentiel.filter(
+    function (item) {
+      return item.idCategorie === idCategorie;
+    }
+  ).length;
+}
+
+function ouvrirModalItemReferentiel() {
+  document
+    .getElementById('modalItemReferentiel')
+    .classList
+    .remove('masque');
+
+  document.body.classList.add('modal-ouverte');
+}
+
+function fermerModalItemReferentiel() {
+  const modal = document.getElementById(
+    'modalItemReferentiel'
+  );
+
+  if (modal) {
+    modal.classList.add('masque');
+  }
+
+  document.body.classList.remove('modal-ouverte');
+}
+
+function soumettreItemReferentiel(evenement) {
+  evenement.preventDefault();
+
+  const bouton = document.getElementById(
+    'boutonEnregistrerItemReferentiel'
+  );
+
+  const donnees = {
+    idItem: document.getElementById(
+      'itemReferentielId'
+    ).value,
+    formation:
+      etatApplication.formationReferentielActive,
+    idCategorie: document.getElementById(
+      'itemReferentielCategorie'
+    ).value,
+    ordre: document.getElementById(
+      'itemReferentielOrdre'
+    ).value,
+    intitule: document.getElementById(
+      'itemReferentielIntitule'
+    ).value,
+    description: document.getElementById(
+      'itemReferentielDescription'
+    ).value,
+    actif: document.getElementById(
+      'itemReferentielActif'
+    ).checked
+  };
+
+  bouton.disabled = true;
+  bouton.textContent = 'Enregistrement…';
+
+  google.script.run
+    .withSuccessHandler(function (resultat) {
+      bouton.disabled = false;
+      bouton.textContent = 'Enregistrer';
+
+      fermerModalItemReferentiel();
+      afficherToast(
+        resultat.message || 'Item enregistré.',
+        false
+      );
+
+      chargerDonneesReferentiel();
+    })
+    .withFailureHandler(function (erreur) {
+      bouton.disabled = false;
+      bouton.textContent = 'Enregistrer';
+
+      afficherToast(
+        extraireMessageErreur(erreur),
+        true
+      );
+    })
+    .enregistrerItemReferentiel(donnees);
+}
+
+function deplacerItemReferentiel(idItem, direction) {
+  executerActionReferentiel(
+    'deplacerItemReferentiel',
+    [idItem, direction]
+  );
+}
+
+function deplacerCategorieReferentielInterface(
+  idCategorie,
+  direction
+) {
+  executerActionReferentiel(
+    'deplacerCategorieReferentiel',
+    [idCategorie, direction]
+  );
+}
+
+function basculerCategorieReferentiel(
+  idCategorie,
+  actif
+) {
+  executerActionReferentiel(
+    'basculerActifCategorieReferentiel',
+    [idCategorie, actif]
+  );
+}
+
+function basculerItemReferentiel(idItem, actif) {
+  executerActionReferentiel(
+    'basculerActifItemReferentiel',
+    [idItem, actif]
+  );
+}
+
+function supprimerCategorieReferentielInterface(
+  idCategorie
+) {
+  const categorie =
+    etatApplication.categoriesReferentiel.find(
+      function (element) {
+        return element.idCategorie === idCategorie;
+      }
+    );
+
+  if (!categorie) {
+    afficherToast('Catégorie introuvable.', true);
+    return;
+  }
+
+  if (categorie.utilisee) {
+    basculerCategorieReferentiel(idCategorie, false);
+    return;
+  }
+
+  const confirmation = window.confirm(
+    'Supprimer définitivement la catégorie « ' +
+    categorie.intitule +
+    ' » et ses items jamais utilisés ?'
+  );
+
+  if (!confirmation) {
+    return;
+  }
+
+  executerActionReferentiel(
+    'supprimerCategorieReferentiel',
+    [idCategorie]
+  );
+}
+
+function supprimerItemReferentielInterface(idItem) {
+  const item = etatApplication.itemsReferentiel.find(
+    function (element) {
+      return element.idItem === idItem;
+    }
+  );
+
+  if (!item) {
+    afficherToast('Item pédagogique introuvable.', true);
+    return;
+  }
+
+  if (item.utilise) {
+    basculerItemReferentiel(idItem, false);
+    return;
+  }
+
+  const confirmation = window.confirm(
+    'Supprimer définitivement l’item « ' +
+    item.intitule +
+    ' » ?'
+  );
+
+  if (!confirmation) {
+    return;
+  }
+
+  executerActionReferentiel(
+    'supprimerItemReferentiel',
+    [idItem]
+  );
+}
+
+function executerActionReferentiel(nomFonction, parametres) {
+  afficherLoader();
+
+  const execution = google.script.run
+    .withSuccessHandler(function (resultat) {
+      afficherToast(
+        resultat.message || 'Référentiel mis à jour.',
+        false
+      );
+
+      chargerDonneesReferentiel();
+    })
+    .withFailureHandler(gererErreurServeur);
+
+  if (nomFonction === 'deplacerItemReferentiel') {
+    execution.deplacerItemReferentiel(
+      parametres[0],
+      parametres[1]
+    );
+    return;
+  }
+
+  if (nomFonction === 'deplacerCategorieReferentiel') {
+    execution.deplacerCategorieReferentiel(
+      parametres[0],
+      parametres[1]
+    );
+    return;
+  }
+
+  if (nomFonction === 'basculerActifItemReferentiel') {
+    execution.basculerActifItemReferentiel(
+      parametres[0],
+      parametres[1]
+    );
+    return;
+  }
+
+  if (
+    nomFonction === 'basculerActifCategorieReferentiel'
+  ) {
+    execution.basculerActifCategorieReferentiel(
+      parametres[0],
+      parametres[1]
+    );
+    return;
+  }
+
+  if (nomFonction === 'supprimerCategorieReferentiel') {
+    execution.supprimerCategorieReferentiel(
+      parametres[0]
+    );
+    return;
+  }
+
+  execution.supprimerItemReferentiel(parametres[0]);
+}
+
+/* =====================================================
    SESSIONS
 ===================================================== */
 
@@ -1801,11 +3007,11 @@ function afficherReferentielSession() {
 
   if (!etatApplication.referentielSession.length) {
     aide.textContent =
-      'Aucun item actif n’est configuré pour cette formation.';
+      'La séance peut être enregistrée sans évaluation.';
 
     zone.innerHTML = `
       <div class="etat-referentiel-session">
-        Référentiel vide pour ${echapperHtml(formation)}.
+        Aucun item pédagogique configuré pour cette formation.
       </div>
     `;
     return;
@@ -1902,13 +3108,22 @@ function creerItemReferentielSession(
   const validation =
     etatApplication.validationsSession[cle] || {};
 
+  const description = item.description
+    ? `
+      <small>
+        ${echapperHtml(item.description)}
+      </small>
+    `
+    : '';
+
   return `
     <div
       class="ligne-item-referentiel-session"
       data-item-id="${echapperHtml(item.idItem)}"
     >
       <div class="libelle-item-referentiel-session">
-        ${echapperHtml(item.libelle)}
+        <span>${echapperHtml(item.libelle)}</span>
+        ${description}
       </div>
 
       <label class="validation-item-session">

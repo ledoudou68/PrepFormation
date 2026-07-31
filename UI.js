@@ -18,6 +18,7 @@ function getPage(nomPage) {
     'Stagiaires',
     'Formateurs',
     'Sessions',
+    'Referentiel',
     'Indemnisation'
   ];
 
