@@ -319,8 +319,13 @@ function getSuiviStagiaire(uuid) {
   }
 
   const idsItemsParSession = {};
+  const sourcesItemsParSession = {};
 
-  function ajouterItemTravaille(idSession, idItem) {
+  function ajouterItemTravaille(
+    idSession,
+    idItem,
+    source
+  ) {
     if (
       !idsSessionsSuivies.has(idSession) ||
       !idItem
@@ -333,6 +338,12 @@ function getSuiviStagiaire(uuid) {
     }
 
     idsItemsParSession[idSession].add(idItem);
+
+    if (!sourcesItemsParSession[idSession]) {
+      sourcesItemsParSession[idSession] = new Set();
+    }
+
+    sourcesItemsParSession[idSession].add(source);
   }
 
   const indexItemsSessions = tableItemsSessions.index;
@@ -348,7 +359,8 @@ function getSuiviStagiaire(uuid) {
         ),
         String(
           ligne[indexItemsSessions.ID_ITEM] || ''
-        )
+        ),
+        'ITEMS_SESSIONS'
       );
     });
   }
@@ -395,7 +407,11 @@ function getSuiviStagiaire(uuid) {
             indexEvaluations
           )
         ) {
-          ajouterItemTravaille(idSession, idItem);
+          ajouterItemTravaille(
+            idSession,
+            idItem,
+            'EVALUATIONS'
+          );
         }
 
         if (!evaluationsParItem[idItem]) {
@@ -479,6 +495,11 @@ function getSuiviStagiaire(uuid) {
           return itemsParId[idItem].intitule;
         })
       : [];
+
+    session.sourcesItemsTravailles =
+      sourcesItemsParSession[session.idSession]
+        ? [...sourcesItemsParSession[session.idSession]]
+        : [];
   });
 
   sessionsSuivies.sort(function (a, b) {

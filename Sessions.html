@@ -39,12 +39,13 @@
             <th>Stagiaires</th>
             <th>Durée</th>
             <th>Remarques</th>
+            <th class="colonne-actions-session">Actions</th>
           </tr>
         </thead>
 
         <tbody id="corpsTableauSessions">
           <tr>
-            <td colspan="7" class="etat-vide">
+            <td colspan="8" class="etat-vide">
               Chargement des séances…
             </td>
           </tr>
@@ -74,7 +75,7 @@
         <h2 id="titreModalSession">
           Nouvelle séance
         </h2>
-        <p>
+        <p id="sousTitreModalSession">
           Prépare la séance puis valide les acquis individuels.
         </p>
       </div>
@@ -94,6 +95,10 @@
       id="formulaireSession"
       onsubmit="soumettreSession(event)"
     >
+
+      <input type="hidden" id="sessionId">
+      <input type="hidden" id="sessionSourceId">
+      <input type="hidden" id="sessionOperationId">
 
       <div class="modal-corps modal-corps-session">
 

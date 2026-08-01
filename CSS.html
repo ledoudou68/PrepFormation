@@ -1321,6 +1321,27 @@ button:disabled {
   white-space: nowrap;
 }
 
+.tableau-referentiel .colonne-actions-item-referentiel {
+  width: 490px;
+  min-width: 490px;
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  background: var(--blanc);
+  box-shadow: -8px 0 14px rgba(25, 39, 52, 0.08);
+}
+
+.tableau-referentiel thead
+.colonne-actions-item-referentiel {
+  z-index: 3;
+  background: #f8f9fa;
+}
+
+.tableau-referentiel tbody tr:hover
+.colonne-actions-item-referentiel {
+  background: #fafbfc;
+}
+
 .action-referentiel {
   width: 36px;
   height: 36px;
@@ -1359,6 +1380,29 @@ button:disabled {
 
 .bouton-action-statut-referentiel:disabled {
   opacity: 0.7;
+}
+
+.bouton-action-texte-referentiel {
+  width: auto;
+  min-width: 92px;
+  height: 36px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--bordure);
+  border-radius: 8px;
+  background: var(--blanc);
+  color: var(--bleu);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.bouton-action-texte-referentiel:hover {
+  border-color: var(--bleu);
+  background: #eef5fc;
 }
 
 .bouton-supprimer-item {
@@ -1418,7 +1462,47 @@ button:disabled {
 ===================================================== */
 
 .tableau-sessions {
-  min-width: 1080px;
+  min-width: 1220px;
+}
+
+.tableau-sessions .colonne-actions-session {
+  width: 142px;
+  min-width: 142px;
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  background: var(--blanc);
+  box-shadow: -7px 0 13px rgba(25, 39, 52, 0.08);
+}
+
+.tableau-sessions thead .colonne-actions-session {
+  z-index: 3;
+  background: #f8f9fa;
+}
+
+.tableau-sessions tbody tr:hover .colonne-actions-session {
+  background: #fafbfc;
+}
+
+.bouton-consulter-session {
+  min-height: 36px;
+  padding: 0 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid #bfd2e6;
+  border-radius: 8px;
+  background: #eef5fc;
+  color: var(--bleu-fonce);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.bouton-consulter-session:hover {
+  border-color: var(--bleu);
+  background: #e1eefb;
 }
 
 .badge-formation-session {
@@ -1575,6 +1659,206 @@ button:disabled {
   height: 18px;
   flex-shrink: 0;
   accent-color: var(--bleu);
+}
+
+.indicateur-participant-historique-session {
+  margin-left: auto;
+  color: var(--texte-secondaire);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Consultation détaillée d'une séance */
+
+.fiche-session-overlay {
+  z-index: 1200;
+}
+
+.fiche-session-barre {
+  min-height: 82px;
+}
+
+.actions-fiche-session {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.actions-fiche-session .bouton-secondaire,
+.actions-fiche-session .bouton-principal {
+  min-height: 40px;
+  white-space: nowrap;
+}
+
+.fiche-session-corps {
+  max-width: 1380px;
+}
+
+.grille-informations-fiche-session {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.information-fiche-session {
+  min-width: 0;
+  min-height: 94px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--bordure);
+  border-radius: 11px;
+  background: var(--blanc);
+  box-shadow: var(--ombre);
+}
+
+.information-fiche-session span {
+  color: var(--texte-secondaire);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.information-fiche-session strong {
+  overflow-wrap: anywhere;
+  color: var(--texte);
+  font-size: 18px;
+}
+
+.participants-fiche-session {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.participants-fiche-session > div {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--bordure);
+  border-radius: 10px;
+  background: #fafbfc;
+}
+
+.participants-fiche-session h3 {
+  margin: 0 0 12px;
+  font-size: 15px;
+}
+
+.liste-puces-fiche-session {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.puce-participant-fiche-session {
+  padding: 7px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #dce4eb;
+  border-radius: 999px;
+  background: var(--blanc);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.valeur-absente-session {
+  color: var(--texte-secondaire);
+  font-size: 13px;
+}
+
+.categorie-fiche-session {
+  overflow: hidden;
+  border: 1px solid var(--bordure);
+  border-radius: 11px;
+  background: var(--blanc);
+}
+
+.categorie-fiche-session + .categorie-fiche-session {
+  margin-top: 18px;
+}
+
+.categorie-fiche-session > h3 {
+  margin: 0;
+  padding: 14px 17px;
+  border-bottom: 1px solid var(--bordure);
+  background: #f8f9fa;
+  color: var(--rouge-fonce);
+  font-size: 17px;
+}
+
+.contenu-categorie-fiche-session {
+  padding: 16px;
+}
+
+.item-fiche-session {
+  overflow: hidden;
+  border: 1px solid #e4e8ec;
+  border-radius: 9px;
+}
+
+.item-fiche-session + .item-fiche-session {
+  margin-top: 14px;
+}
+
+.entete-item-fiche-session {
+  padding: 12px 14px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  border-bottom: 1px solid #e4e8ec;
+  background: #fcfcfd;
+}
+
+.entete-item-fiche-session h4 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.entete-item-fiche-session p {
+  margin: 5px 0 0;
+  color: var(--texte-secondaire);
+  font-size: 13px;
+}
+
+.tableau-validations-fiche-session {
+  min-width: 720px;
+}
+
+.tableau-validations-fiche-session th:first-child {
+  width: 28%;
+}
+
+.tableau-validations-fiche-session th:nth-child(2) {
+  width: 180px;
+}
+
+.commentaire-validation-fiche-session {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.indicateur-vu-historique-session {
+  margin-top: 5px;
+  display: block;
+  color: var(--texte-secondaire);
+  font-size: 10px;
+}
+
+.remarques-fiche-session {
+  min-height: 82px;
+  padding: 16px;
+  border-left: 4px solid var(--rouge);
+  border-radius: 0 9px 9px 0;
+  background: #fff8f8;
+  white-space: pre-wrap;
+  line-height: 1.55;
 }
 
 .etat-selection-session,
@@ -1789,6 +2073,10 @@ button:disabled {
 
 @media (max-width: 950px) {
 
+  .grille-informations-fiche-session {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .grille-session-principale {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1806,6 +2094,33 @@ button:disabled {
 }
 
 @media (max-width: 700px) {
+
+  .fiche-session-barre {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .actions-fiche-session {
+    justify-content: stretch;
+  }
+
+  .actions-fiche-session .bouton-secondaire,
+  .actions-fiche-session .bouton-principal {
+    flex: 1 1 100%;
+  }
+
+  .grille-informations-fiche-session,
+  .participants-fiche-session {
+    grid-template-columns: 1fr;
+  }
+
+  .information-fiche-session {
+    min-height: 78px;
+  }
+
+  .contenu-categorie-fiche-session {
+    padding: 10px;
+  }
 
   .modal-session {
     max-width: none;

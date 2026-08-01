@@ -233,8 +233,3 @@ function appliquerFormats(classeur) {
     .getRange(2, 4, feuillePrestations.getMaxRows() - 1, 1)
     .setNumberFormat('0.00');
 }
-function getPage(page) {
-  return HtmlService.createTemplateFromFile(page)
-.evaluate()
-.getContent();
-}

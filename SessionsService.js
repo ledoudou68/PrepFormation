@@ -221,6 +221,540 @@ function getSessions() {
 
 
 /**
+ * Retourne toutes les données nécessaires à la consultation,
+ * à la modification ou à la duplication d'une séance.
+ */
+function getSessionDetaillee(idSession) {
+  const identifiant = String(idSession || '').trim();
+
+  if (!identifiant) {
+    throw new Error('Identifiant de séance manquant.');
+  }
+
+  return construireSessionDetaillee_(
+    SpreadsheetApp.getActiveSpreadsheet(),
+    identifiant
+  );
+}
+
+
+function construireSessionDetaillee_(classeur, idSession) {
+  const tableSessions = lireFeuilleSession_(
+    classeur,
+    'SESSIONS'
+  );
+
+  const indexSessions = tableSessions.index;
+
+  if (!Number.isInteger(indexSessions.ID_SESSION)) {
+    throw new Error(
+      'La colonne ID_SESSION est absente de la feuille SESSIONS.'
+    );
+  }
+
+  const lignesSession = tableSessions.lignes.filter(
+    function (ligne) {
+      return String(
+        ligne[indexSessions.ID_SESSION] || ''
+      ) === idSession;
+    }
+  );
+
+  if (!lignesSession.length) {
+    throw new Error('Séance introuvable.');
+  }
+
+  if (lignesSession.length > 1) {
+    throw new Error(
+      'Plusieurs séances utilisent le même ID_SESSION. Corrige la feuille SESSIONS avant de continuer.'
+    );
+  }
+
+  const ligneSession = lignesSession[0];
+  const formation = String(
+    valeurColonneSession_(
+      ligneSession,
+      indexSessions,
+      'FORMATION'
+    ) || ''
+  ).trim();
+
+  const stagiairesParId = {};
+
+  getStagiaires().forEach(function (stagiaire) {
+    stagiairesParId[String(stagiaire.uuid)] = stagiaire;
+  });
+
+  const formateursParId = {};
+
+  getFormateurs().forEach(function (formateur) {
+    formateursParId[
+      String(formateur.idFormateur)
+    ] = formateur;
+  });
+
+  const tablePresences = lireFeuilleSession_(
+    classeur,
+    'PRESENCES_STAGIAIRES'
+  );
+
+  const idsStagiaires = new Set();
+  const indexPresences = tablePresences.index;
+
+  if (
+    Number.isInteger(indexPresences.ID_SESSION) &&
+    Number.isInteger(indexPresences.ID_STAGIAIRE)
+  ) {
+    tablePresences.lignes.forEach(function (ligne) {
+      if (
+        String(ligne[indexPresences.ID_SESSION] || '') ===
+        idSession
+      ) {
+        const idStagiaire = String(
+          ligne[indexPresences.ID_STAGIAIRE] || ''
+        );
+
+        if (idStagiaire) {
+          idsStagiaires.add(idStagiaire);
+        }
+      }
+    });
+  }
+
+  const tablePrestations = lireFeuilleSession_(
+    classeur,
+    'PRESTATIONS_FORMATEURS'
+  );
+
+  const idsFormateurs = new Set();
+  const indexPrestations = tablePrestations.index;
+
+  if (
+    Number.isInteger(indexPrestations.ID_SESSION) &&
+    Number.isInteger(indexPrestations.ID_FORMATEUR)
+  ) {
+    tablePrestations.lignes.forEach(function (ligne) {
+      if (
+        String(ligne[indexPrestations.ID_SESSION] || '') ===
+        idSession
+      ) {
+        const idFormateur = String(
+          ligne[indexPrestations.ID_FORMATEUR] || ''
+        );
+
+        if (idFormateur) {
+          idsFormateurs.add(idFormateur);
+        }
+      }
+    });
+  }
+
+  const tableItemsSessions = lireFeuilleSession_(
+    classeur,
+    'ITEMS_SESSIONS'
+  );
+
+  const idsItems = new Set();
+  const sourcesItems = {};
+  const indexItemsSessions = tableItemsSessions.index;
+
+  function ajouterItemSession(idItem, source) {
+    const identifiantItem = String(idItem || '').trim();
+
+    if (!identifiantItem) {
+      return;
+    }
+
+    idsItems.add(identifiantItem);
+
+    if (!sourcesItems[identifiantItem]) {
+      sourcesItems[identifiantItem] = new Set();
+    }
+
+    sourcesItems[identifiantItem].add(source);
+  }
+
+  if (
+    Number.isInteger(indexItemsSessions.ID_SESSION) &&
+    Number.isInteger(indexItemsSessions.ID_ITEM)
+  ) {
+    tableItemsSessions.lignes.forEach(function (ligne) {
+      if (
+        String(
+          ligne[indexItemsSessions.ID_SESSION] || ''
+        ) === idSession
+      ) {
+        ajouterItemSession(
+          ligne[indexItemsSessions.ID_ITEM],
+          'ITEMS_SESSIONS'
+        );
+      }
+    });
+  }
+
+  const tableEvaluations = lireFeuilleSession_(
+    classeur,
+    'EVALUATIONS'
+  );
+
+  const indexEvaluations = tableEvaluations.index;
+  const validationsParCle = {};
+
+  if (
+    Number.isInteger(indexEvaluations.ID_SESSION) &&
+    Number.isInteger(indexEvaluations.ID_STAGIAIRE) &&
+    Number.isInteger(indexEvaluations.ID_ITEM)
+  ) {
+    tableEvaluations.lignes.forEach(
+      function (ligne, position) {
+        if (
+          String(
+            ligne[indexEvaluations.ID_SESSION] || ''
+          ) !== idSession
+        ) {
+          return;
+        }
+
+        const idStagiaire = String(
+          ligne[indexEvaluations.ID_STAGIAIRE] || ''
+        );
+
+        const idItem = String(
+          ligne[indexEvaluations.ID_ITEM] || ''
+        );
+
+        if (!idStagiaire || !idItem) {
+          return;
+        }
+
+        const acquis = evaluationAcquiseSession_(
+          ligne,
+          indexEvaluations
+        );
+
+        const vuHistorique = Number.isInteger(
+          indexEvaluations.VU
+        ) && estValeurPositiveSession_(
+          ligne[indexEvaluations.VU]
+        );
+
+        const commentaire = String(
+          valeurColonneSession_(
+            ligne,
+            indexEvaluations,
+            'REMARQUE'
+          ) || ''
+        ).trim();
+
+        const cle = idStagiaire + '::' + idItem;
+
+        if (!validationsParCle[cle]) {
+          validationsParCle[cle] = {
+            idStagiaire: idStagiaire,
+            idItem: idItem,
+            acquis: false,
+            commentaire: '',
+            vuHistorique: false,
+            ordreCommentaire: -1
+          };
+        }
+
+        const validation = validationsParCle[cle];
+        validation.acquis = validation.acquis || acquis;
+        validation.vuHistorique =
+          validation.vuHistorique || vuHistorique;
+
+        if (commentaire && position >= validation.ordreCommentaire) {
+          validation.commentaire = commentaire;
+          validation.ordreCommentaire = position;
+        }
+
+        if (
+          evaluationIndiqueTravailSession_(
+            ligne,
+            indexEvaluations
+          )
+        ) {
+          ajouterItemSession(idItem, 'EVALUATIONS');
+        }
+      }
+    );
+  }
+
+  const categoriesReferentiel = formation
+    ? getCategoriesReferentiel(formation)
+    : [];
+
+  const itemsReferentiel = formation
+    ? getItemsReferentiel(formation)
+    : [];
+
+  const categoriesParId = {};
+  const itemsParId = {};
+
+  categoriesReferentiel.forEach(function (categorie) {
+    categoriesParId[categorie.idCategorie] = categorie;
+  });
+
+  itemsReferentiel.forEach(function (item) {
+    itemsParId[item.idItem] = item;
+  });
+
+  const groupesParId = {};
+
+  [...idsItems].forEach(function (idItem) {
+    const item = itemsParId[idItem];
+    const idCategorie = item && item.idCategorie
+      ? item.idCategorie
+      : '__HISTORIQUE__';
+
+    const categorie = categoriesParId[idCategorie];
+
+    if (!groupesParId[idCategorie]) {
+      groupesParId[idCategorie] = {
+        idCategorie: idCategorie,
+        libelle: categorie
+          ? categorie.intitule
+          : 'Items historiques',
+        ordre: categorie ? categorie.ordre : 999999,
+        actif: Boolean(categorie && categorie.actif),
+        items: []
+      };
+    }
+
+    groupesParId[idCategorie].items.push({
+      idItem: idItem,
+      libelle: item ? item.intitule : idItem,
+      description: item ? item.description : '',
+      ordre: item ? item.ordre : 999999,
+      actif: Boolean(item && item.actif),
+      sources: sourcesItems[idItem]
+        ? [...sourcesItems[idItem]]
+        : []
+    });
+  });
+
+  const categories = Object.keys(groupesParId)
+    .map(function (idCategorie) {
+      const categorie = groupesParId[idCategorie];
+
+      categorie.items.sort(function (a, b) {
+        return (
+          a.ordre - b.ordre ||
+          a.libelle.localeCompare(
+            b.libelle,
+            'fr',
+            { sensitivity: 'base' }
+          )
+        );
+      });
+
+      return categorie;
+    })
+    .sort(function (a, b) {
+      return (
+        a.ordre - b.ordre ||
+        a.libelle.localeCompare(
+          b.libelle,
+          'fr',
+          { sensitivity: 'base' }
+        )
+      );
+    });
+
+  const stagiaires = [...idsStagiaires]
+    .map(function (idStagiaire) {
+      const stagiaire = stagiairesParId[idStagiaire];
+
+      return {
+        idStagiaire: idStagiaire,
+        uuid: idStagiaire,
+        nom: stagiaire ? stagiaire.nom : 'Stagiaire',
+        prenom: stagiaire ? stagiaire.prenom : 'non identifié',
+        formation: stagiaire ? stagiaire.formation : formation,
+        statut: stagiaire ? stagiaire.statut : 'Historique'
+      };
+    })
+    .sort(trierIdentitesSession_);
+
+  const formateurs = [...idsFormateurs]
+    .map(function (idFormateur) {
+      const formateur = formateursParId[idFormateur];
+
+      return {
+        idFormateur: idFormateur,
+        nom: formateur ? formateur.nom : 'Formateur',
+        prenom: formateur ? formateur.prenom : 'non identifié',
+        actif: Boolean(formateur && formateur.actif)
+      };
+    })
+    .sort(trierIdentitesSession_);
+
+  const validations = [];
+
+  stagiaires.forEach(function (stagiaire) {
+    categories.forEach(function (categorie) {
+      categorie.items.forEach(function (item) {
+        const cle = stagiaire.idStagiaire +
+          '::' + item.idItem;
+
+        const evaluation = validationsParCle[cle];
+
+        validations.push({
+          idStagiaire: stagiaire.idStagiaire,
+          idItem: item.idItem,
+          acquis: Boolean(evaluation && evaluation.acquis),
+          commentaire: evaluation
+            ? evaluation.commentaire
+            : '',
+          vuHistorique: Boolean(
+            evaluation && evaluation.vuHistorique
+          )
+        });
+      });
+    });
+  });
+
+  return {
+    idSession: idSession,
+    date: convertirDateInterfaceSession_(
+      valeurColonneSession_(
+        ligneSession,
+        indexSessions,
+        'DATE_SESSION'
+      )
+    ),
+    heureDebut: convertirHeureInterfaceSession_(
+      valeurColonneSession_(
+        ligneSession,
+        indexSessions,
+        'HEURE_DEBUT'
+      )
+    ),
+    heureFin: convertirHeureInterfaceSession_(
+      valeurColonneSession_(
+        ligneSession,
+        indexSessions,
+        'HEURE_FIN'
+      )
+    ),
+    dureeHeures: convertirNombreSession_(
+      valeurColonneSession_(
+        ligneSession,
+        indexSessions,
+        'DUREE_HEURES'
+      )
+    ),
+    formation: formation,
+    theme: String(
+      valeurColonneSession_(
+        ligneSession,
+        indexSessions,
+        'THEME'
+      ) || ''
+    ),
+    remarques: String(
+      valeurColonneSession_(
+        ligneSession,
+        indexSessions,
+        'REMARQUES'
+      ) || ''
+    ),
+    formateurs: formateurs,
+    stagiaires: stagiaires,
+    categories: categories,
+    itemsTravailles: categories.reduce(
+      function (items, categorie) {
+        return items.concat(
+          categorie.items.map(function (item) {
+            return item.idItem;
+          })
+        );
+      },
+      []
+    ),
+    validations: validations
+  };
+}
+
+
+function trierIdentitesSession_(a, b) {
+  return (
+    String(a.nom || '').localeCompare(
+      String(b.nom || ''),
+      'fr',
+      { sensitivity: 'base' }
+    ) ||
+    String(a.prenom || '').localeCompare(
+      String(b.prenom || ''),
+      'fr',
+      { sensitivity: 'base' }
+    )
+  );
+}
+
+
+function evaluationIndiqueTravailSession_(ligne, index) {
+  if (evaluationAcquiseSession_(ligne, index)) {
+    return true;
+  }
+
+  if (Number.isInteger(index.VU)) {
+    const valeurVu = ligne[index.VU];
+
+    if (
+      valeurVu !== '' &&
+      valeurVu !== null &&
+      valeurVu !== undefined
+    ) {
+      return estValeurPositiveSession_(valeurVu);
+    }
+  }
+
+  if (Number.isInteger(index.NIVEAU)) {
+    return Boolean(
+      String(ligne[index.NIVEAU] || '').trim()
+    );
+  }
+
+  return Number.isInteger(index.REMARQUE) && Boolean(
+    String(ligne[index.REMARQUE] || '').trim()
+  );
+}
+
+
+function evaluationAcquiseSession_(ligne, index) {
+  if (
+    Number.isInteger(index.ACQUIS) &&
+    estValeurPositiveSession_(ligne[index.ACQUIS])
+  ) {
+    return true;
+  }
+
+  return Number.isInteger(index.NIVEAU) &&
+    normaliserEnteteSession_(ligne[index.NIVEAU]) ===
+      'ACQUIS';
+}
+
+
+function estValeurPositiveSession_(valeur) {
+  if (valeur === true || valeur === 1) {
+    return true;
+  }
+
+  return [
+    'oui',
+    'true',
+    '1',
+    'vu',
+    'acquis'
+  ].includes(
+    String(valeur || '').trim().toLowerCase()
+  );
+}
+
+
+/**
  * Retourne les participants disponibles pour une nouvelle séance.
  */
 function getPreparationSession() {
@@ -241,6 +775,18 @@ function getPreparationSession() {
  * Retourne le référentiel actif d'une formation.
  */
 function getReferentielFormation(formation) {
+  return getReferentielSession(formation, '');
+}
+
+
+/**
+ * Retourne le référentiel actif et, pour une édition ou une
+ * duplication, les éléments inactifs déjà utilisés.
+ */
+function getReferentielSession(
+  formation,
+  idSessionHistorique
+) {
   const formationDemandee = String(
     formation || ''
   ).trim();
@@ -249,34 +795,143 @@ function getReferentielFormation(formation) {
     return [];
   }
 
+  const idHistorique = String(
+    idSessionHistorique || ''
+  ).trim();
+
+  const idsItemsHistoriques = new Set();
+  const classeur = SpreadsheetApp.getActiveSpreadsheet();
+
+  if (idHistorique) {
+    const formationHistorique =
+      obtenirFormationSessionHistorique_(
+        classeur,
+        idHistorique
+      );
+
+    if (formationHistorique !== formationDemandee) {
+      throw new Error(
+        'La séance historique ne correspond pas à la formation sélectionnée.'
+      );
+    }
+
+    obtenirIdsItemsSessionHistorique_(
+      classeur,
+      idHistorique
+    ).forEach(function (idItem) {
+      idsItemsHistoriques.add(idItem);
+    });
+  }
+
   const categories = getCategoriesReferentiel(
     formationDemandee
-  ).filter(function (categorie) {
-    return categorie.actif;
-  });
+  );
 
   const items = getItemsReferentiel(formationDemandee)
     .filter(function (item) {
-      return item.actif && item.categorieActive;
+      return (
+        item.actif && item.categorieActive
+      ) || idsItemsHistoriques.has(item.idItem);
     });
 
+  items.forEach(function (item) {
+    if (categories.some(function (categorie) {
+      return categorie.idCategorie === item.idCategorie;
+    })) {
+      return;
+    }
+
+    categories.push({
+      idCategorie: item.idCategorie,
+      intitule: item.categorie || 'Catégorie historique',
+      ordre: item.ordreCategorie || 999999,
+      actif: false
+    });
+  });
+
+  const idsItemsConnus = new Set(
+    items.map(function (item) {
+      return item.idItem;
+    })
+  );
+
+  const idsItemsSansDefinition = [...idsItemsHistoriques]
+    .filter(function (idItem) {
+      return !idsItemsConnus.has(idItem);
+    });
+
+  if (idsItemsSansDefinition.length) {
+    categories.push({
+      idCategorie: '__HISTORIQUE__',
+      intitule: 'Items historiques',
+      ordre: 999999,
+      actif: false
+    });
+
+    idsItemsSansDefinition.forEach(function (idItem, position) {
+      items.push({
+        idItem: idItem,
+        idCategorie: '__HISTORIQUE__',
+        intitule: idItem,
+        description: '',
+        ordre: position + 1,
+        actif: false,
+        categorieActive: false
+      });
+    });
+  }
+
+  categories.sort(function (a, b) {
+    return (
+      a.ordre - b.ordre ||
+      a.intitule.localeCompare(
+        b.intitule,
+        'fr',
+        { sensitivity: 'base' }
+      )
+    );
+  });
+
   return categories
+    .filter(function (categorie) {
+      return categorie.actif || items.some(
+        function (item) {
+          return item.idCategorie ===
+            categorie.idCategorie;
+        }
+      );
+    })
     .map(function (categorie) {
       return {
         idCategorie: categorie.idCategorie,
         libelle: categorie.intitule,
         ordre: categorie.ordre,
+        actif: categorie.actif,
         items: items
           .filter(function (item) {
             return item.idCategorie ===
               categorie.idCategorie;
+          })
+          .sort(function (a, b) {
+            return (
+              a.ordre - b.ordre ||
+              a.intitule.localeCompare(
+                b.intitule,
+                'fr',
+                { sensitivity: 'base' }
+              )
+            );
           })
           .map(function (item) {
             return {
               idItem: item.idItem,
               libelle: item.intitule,
               description: item.description,
-              ordre: item.ordre
+              ordre: item.ordre,
+              actif: item.actif,
+              historique: idsItemsHistoriques.has(
+                item.idItem
+              )
             };
           })
       };
@@ -287,11 +942,116 @@ function getReferentielFormation(formation) {
 }
 
 
+function obtenirFormationSessionHistorique_(
+  classeur,
+  idSession
+) {
+  const table = lireFeuilleSession_(classeur, 'SESSIONS');
+  const index = table.index;
+
+  if (
+    !Number.isInteger(index.ID_SESSION) ||
+    !Number.isInteger(index.FORMATION)
+  ) {
+    throw new Error(
+      'La structure de la feuille SESSIONS est incomplète.'
+    );
+  }
+
+  const lignes = table.lignes.filter(function (ligne) {
+    return String(ligne[index.ID_SESSION] || '') === idSession;
+  });
+
+  if (lignes.length !== 1) {
+    throw new Error(
+      lignes.length
+        ? 'Plusieurs séances utilisent le même ID_SESSION.'
+        : 'Séance historique introuvable.'
+    );
+  }
+
+  return String(lignes[0][index.FORMATION] || '').trim();
+}
+
+
+function obtenirIdsItemsSessionHistorique_(
+  classeur,
+  idSession
+) {
+  const idsItems = new Set();
+  const tableItems = lireFeuilleSession_(
+    classeur,
+    'ITEMS_SESSIONS'
+  );
+
+  const indexItems = tableItems.index;
+
+  if (
+    Number.isInteger(indexItems.ID_SESSION) &&
+    Number.isInteger(indexItems.ID_ITEM)
+  ) {
+    tableItems.lignes.forEach(function (ligne) {
+      if (
+        String(ligne[indexItems.ID_SESSION] || '') ===
+        idSession
+      ) {
+        const idItem = String(
+          ligne[indexItems.ID_ITEM] || ''
+        );
+
+        if (idItem) {
+          idsItems.add(idItem);
+        }
+      }
+    });
+  }
+
+  const tableEvaluations = lireFeuilleSession_(
+    classeur,
+    'EVALUATIONS'
+  );
+
+  const indexEvaluations = tableEvaluations.index;
+
+  if (
+    Number.isInteger(indexEvaluations.ID_SESSION) &&
+    Number.isInteger(indexEvaluations.ID_ITEM)
+  ) {
+    tableEvaluations.lignes.forEach(function (ligne) {
+      if (
+        String(
+          ligne[indexEvaluations.ID_SESSION] || ''
+        ) !== idSession ||
+        !evaluationIndiqueTravailSession_(
+          ligne,
+          indexEvaluations
+        )
+      ) {
+        return;
+      }
+
+      const idItem = String(
+        ligne[indexEvaluations.ID_ITEM] || ''
+      );
+
+      if (idItem) {
+        idsItems.add(idItem);
+      }
+    });
+  }
+
+  return idsItems;
+}
+
+
 /**
  * Enregistre une séance et toutes ses données liées.
  */
 function enregistrerSession(donnees) {
-  const donneesValidees = verifierSession_(donnees);
+  if (!donnees) {
+    throw new Error('Aucune donnée de séance reçue.');
+  }
+
   const verrou = LockService.getDocumentLock();
 
   if (!verrou.tryLock(30000)) {
@@ -300,39 +1060,102 @@ function enregistrerSession(donnees) {
     );
   }
 
-  const ecritures = [];
+  let transaction = null;
 
   try {
     const classeur = SpreadsheetApp.getActiveSpreadsheet();
-    const maintenant = new Date();
-    const idSession = Utilities.getUuid();
+    preparerStructureEcritureSession_(classeur);
 
-    ajouterLignesSession_(
-      classeur,
-      'SESSIONS',
-      [{
-        ID_SESSION: idSession,
-        DATE_SESSION: donneesValidees.date,
-        HEURE_DEBUT: donneesValidees.heureDebut,
-        HEURE_FIN: donneesValidees.heureFin,
-        DUREE_HEURES: donneesValidees.dureeHeures,
-        FORMATION: donneesValidees.formation,
-        THEME: '',
-        REMARQUES: donneesValidees.remarques,
-        SAISI_PAR: obtenirUtilisateurSession_(),
-        DATE_CREATION: maintenant,
-        DATE_MODIFICATION: maintenant
-      }],
-      [
-        'ID_SESSION',
-        'DATE_SESSION',
-        'HEURE_DEBUT',
-        'HEURE_FIN',
-        'DUREE_HEURES',
-        'FORMATION'
-      ],
-      ecritures
+    const maintenant = new Date();
+    const idSessionEdition = String(
+      donnees.idSession || ''
+    ).trim();
+
+    const idSessionSource = String(
+      idSessionEdition || donnees.idSessionSource || ''
+    ).trim();
+
+    const idOperation = nettoyerIdOperationSession_(
+      donnees.idOperation
     );
+
+    if (!idSessionEdition) {
+      const sessionRejouee = trouverSessionParOperation_(
+        classeur,
+        idOperation
+      );
+
+      if (sessionRejouee) {
+        return {
+          succes: true,
+          idSession: sessionRejouee,
+          rejouee: true,
+          message: 'Séance déjà enregistrée.'
+        };
+      }
+    }
+
+    const detailSource = idSessionSource
+      ? construireSessionDetaillee_(
+        classeur,
+        idSessionSource
+      )
+      : null;
+
+    const donneesValidees = verifierSession_(
+      donnees,
+      detailSource
+    );
+
+    const idSession = idSessionEdition ||
+      Utilities.getUuid();
+
+    transaction = {
+      ajouts: [],
+      modifications: [],
+      formats: []
+    };
+
+    const objetSession = {
+      ID_SESSION: idSession,
+      DATE_SESSION: donneesValidees.date,
+      HEURE_DEBUT: donneesValidees.heureDebut,
+      HEURE_FIN: donneesValidees.heureFin,
+      DUREE_HEURES: donneesValidees.dureeHeures,
+      FORMATION: donneesValidees.formation,
+      REMARQUES: donneesValidees.remarques,
+      DATE_MODIFICATION: maintenant,
+      ID_REQUETE: idOperation
+    };
+
+    if (idSessionEdition) {
+      mettreAJourSessionExistante_(
+        classeur,
+        idSession,
+        objetSession,
+        transaction
+      );
+    } else {
+      objetSession.THEME = '';
+      objetSession.SAISI_PAR = obtenirUtilisateurSession_();
+      objetSession.DATE_CREATION = maintenant;
+
+      ajouterLignesSession_(
+        classeur,
+        'SESSIONS',
+        [objetSession],
+        [
+          'ID_SESSION',
+          'DATE_SESSION',
+          'HEURE_DEBUT',
+          'HEURE_FIN',
+          'DUREE_HEURES',
+          'FORMATION',
+          'ID_REQUETE'
+        ],
+        transaction.ajouts
+      );
+    }
 
     const lignesPresences = donneesValidees.stagiaires
       .map(function (idStagiaire) {
@@ -343,18 +1166,6 @@ function enregistrerSession(donnees) {
           DATE_CREATION: maintenant
         };
       });
-
-    ajouterLignesSession_(
-      classeur,
-      'PRESENCES_STAGIAIRES',
-      lignesPresences,
-      [
-        'ID_PRESENCE',
-        'ID_SESSION',
-        'ID_STAGIAIRE'
-      ],
-      ecritures
-    );
 
     const lignesPrestations = donneesValidees.formateurs
       .map(function (idFormateur) {
@@ -369,21 +1180,6 @@ function enregistrerSession(donnees) {
         };
       });
 
-    ajouterLignesSession_(
-      classeur,
-      'PRESTATIONS_FORMATEURS',
-      lignesPrestations,
-      [
-        'ID_PRESTATION',
-        'ID_SESSION',
-        'ID_FORMATEUR',
-        'DUREE_HEURES'
-      ],
-      ecritures
-    );
-
-    obtenirFeuilleItemsSessions_(classeur);
-
     const lignesItemsSession =
       donneesValidees.itemsTravailles.map(
         function (idItem) {
@@ -396,18 +1192,6 @@ function enregistrerSession(donnees) {
         }
       );
 
-    ajouterLignesSession_(
-      classeur,
-      'ITEMS_SESSIONS',
-      lignesItemsSession,
-      [
-        'ID_SESSION_ITEM',
-        'ID_SESSION',
-        'ID_ITEM'
-      ],
-      ecritures
-    );
-
     const lignesEvaluations = donneesValidees.validations
       .map(function (validation) {
         return {
@@ -419,29 +1203,94 @@ function enregistrerSession(donnees) {
             ? 'Acquis'
             : 'Non acquis',
           REMARQUE: validation.commentaire,
+          VU: validation.vuHistorique ? 'Oui' : '',
           DATE_CREATION: maintenant,
           DATE_MODIFICATION: maintenant
         };
       });
 
-    if (lignesEvaluations.length) {
-      ajouterLignesSession_(
-        classeur,
-        'EVALUATIONS',
-        lignesEvaluations,
-        [
+    const liaisons = [
+      {
+        feuille: 'PRESENCES_STAGIAIRES',
+        objets: lignesPresences,
+        colonnes: [
+          'ID_PRESENCE',
+          'ID_SESSION',
+          'ID_STAGIAIRE'
+        ],
+        cle: ['ID_STAGIAIRE'],
+        identifiant: 'ID_PRESENCE'
+      },
+      {
+        feuille: 'PRESTATIONS_FORMATEURS',
+        objets: lignesPrestations,
+        colonnes: [
+          'ID_PRESTATION',
+          'ID_SESSION',
+          'ID_FORMATEUR',
+          'DUREE_HEURES'
+        ],
+        cle: ['ID_FORMATEUR'],
+        identifiant: 'ID_PRESTATION'
+      },
+      {
+        feuille: 'ITEMS_SESSIONS',
+        objets: lignesItemsSession,
+        colonnes: [
+          'ID_SESSION_ITEM',
+          'ID_SESSION',
+          'ID_ITEM'
+        ],
+        cle: ['ID_ITEM'],
+        identifiant: 'ID_SESSION_ITEM'
+      },
+      {
+        feuille: 'EVALUATIONS',
+        objets: lignesEvaluations,
+        colonnes: [
           'ID_EVALUATION',
           'ID_SESSION',
           'ID_STAGIAIRE',
           'ID_ITEM',
           'NIVEAU'
         ],
-        ecritures
-      );
+        cle: ['ID_STAGIAIRE', 'ID_ITEM'],
+        identifiant: 'ID_EVALUATION'
+      }
+    ];
+
+    if (idSessionEdition) {
+      liaisons.forEach(function (liaison) {
+        remplacerLignesLieesSession_(
+          classeur,
+          liaison.feuille,
+          idSession,
+          liaison.objets,
+          liaison.colonnes,
+          liaison.cle,
+          liaison.identifiant,
+          maintenant,
+          transaction
+        );
+      });
+    } else {
+      liaisons.forEach(function (liaison) {
+        if (!liaison.objets.length) {
+          return;
+        }
+
+        ajouterLignesSession_(
+          classeur,
+          liaison.feuille,
+          liaison.objets,
+          liaison.colonnes,
+          transaction.ajouts
+        );
+      });
     }
 
     appliquerFormatsNouvelleSession_(
-      ecritures
+      transaction.ajouts.concat(transaction.formats)
     );
 
     SpreadsheetApp.flush();
@@ -449,10 +1298,17 @@ function enregistrerSession(donnees) {
     return {
       succes: true,
       idSession: idSession,
-      message: 'Séance enregistrée.'
+      message: idSessionEdition
+        ? 'Séance modifiée.'
+        : idSessionSource
+          ? 'Séance dupliquée.'
+          : 'Séance enregistrée.'
     };
   } catch (erreur) {
-    annulerEcrituresSession_(ecritures);
+    if (transaction) {
+      annulerTransactionSession_(transaction);
+    }
+
     throw erreur;
   } finally {
     verrou.releaseLock();
@@ -460,7 +1316,7 @@ function enregistrerSession(donnees) {
 }
 
 
-function verifierSession_(donnees) {
+function verifierSession_(donnees, detailSource) {
   if (!donnees) {
     throw new Error('Aucune donnée de séance reçue.');
   }
@@ -471,6 +1327,24 @@ function verifierSession_(donnees) {
 
   if (!formation) {
     throw new Error('La formation est obligatoire.');
+  }
+
+  if (
+    detailSource &&
+    detailSource.formation !== formation
+  ) {
+    throw new Error(
+      'La formation d’une séance modifiée ou dupliquée ne peut pas être remplacée.'
+    );
+  }
+
+  if (
+    !detailSource &&
+    !getFormations().includes(formation)
+  ) {
+    throw new Error(
+      'La formation sélectionnée est introuvable ou inactive.'
+    );
   }
 
   const date = convertirDateSession_(donnees.date);
@@ -510,10 +1384,23 @@ function verifierSession_(donnees) {
     );
   }
 
+  const idsStagiairesHistoriques = new Set(
+    detailSource
+      ? detailSource.stagiaires.map(function (stagiaire) {
+        return String(stagiaire.idStagiaire);
+      })
+      : []
+  );
+
   const stagiairesAutorises = getStagiaires()
     .filter(function (stagiaire) {
       return (
-        stagiaire.statut === 'À préparer' &&
+        (
+          stagiaire.statut === 'À préparer' ||
+          idsStagiairesHistoriques.has(
+            String(stagiaire.uuid)
+          )
+        ) &&
         stagiaire.formation === formation
       );
     });
@@ -524,6 +1411,10 @@ function verifierSession_(donnees) {
     })
   );
 
+  idsStagiairesHistoriques.forEach(function (idStagiaire) {
+    idsStagiairesAutorises.add(idStagiaire);
+  });
+
   stagiaires.forEach(function (idStagiaire) {
     if (!idsStagiairesAutorises.has(idStagiaire)) {
       throw new Error(
@@ -531,6 +1422,14 @@ function verifierSession_(donnees) {
       );
     }
   });
+
+  const idsFormateursHistoriques = new Set(
+    detailSource
+      ? detailSource.formateurs.map(function (formateur) {
+        return String(formateur.idFormateur);
+      })
+      : []
+  );
 
   const idsFormateursActifs = new Set(
     getFormateursActifsSession_()
@@ -540,7 +1439,10 @@ function verifierSession_(donnees) {
   );
 
   formateurs.forEach(function (idFormateur) {
-    if (!idsFormateursActifs.has(idFormateur)) {
+    if (
+      !idsFormateursActifs.has(idFormateur) &&
+      !idsFormateursHistoriques.has(idFormateur)
+    ) {
       throw new Error(
         'Un formateur sélectionné est introuvable ou inactif.'
       );
@@ -555,6 +1457,14 @@ function verifierSession_(donnees) {
         idsItemsAutorises.add(String(item.idItem));
       });
     });
+
+  if (detailSource) {
+    detailSource.itemsTravailles.forEach(
+      function (idItem) {
+        idsItemsAutorises.add(String(idItem));
+      }
+    );
+  }
 
   const validationsRecues = Array.isArray(
     donnees.validations
@@ -598,6 +1508,16 @@ function verifierSession_(donnees) {
   const idsItemsTravailles = new Set(itemsTravailles);
   const validationsParCle = {};
 
+  const validationsSourceParCle = {};
+
+  if (detailSource) {
+    detailSource.validations.forEach(function (validation) {
+      validationsSourceParCle[
+        validation.idStagiaire + '::' + validation.idItem
+      ] = validation;
+    });
+  }
+
   validationsRecues.forEach(function (validation) {
     const idStagiaire = String(
       validation.idStagiaire || ''
@@ -620,7 +1540,13 @@ function verifierSession_(donnees) {
       validation.commentaire || ''
     ).trim();
 
-    const acquis = Boolean(validation.acquis);
+    const acquis = convertirBooleenSession_(
+      validation.acquis
+    );
+
+    const validationSource = validationsSourceParCle[
+      idStagiaire + '::' + idItem
+    ];
 
     validationsParCle[
       idStagiaire + '::' + idItem
@@ -628,7 +1554,13 @@ function verifierSession_(donnees) {
       idStagiaire: idStagiaire,
       idItem: idItem,
       acquis: acquis,
-      commentaire: commentaire
+      commentaire: commentaire,
+      vuHistorique: convertirBooleenSession_(
+        validation.vuHistorique
+      ) || Boolean(
+        validationSource &&
+        validationSource.vuHistorique
+      )
     };
   });
 
@@ -638,14 +1570,28 @@ function verifierSession_(donnees) {
     itemsTravailles.forEach(function (idItem) {
       const cle = idStagiaire + '::' + idItem;
       const validation = validationsParCle[cle];
+      const validationSource = validationsSourceParCle[cle];
 
       validations.push({
         idStagiaire: idStagiaire,
         idItem: idItem,
-        acquis: Boolean(validation && validation.acquis),
+        acquis: Boolean(
+          validation
+            ? validation.acquis
+            : validationSource &&
+              validationSource.acquis
+        ),
         commentaire: validation
           ? validation.commentaire
-          : ''
+          : validationSource
+            ? validationSource.commentaire
+            : '',
+        vuHistorique: Boolean(
+          validation
+            ? validation.vuHistorique
+            : validationSource &&
+              validationSource.vuHistorique
+        )
       });
     });
   });
@@ -666,6 +1612,506 @@ function verifierSession_(donnees) {
     ).trim(),
     validations: validations
   };
+}
+
+
+function convertirBooleenSession_(valeur) {
+  if (valeur === true || valeur === 1) {
+    return true;
+  }
+
+  return [
+    'oui',
+    'true',
+    '1',
+    'acquis',
+    'vu'
+  ].includes(
+    String(valeur || '').trim().toLowerCase()
+  );
+}
+
+
+function preparerStructureEcritureSession_(classeur) {
+  obtenirFeuilleItemsSessions_(classeur);
+
+  const feuilleSessions = classeur.getSheetByName(
+    'SESSIONS'
+  );
+
+  if (!feuilleSessions || feuilleSessions.getLastRow() < 1) {
+    throw new Error(
+      'La feuille SESSIONS est absente ou non initialisée.'
+    );
+  }
+
+  assurerColonneSession_(feuilleSessions, 'ID_REQUETE');
+
+  const structures = {
+    SESSIONS: [
+      'ID_SESSION',
+      'DATE_SESSION',
+      'HEURE_DEBUT',
+      'HEURE_FIN',
+      'DUREE_HEURES',
+      'FORMATION',
+      'ID_REQUETE'
+    ],
+    PRESENCES_STAGIAIRES: [
+      'ID_PRESENCE',
+      'ID_SESSION',
+      'ID_STAGIAIRE'
+    ],
+    PRESTATIONS_FORMATEURS: [
+      'ID_PRESTATION',
+      'ID_SESSION',
+      'ID_FORMATEUR',
+      'DUREE_HEURES'
+    ],
+    ITEMS_SESSIONS: [
+      'ID_SESSION_ITEM',
+      'ID_SESSION',
+      'ID_ITEM'
+    ],
+    EVALUATIONS: [
+      'ID_EVALUATION',
+      'ID_SESSION',
+      'ID_STAGIAIRE',
+      'ID_ITEM',
+      'NIVEAU'
+    ]
+  };
+
+  Object.keys(structures).forEach(function (nomFeuille) {
+    verifierColonnesSession_(
+      classeur,
+      nomFeuille,
+      structures[nomFeuille]
+    );
+  });
+}
+
+
+function assurerColonneSession_(feuille, colonne) {
+  const derniereColonne = Math.max(
+    feuille.getLastColumn(),
+    1
+  );
+
+  const entetes = feuille
+    .getRange(1, 1, 1, derniereColonne)
+    .getValues()[0];
+
+  const index = creerIndexSession_(entetes);
+
+  if (Number.isInteger(index[colonne])) {
+    return;
+  }
+
+  feuille
+    .getRange(1, derniereColonne + 1)
+    .setValue(colonne)
+    .setFontWeight('bold');
+}
+
+
+function verifierColonnesSession_(
+  classeur,
+  nomFeuille,
+  colonnes
+) {
+  const feuille = classeur.getSheetByName(nomFeuille);
+
+  if (!feuille || feuille.getLastRow() < 1) {
+    throw new Error(
+      'La feuille ' + nomFeuille +
+      ' est absente ou non initialisée.'
+    );
+  }
+
+  const entetes = feuille
+    .getRange(1, 1, 1, feuille.getLastColumn())
+    .getValues()[0];
+
+  const index = creerIndexSession_(entetes);
+
+  colonnes.forEach(function (colonne) {
+    if (!Number.isInteger(index[colonne])) {
+      throw new Error(
+        'La colonne "' + colonne +
+        '" est absente de la feuille ' + nomFeuille + '.'
+      );
+    }
+  });
+}
+
+
+function nettoyerIdOperationSession_(valeur) {
+  const identifiant = String(
+    valeur || Utilities.getUuid()
+  ).trim();
+
+  if (!/^[A-Za-z0-9_-]{8,120}$/.test(identifiant)) {
+    throw new Error(
+      'L’identifiant technique de l’enregistrement est invalide.'
+    );
+  }
+
+  return identifiant;
+}
+
+
+function trouverSessionParOperation_(classeur, idOperation) {
+  const table = lireFeuilleSession_(classeur, 'SESSIONS');
+  const index = table.index;
+
+  if (
+    !Number.isInteger(index.ID_REQUETE) ||
+    !Number.isInteger(index.ID_SESSION)
+  ) {
+    return '';
+  }
+
+  const ids = table.lignes
+    .filter(function (ligne) {
+      return String(
+        ligne[index.ID_REQUETE] || ''
+      ) === idOperation;
+    })
+    .map(function (ligne) {
+      return String(ligne[index.ID_SESSION] || '');
+    })
+    .filter(Boolean);
+
+  if (ids.length > 1) {
+    throw new Error(
+      'Plusieurs séances correspondent à la même requête. Aucune nouvelle écriture n’a été effectuée.'
+    );
+  }
+
+  return ids[0] || '';
+}
+
+
+function mettreAJourSessionExistante_(
+  classeur,
+  idSession,
+  objet,
+  transaction
+) {
+  const feuille = classeur.getSheetByName('SESSIONS');
+  const donnees = feuille.getDataRange().getValues();
+  const index = creerIndexSession_(donnees[0]);
+  const numerosLignes = [];
+
+  donnees.slice(1).forEach(function (ligne, position) {
+    if (
+      String(ligne[index.ID_SESSION] || '') === idSession
+    ) {
+      numerosLignes.push(position + 2);
+    }
+  });
+
+  if (numerosLignes.length !== 1) {
+    throw new Error(
+      numerosLignes.length
+        ? 'Plusieurs séances utilisent le même ID_SESSION.'
+        : 'Séance à modifier introuvable.'
+    );
+  }
+
+  const numeroLigne = numerosLignes[0];
+  const ligne = feuille
+    .getRange(numeroLigne, 1, 1, feuille.getLastColumn())
+    .getValues()[0];
+
+  Object.keys(objet).forEach(function (colonne) {
+    if (Number.isInteger(index[colonne])) {
+      ligne[index[colonne]] = objet[colonne];
+    }
+  });
+
+  ecrireLigneTransactionSession_(
+    feuille,
+    numeroLigne,
+    ligne,
+    'SESSIONS',
+    index,
+    transaction
+  );
+}
+
+
+function remplacerLignesLieesSession_(
+  classeur,
+  nomFeuille,
+  idSession,
+  objets,
+  colonnesObligatoires,
+  colonnesCle,
+  colonneIdentifiant,
+  maintenant,
+  transaction
+) {
+  const feuille = classeur.getSheetByName(nomFeuille);
+  const derniereColonne = feuille.getLastColumn();
+  const donnees = feuille.getDataRange().getValues();
+  const index = creerIndexSession_(donnees[0]);
+
+  colonnesObligatoires.forEach(function (colonne) {
+    if (!Number.isInteger(index[colonne])) {
+      throw new Error(
+        'La colonne "' + colonne +
+        '" est absente de la feuille ' + nomFeuille + '.'
+      );
+    }
+  });
+
+  const lignesExistantes = [];
+
+  donnees.slice(1).forEach(function (ligne, position) {
+    if (
+      String(ligne[index.ID_SESSION] || '') === idSession
+    ) {
+      lignesExistantes.push({
+        numeroLigne: position + 2,
+        valeurs: ligne.slice()
+      });
+    }
+  });
+
+  const lignesParCle = {};
+
+  lignesExistantes.forEach(function (ligne) {
+    const cle = creerCleLiaisonSession_(
+      ligne.valeurs,
+      colonnesCle,
+      index
+    );
+
+    if (!lignesParCle[cle]) {
+      lignesParCle[cle] = [];
+    }
+
+    lignesParCle[cle].push(ligne);
+  });
+
+  if (
+    nomFeuille === 'PRESTATIONS_FORMATEURS' &&
+    Number.isInteger(index.STATUT_INDEMNISATION)
+  ) {
+    const clesFinales = new Set(
+      objets.map(function (objet) {
+        return creerCleObjetLiaisonSession_(
+          objet,
+          colonnesCle
+        );
+      })
+    );
+
+    lignesExistantes.forEach(function (ligne) {
+      const cle = creerCleLiaisonSession_(
+        ligne.valeurs,
+        colonnesCle,
+        index
+      );
+
+      const statut = normaliserEnteteSession_(
+        ligne.valeurs[index.STATUT_INDEMNISATION]
+      );
+
+      if (
+        !clesFinales.has(cle) &&
+        statut &&
+        statut !== 'A_DEMANDER'
+      ) {
+        throw new Error(
+          'Un formateur avec une indemnisation engagée ne peut pas être retiré de la séance.'
+        );
+      }
+    });
+  }
+
+  const lignesUtilisees = new Set();
+
+  objets.forEach(function (objetInitial) {
+    const objet = Object.assign({}, objetInitial);
+    const cle = creerCleObjetLiaisonSession_(
+      objet,
+      colonnesCle
+    );
+
+    let ligneCible = (lignesParCle[cle] || []).find(
+      function (ligne) {
+        return !lignesUtilisees.has(ligne.numeroLigne);
+      }
+    );
+
+    const correspondanceExacte = Boolean(ligneCible);
+
+    if (
+      correspondanceExacte &&
+      nomFeuille === 'PRESTATIONS_FORMATEURS'
+    ) {
+      delete objet.STATUT_INDEMNISATION;
+    }
+
+    if (!ligneCible) {
+      ligneCible = lignesExistantes.find(
+        function (ligne) {
+          return !lignesUtilisees.has(ligne.numeroLigne);
+        }
+      );
+    }
+
+    const ligne = correspondanceExacte
+      ? ligneCible.valeurs.slice()
+      : new Array(derniereColonne).fill('');
+
+    if (
+      correspondanceExacte &&
+      Number.isInteger(index[colonneIdentifiant])
+    ) {
+      objet[colonneIdentifiant] =
+        ligneCible.valeurs[index[colonneIdentifiant]] ||
+        objet[colonneIdentifiant];
+    }
+
+    if (
+      correspondanceExacte &&
+      Number.isInteger(index.DATE_CREATION)
+    ) {
+      objet.DATE_CREATION =
+        ligneCible.valeurs[index.DATE_CREATION] ||
+        objet.DATE_CREATION || maintenant;
+    }
+
+    Object.keys(objet).forEach(function (colonne) {
+      if (Number.isInteger(index[colonne])) {
+        ligne[index[colonne]] = objet[colonne];
+      }
+    });
+
+    if (ligneCible) {
+      lignesUtilisees.add(ligneCible.numeroLigne);
+
+      ecrireLigneTransactionSession_(
+        feuille,
+        ligneCible.numeroLigne,
+        ligne,
+        nomFeuille,
+        index,
+        transaction
+      );
+    } else {
+      ajouterLignesSession_(
+        classeur,
+        nomFeuille,
+        [objet],
+        colonnesObligatoires,
+        transaction.ajouts
+      );
+    }
+  });
+
+  lignesExistantes.forEach(function (ligne) {
+    if (lignesUtilisees.has(ligne.numeroLigne)) {
+      return;
+    }
+
+    ecrireLigneTransactionSession_(
+      feuille,
+      ligne.numeroLigne,
+      new Array(derniereColonne).fill(''),
+      nomFeuille,
+      index,
+      transaction,
+      false
+    );
+  });
+}
+
+
+function creerCleLiaisonSession_(ligne, colonnes, index) {
+  return colonnes.map(function (colonne) {
+    return String(ligne[index[colonne]] || '').trim();
+  }).join('::');
+}
+
+
+function creerCleObjetLiaisonSession_(objet, colonnes) {
+  return colonnes.map(function (colonne) {
+    return String(objet[colonne] || '').trim();
+  }).join('::');
+}
+
+
+function ecrireLigneTransactionSession_(
+  feuille,
+  numeroLigne,
+  ligne,
+  nomFeuille,
+  index,
+  transaction,
+  formater
+) {
+  const plage = feuille.getRange(
+    numeroLigne,
+    1,
+    1,
+    feuille.getLastColumn()
+  );
+
+  transaction.modifications.push({
+    feuille: feuille,
+    premiereLigne: numeroLigne,
+    nombreColonnes: feuille.getLastColumn(),
+    valeurs: plage.getValues(),
+    formats: plage.getNumberFormats()
+  });
+
+  plage.setValues([ligne]);
+
+  if (formater !== false) {
+    transaction.formats.push({
+      feuille: feuille,
+      premiereLigne: numeroLigne,
+      nombreLignes: 1,
+      nombreColonnes: feuille.getLastColumn(),
+      index: index,
+      nomFeuille: nomFeuille
+    });
+  }
+}
+
+
+function annulerTransactionSession_(transaction) {
+  annulerEcrituresSession_(transaction.ajouts);
+
+  transaction.modifications
+    .slice()
+    .reverse()
+    .forEach(function (modification) {
+      try {
+        const plage = modification.feuille.getRange(
+          modification.premiereLigne,
+          1,
+          1,
+          modification.nombreColonnes
+        );
+
+        plage.setValues(modification.valeurs);
+        plage.setNumberFormats(modification.formats);
+      } catch (erreurAnnulation) {
+        console.error(erreurAnnulation);
+      }
+    });
+
+  try {
+    SpreadsheetApp.flush();
+  } catch (erreurFlush) {
+    console.error(erreurFlush);
+  }
 }
 
 
@@ -758,7 +2204,8 @@ function getFormateursActifsSession_() {
         nom: String(ligne[index.NOM] || '').trim(),
         prenom: Number.isInteger(index.PRENOM)
           ? String(ligne[index.PRENOM] || '').trim()
-          : ''
+          : '',
+        actif: true
       };
     })
     .sort(function (a, b) {
