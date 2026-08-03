@@ -7,6 +7,7 @@ const CONFIG_FORMATEURS = {
     'NOM',
     'PRENOM',
     'ACTIF',
+    'EMAIL',
     'DATE_CREATION',
     'DATE_MODIFICATION'
   ]
@@ -16,8 +17,11 @@ const CONFIG_FORMATEURS = {
 /**
  * Retourne tous les formateurs, actifs ou non.
  */
-function getFormateurs() {
-  const feuille = obtenirFeuilleFormateurs_();
+function getFormateurs(jetonAdministrateur) {
+  const sessionUtilisateur = getSessionUtilisateur(
+    jetonAdministrateur
+  );
+  const feuille = obtenirFeuilleFormateursLecture_();
   const donnees = feuille.getDataRange().getValues();
 
   if (donnees.length <= 1) {
@@ -38,6 +42,18 @@ function getFormateurs() {
         ),
         nom: String(ligne[index.NOM] || ''),
         prenom: String(ligne[index.PRENOM] || ''),
+        email: (function () {
+          const email = String(ligne[index.EMAIL] || '')
+            .trim()
+            .toLowerCase();
+
+          return (
+            sessionUtilisateur.estAdministrateur ||
+            email === sessionUtilisateur.email
+          )
+            ? email
+            : '';
+        })(),
         actif: convertirActifFormateur_(
           ligne[index.ACTIF]
         )
@@ -63,7 +79,21 @@ function getFormateurs() {
 /**
  * Crée ou modifie un formateur.
  */
-function enregistrerFormateur(donnees) {
+function enregistrerFormateur(donnees, jetonAdministrateur) {
+  const sessionUtilisateur = exigerAdministrateur_(
+    jetonAdministrateur
+  );
+
+  return executerMutationMetier_(function () {
+    return enregistrerFormateurInterne_(
+      donnees,
+      sessionUtilisateur
+    );
+  });
+}
+
+
+function enregistrerFormateurInterne_(donnees, sessionUtilisateur) {
   verifierFormateur_(donnees);
 
   const feuille = obtenirFeuilleFormateurs_();
@@ -105,6 +135,9 @@ function enregistrerFormateur(donnees) {
   )
     ? 'Oui'
     : 'Non';
+  ligne[index.EMAIL] = String(donnees.email || '')
+    .trim()
+    .toLowerCase();
   ligne[index.DATE_CREATION] = dateCreation;
   ligne[index.DATE_MODIFICATION] = new Date();
 
@@ -126,6 +159,21 @@ function enregistrerFormateur(donnees) {
       .setNumberFormat('dd/MM/yyyy HH:mm');
   });
 
+  journaliserActionSensible_(
+    donnees.idFormateur
+      ? 'FORMATEUR_MODIFICATION'
+      : 'FORMATEUR_CREATION',
+    'FORMATEUR',
+    idFormateur,
+    {
+      nom: ligne[index.NOM],
+      prenom: ligne[index.PRENOM],
+      email: ligne[index.EMAIL],
+      actif: ligne[index.ACTIF]
+    },
+    sessionUtilisateur.identifiantHistorique
+  );
+
   return {
     succes: true,
     idFormateur: idFormateur,
@@ -136,46 +184,21 @@ function enregistrerFormateur(donnees) {
 }
 
 
+function obtenirFeuilleFormateursLecture_() {
+  return obtenirFeuilleLecturePure_(
+    SpreadsheetApp.getActiveSpreadsheet(),
+    CONFIG_FORMATEURS.feuille,
+    CONFIG_FORMATEURS.colonnes
+  );
+}
+
+
 function obtenirFeuilleFormateurs_() {
   const classeur = SpreadsheetApp.getActiveSpreadsheet();
-  let feuille = classeur.getSheetByName(
+  const feuille = assurerFeuilleMigration_(
+    classeur,
     CONFIG_FORMATEURS.feuille
   );
-
-  if (!feuille) {
-    feuille = classeur.insertSheet(
-      CONFIG_FORMATEURS.feuille
-    );
-  }
-
-  const premiereLigne = feuille
-    .getRange(
-      1,
-      1,
-      1,
-      CONFIG_FORMATEURS.colonnes.length
-    )
-    .getValues()[0];
-
-  if (
-    premiereLigne.every(function (valeur) {
-      return valeur === '';
-    })
-  ) {
-    feuille
-      .getRange(
-        1,
-        1,
-        1,
-        CONFIG_FORMATEURS.colonnes.length
-      )
-      .setValues([CONFIG_FORMATEURS.colonnes])
-      .setFontWeight('bold')
-      .setBackground('#c62828')
-      .setFontColor('#ffffff');
-
-    feuille.setFrozenRows(1);
-  }
 
   const entetes = feuille
     .getRange(1, 1, 1, feuille.getLastColumn())
@@ -208,6 +231,185 @@ function verifierFormateur_(donnees) {
   if (!String(donnees.prenom || '').trim()) {
     throw new Error('Le prénom est obligatoire.');
   }
+
+  const email = String(donnees.email || '').trim();
+
+  if (
+    email &&
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+  ) {
+    throw new Error('L’adresse e-mail est invalide.');
+  }
+}
+
+
+/**
+ * Retourne exclusivement les prestations du formateur dont
+ * l'adresse correspond à l'utilisateur Google actif.
+ */
+function getMonRecapitulatifHeuresFormateur() {
+  const session = obtenirSessionUtilisateur_();
+
+  if (!session.estIdentifie) {
+    return {
+      estIdentifie: false,
+      formateurAssocie: false,
+      email: '',
+      totalHeures: 0,
+      nombrePrestations: 0,
+      prestations: []
+    };
+  }
+
+  const formateur = getFormateurs().find(function (element) {
+    return element.email === session.email;
+  });
+
+  if (!formateur) {
+    return {
+      estIdentifie: true,
+      formateurAssocie: false,
+      email: session.email,
+      totalHeures: 0,
+      nombrePrestations: 0,
+      prestations: []
+    };
+  }
+
+  const classeur = SpreadsheetApp.getActiveSpreadsheet();
+  const feuillePrestations = classeur.getSheetByName(
+    'PRESTATIONS_FORMATEURS'
+  );
+  const feuilleSessions = classeur.getSheetByName('SESSIONS');
+
+  if (
+    !feuillePrestations ||
+    feuillePrestations.getLastRow() < 2
+  ) {
+    return {
+      estIdentifie: true,
+      formateurAssocie: true,
+      email: session.email,
+      formateur: [formateur.prenom, formateur.nom]
+        .filter(Boolean)
+        .join(' '),
+      totalHeures: 0,
+      nombrePrestations: 0,
+      prestations: []
+    };
+  }
+
+  const donneesPrestations = feuillePrestations
+    .getDataRange()
+    .getValues();
+  const indexPrestations = creerIndexFormateurs_(
+    donneesPrestations[0]
+  );
+  const sessionsParId = {};
+
+  if (feuilleSessions && feuilleSessions.getLastRow() > 1) {
+    const donneesSessions = feuilleSessions
+      .getDataRange()
+      .getValues();
+    const indexSessions = creerIndexFormateurs_(
+      donneesSessions[0]
+    );
+
+    donneesSessions.slice(1).forEach(function (ligne) {
+      const idSession = String(
+        ligne[indexSessions.ID_SESSION] || ''
+      );
+
+      if (idSession) {
+        sessionsParId[idSession] = {
+          date: convertirDateFormateurInterface_(
+            ligne[indexSessions.DATE_SESSION]
+          ),
+          formation: String(
+            ligne[indexSessions.FORMATION] || ''
+          )
+        };
+      }
+    });
+  }
+
+  const prestations = donneesPrestations
+    .slice(1)
+    .filter(function (ligne) {
+      return String(
+        ligne[indexPrestations.ID_FORMATEUR] || ''
+      ) === formateur.idFormateur;
+    })
+    .map(function (ligne) {
+      const idSession = String(
+        ligne[indexPrestations.ID_SESSION] || ''
+      );
+      const sessionLiee = sessionsParId[idSession] || {};
+
+      return {
+        idPrestation: String(
+          ligne[indexPrestations.ID_PRESTATION] || ''
+        ),
+        idSession: idSession,
+        date: sessionLiee.date || '',
+        formation: sessionLiee.formation || '',
+        dureeHeures: Number(
+          ligne[indexPrestations.DUREE_HEURES]
+        ) || 0,
+        statut: Number.isInteger(
+          indexPrestations.STATUT_INDEMNISATION
+        )
+          ? String(
+            ligne[
+              indexPrestations.STATUT_INDEMNISATION
+            ] || 'À demander'
+          )
+          : 'À demander'
+      };
+    })
+    .sort(function (a, b) {
+      return String(b.date).localeCompare(String(a.date));
+    });
+
+  const totalHeures = prestations.reduce(
+    function (total, prestation) {
+      return total + prestation.dureeHeures;
+    },
+    0
+  );
+
+  return {
+    estIdentifie: true,
+    formateurAssocie: true,
+    email: session.email,
+    formateur: [formateur.prenom, formateur.nom]
+      .filter(Boolean)
+      .join(' '),
+    totalHeures: Math.round(totalHeures * 100) / 100,
+    nombrePrestations: prestations.length,
+    prestations: prestations
+  };
+}
+
+
+function convertirDateFormateurInterface_(valeur) {
+  if (!valeur) {
+    return '';
+  }
+
+  const date = valeur instanceof Date
+    ? valeur
+    : new Date(valeur);
+
+  if (isNaN(date.getTime())) {
+    return '';
+  }
+
+  return Utilities.formatDate(
+    date,
+    Session.getScriptTimeZone(),
+    'yyyy-MM-dd'
+  );
 }
 
 

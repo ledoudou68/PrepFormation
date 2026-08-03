@@ -758,13 +758,8 @@ function estValeurPositiveSession_(valeur) {
  * Retourne les participants disponibles pour une nouvelle séance.
  */
 function getPreparationSession() {
-  const stagiaires = getStagiaires()
-    .filter(function (stagiaire) {
-      return stagiaire.statut === 'À préparer';
-    });
-
   return {
-    stagiaires: stagiaires,
+    stagiaires: getStagiaires(),
     formateurs: getFormateursActifsSession_(),
     formations: getFormations()
   };
@@ -1052,13 +1047,15 @@ function enregistrerSession(donnees) {
     throw new Error('Aucune donnée de séance reçue.');
   }
 
-  const verrou = LockService.getDocumentLock();
+  const sessionUtilisateur = obtenirSessionUtilisateur_();
 
-  if (!verrou.tryLock(30000)) {
-    throw new Error(
-      'Une autre séance est en cours d’enregistrement. Réessaie dans quelques instants.'
-    );
-  }
+  return executerMutationMetier_(function () {
+    return enregistrerSessionInterne_(donnees, sessionUtilisateur);
+  });
+}
+
+
+function enregistrerSessionInterne_(donnees, sessionUtilisateur) {
 
   let transaction = null;
 
@@ -1295,6 +1292,27 @@ function enregistrerSession(donnees) {
 
     SpreadsheetApp.flush();
 
+    synchroniserStatutsStagiaires_();
+
+    journaliserActionSensible_(
+      idSessionEdition
+        ? 'SESSION_MODIFICATION'
+        : idSessionSource
+          ? 'SESSION_DUPLICATION'
+          : 'SESSION_CREATION',
+      'SESSION',
+      idSession,
+      {
+        sessionSource: idSessionSource || '',
+        date: donnees.date,
+        formation: donneesValidees.formation,
+        nombreFormateurs: donneesValidees.formateurs.length,
+        nombreStagiaires: donneesValidees.stagiaires.length,
+        nombreItems: donneesValidees.itemsTravailles.length
+      },
+      sessionUtilisateur.email || 'FORMATEUR_PUBLIC'
+    );
+
     return {
       succes: true,
       idSession: idSession,
@@ -1310,8 +1328,6 @@ function enregistrerSession(donnees) {
     }
 
     throw erreur;
-  } finally {
-    verrou.releaseLock();
   }
 }
 
@@ -1392,15 +1408,19 @@ function verifierSession_(donnees, detailSource) {
       : []
   );
 
+  const confirmationsStagiairesFermes = new Set(
+    valeursUniquesSession_(
+      donnees.confirmationsStagiairesFermes
+    )
+  );
+
+  const modificationExistante = Boolean(
+    String(donnees.idSession || '').trim()
+  );
+
   const stagiairesAutorises = getStagiaires()
     .filter(function (stagiaire) {
       return (
-        (
-          stagiaire.statut === 'À préparer' ||
-          idsStagiairesHistoriques.has(
-            String(stagiaire.uuid)
-          )
-        ) &&
         stagiaire.formation === formation
       );
     });
@@ -1419,6 +1439,36 @@ function verifierSession_(donnees, detailSource) {
     if (!idsStagiairesAutorises.has(idStagiaire)) {
       throw new Error(
         'Un stagiaire sélectionné n’est plus disponible pour cette formation.'
+      );
+    }
+
+    const stagiaire = stagiairesAutorises.find(
+      function (element) {
+        return String(element.uuid) === idStagiaire;
+      }
+    );
+
+    const statutFerme = stagiaire && [
+      'Clôturé',
+      'Abandon'
+    ].includes(stagiaire.statut);
+
+    const participantHistoriqueModifie =
+      modificationExistante &&
+      idsStagiairesHistoriques.has(idStagiaire);
+
+    if (
+      statutFerme &&
+      !participantHistoriqueModifie &&
+      !confirmationsStagiairesFermes.has(idStagiaire)
+    ) {
+      throw new Error(
+        'Le stagiaire ' +
+        [stagiaire.prenom, stagiaire.nom]
+          .filter(Boolean)
+          .join(' ') +
+        ' est au statut « ' + stagiaire.statut +
+        ' ». Une confirmation explicite est obligatoire.'
       );
     }
   });
@@ -1633,19 +1683,15 @@ function convertirBooleenSession_(valeur) {
 
 
 function preparerStructureEcritureSession_(classeur) {
-  obtenirFeuilleItemsSessions_(classeur);
-
-  const feuilleSessions = classeur.getSheetByName(
-    'SESSIONS'
-  );
-
-  if (!feuilleSessions || feuilleSessions.getLastRow() < 1) {
-    throw new Error(
-      'La feuille SESSIONS est absente ou non initialisée.'
-    );
-  }
-
-  assurerColonneSession_(feuilleSessions, 'ID_REQUETE');
+  [
+    'SESSIONS',
+    'PRESENCES_STAGIAIRES',
+    'PRESTATIONS_FORMATEURS',
+    'ITEMS_SESSIONS',
+    'EVALUATIONS'
+  ].forEach(function (nomFeuille) {
+    assurerFeuilleMigration_(classeur, nomFeuille);
+  });
 
   const structures = {
     SESSIONS: [
@@ -1689,29 +1735,6 @@ function preparerStructureEcritureSession_(classeur) {
       structures[nomFeuille]
     );
   });
-}
-
-
-function assurerColonneSession_(feuille, colonne) {
-  const derniereColonne = Math.max(
-    feuille.getLastColumn(),
-    1
-  );
-
-  const entetes = feuille
-    .getRange(1, 1, 1, derniereColonne)
-    .getValues()[0];
-
-  const index = creerIndexSession_(entetes);
-
-  if (Number.isInteger(index[colonne])) {
-    return;
-  }
-
-  feuille
-    .getRange(1, derniereColonne + 1)
-    .setValue(colonne)
-    .setFontWeight('bold');
 }
 
 
@@ -2120,58 +2143,10 @@ function annulerTransactionSession_(transaction) {
  * n'existe pas et complète ses entêtes sans effacer de données.
  */
 function obtenirFeuilleItemsSessions_(classeur) {
-  const nomFeuille = 'ITEMS_SESSIONS';
-  const entetesAttendues = [
-    'ID_SESSION_ITEM',
-    'ID_SESSION',
-    'ID_ITEM',
-    'DATE_CREATION'
-  ];
-
-  let feuille = classeur.getSheetByName(nomFeuille);
-
-  if (!feuille) {
-    feuille = classeur.insertSheet(nomFeuille);
-  }
-
-  if (feuille.getLastRow() < 1) {
-    feuille
-      .getRange(1, 1, 1, entetesAttendues.length)
-      .setValues([entetesAttendues]);
-
-    feuille.setFrozenRows(1);
-    return feuille;
-  }
-
-  const derniereColonne = Math.max(
-    feuille.getLastColumn(),
-    1
+  return assurerFeuilleMigration_(
+    classeur,
+    'ITEMS_SESSIONS'
   );
-
-  const entetes = feuille
-    .getRange(1, 1, 1, derniereColonne)
-    .getValues()[0];
-
-  const index = creerIndexSession_(entetes);
-  const entetesManquantes = entetesAttendues.filter(
-    function (entete) {
-      return !Number.isInteger(index[entete]);
-    }
-  );
-
-  if (entetesManquantes.length) {
-    feuille
-      .getRange(
-        1,
-        derniereColonne + 1,
-        1,
-        entetesManquantes.length
-      )
-      .setValues([entetesManquantes]);
-  }
-
-  feuille.setFrozenRows(1);
-  return feuille;
 }
 
 
@@ -2428,13 +2403,8 @@ function valeursUniquesSession_(valeurs) {
 
 
 function obtenirUtilisateurSession_() {
-  try {
-    return Session.getActiveUser().getEmail() ||
-      Session.getEffectiveUser().getEmail() ||
-      '';
-  } catch (erreur) {
-    return '';
-  }
+  return obtenirEmailUtilisateurActif_() ||
+    'FORMATEUR_PUBLIC';
 }
 
 

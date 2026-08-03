@@ -18,14 +18,17 @@ const CONFIG_STAGIAIRES = {
     'TELEPHONE',
     'EMAIL',
     'PHOTO_URL',
-    'FORMATEUR_REFERENT'
+    'FORMATEUR_REFERENT',
+    'DATE_CHANGEMENT_STATUT_AUTO'
   ],
 
   statuts: [
     'À préparer',
-    'Échéance atteinte',
-    'Préparation terminée',
-    'Préparation abandonnée'
+    'En préparation',
+    'Stage aujourd\'hui',
+    'Stage passé',
+    'Clôturé',
+    'Abandon'
   ]
 };
 
@@ -34,7 +37,18 @@ const CONFIG_STAGIAIRES = {
  * Retourne tous les stagiaires.
  */
 function getStagiaires() {
-  const feuille = obtenirFeuilleStagiaires_();
+  synchroniserStatutsStagiaires_();
+  return lireStagiairesSansSynchronisation_();
+}
+
+
+/**
+ * Lit les stagiaires après une éventuelle synchronisation.
+ * Cette fonction interne évite les appels récursifs pendant
+ * la migration et le calcul des statuts.
+ */
+function lireStagiairesSansSynchronisation_() {
+  const feuille = obtenirFeuilleStagiairesLecture_();
   const donnees = feuille.getDataRange().getValues();
 
   if (donnees.length <= 1) {
@@ -103,7 +117,12 @@ function getStagiaires() {
 
         formateurReferent: String(
           ligne[index.FORMATEUR_REFERENT] || ''
-        )
+        ),
+
+        dateChangementStatutAuto:
+          convertirDateHeureStatutPourInterface_(
+            ligne[index.DATE_CHANGEMENT_STATUT_AUTO]
+          )
       };
     })
     .sort(function (a, b) {
@@ -123,6 +142,293 @@ function getStagiaires() {
         { sensitivity: 'base' }
       );
     });
+}
+
+
+/**
+ * Migre les anciens libellés et recalcule les statuts gérés
+ * automatiquement. La feuille est modifiée uniquement lorsque
+ * le statut calculé change ou que la date initiale manque.
+ */
+function synchroniserStatutsStagiaires_() {
+  if (restaurationBloqueEcritures_()) {
+    return {
+      migres: 0,
+      automatiquesMisAJour: 0,
+      suspenduPendantRestauration: true
+    };
+  }
+
+  return executerMutationMetier_(function () {
+    const feuille = obtenirFeuilleStagiaires_();
+    const donnees = feuille.getDataRange().getValues();
+
+    if (donnees.length <= 1) {
+      return {
+        migres: 0,
+        automatiquesMisAJour: 0
+      };
+    }
+
+    const index = creerIndexEntetes_(donnees[0]);
+    const nombreSessionsParStagiaire =
+      compterSessionsRealiseesParStagiaire_();
+    const maintenant = new Date();
+    const aujourdHui = obtenirDateSansHeure_(maintenant);
+    let migres = 0;
+    let automatiquesMisAJour = 0;
+    let modification = false;
+    const changementsStatuts = [];
+
+    donnees.slice(1).forEach(function (ligne) {
+      const uuid = String(ligne[index.UUID] || '').trim();
+
+      if (!uuid) {
+        return;
+      }
+
+      const statutBrut = String(
+        ligne[index.STATUT] || ''
+      ).trim();
+
+      const statutNormalise =
+        normaliserStatutStagiaire_(statutBrut);
+
+      const statutManuel = [
+        'Clôturé',
+        'Abandon'
+      ].includes(statutNormalise);
+
+      const statutCible = statutManuel
+        ? statutNormalise
+        : calculerStatutAutomatiqueStagiaire_(
+          ligne[index.DATE_STAGE],
+          nombreSessionsParStagiaire[uuid] || 0,
+          aujourdHui
+        );
+
+      const ancienLibelle = statutBrut || 'À préparer';
+      const libelleMigre = ancienLibelle !== statutCible;
+      const dateAutomatiqueManquante =
+        !statutManuel &&
+        !ligne[index.DATE_CHANGEMENT_STATUT_AUTO];
+
+      if (libelleMigre) {
+        ligne[index.STATUT] = statutCible;
+        modification = true;
+        migres++;
+        changementsStatuts.push({
+          uuid: uuid,
+          ancienStatut: ancienLibelle,
+          nouveauStatut: statutCible,
+          migrationManuelle: statutManuel
+        });
+      }
+
+      if (!statutManuel && (libelleMigre || dateAutomatiqueManquante)) {
+        ligne[index.DATE_CHANGEMENT_STATUT_AUTO] = maintenant;
+        modification = true;
+        automatiquesMisAJour++;
+      }
+    });
+
+    if (modification) {
+      feuille
+        .getRange(
+          2,
+          index.STATUT + 1,
+          donnees.length - 1,
+          1
+        )
+        .setValues(
+          donnees.slice(1).map(function (ligne) {
+            return [ligne[index.STATUT]];
+          })
+        );
+
+      feuille
+        .getRange(
+          2,
+          index.DATE_CHANGEMENT_STATUT_AUTO + 1,
+          donnees.length - 1,
+          1
+        )
+        .setValues(
+          donnees.slice(1).map(function (ligne) {
+            return [
+              ligne[index.DATE_CHANGEMENT_STATUT_AUTO]
+            ];
+          })
+        )
+        .setNumberFormat('dd/mm/yyyy hh:mm');
+
+      SpreadsheetApp.flush();
+
+      changementsStatuts.forEach(function (changement) {
+        journaliserActionSensible_(
+          changement.migrationManuelle
+            ? 'STATUT_STAGIAIRE_MIGRATION'
+            : 'STATUT_STAGIAIRE_AUTOMATIQUE',
+          'STAGIAIRE',
+          changement.uuid,
+          {
+            ancienStatut: changement.ancienStatut,
+            nouveauStatut: changement.nouveauStatut
+          }
+        );
+      });
+    }
+
+    return {
+      migres: migres,
+      automatiquesMisAJour: automatiquesMisAJour
+    };
+  });
+}
+
+
+function compterSessionsRealiseesParStagiaire_() {
+  const classeur = SpreadsheetApp.getActiveSpreadsheet();
+  const tableSessions = lireFeuillePourSuivi_(
+    classeur,
+    'SESSIONS'
+  );
+  const tablePresences = lireFeuillePourSuivi_(
+    classeur,
+    'PRESENCES_STAGIAIRES'
+  );
+  const datesSessions = {};
+  const aujourdHui = obtenirDateSansHeure_(new Date());
+
+  if (
+    Number.isInteger(tableSessions.index.ID_SESSION) &&
+    Number.isInteger(tableSessions.index.DATE_SESSION)
+  ) {
+    tableSessions.lignes.forEach(function (ligne) {
+      const idSession = String(
+        ligne[tableSessions.index.ID_SESSION] || ''
+      ).trim();
+      const dateSession = obtenirDateSansHeure_(
+        ligne[tableSessions.index.DATE_SESSION]
+      );
+
+      if (
+        idSession &&
+        dateSession &&
+        dateSession.getTime() <= aujourdHui.getTime()
+      ) {
+        datesSessions[idSession] = true;
+      }
+    });
+  }
+
+  const sessionsParStagiaire = {};
+
+  if (
+    Number.isInteger(tablePresences.index.ID_SESSION) &&
+    Number.isInteger(tablePresences.index.ID_STAGIAIRE)
+  ) {
+    tablePresences.lignes.forEach(function (ligne) {
+      const idSession = String(
+        ligne[tablePresences.index.ID_SESSION] || ''
+      ).trim();
+      const idStagiaire = String(
+        ligne[tablePresences.index.ID_STAGIAIRE] || ''
+      ).trim();
+
+      if (!idStagiaire || !datesSessions[idSession]) {
+        return;
+      }
+
+      if (!sessionsParStagiaire[idStagiaire]) {
+        sessionsParStagiaire[idStagiaire] = new Set();
+      }
+
+      sessionsParStagiaire[idStagiaire].add(idSession);
+    });
+  }
+
+  return Object.keys(sessionsParStagiaire).reduce(
+    function (resultat, idStagiaire) {
+      resultat[idStagiaire] =
+        sessionsParStagiaire[idStagiaire].size;
+      return resultat;
+    },
+    {}
+  );
+}
+
+
+function calculerStatutAutomatiqueStagiaire_(
+  dateStageValeur,
+  nombreSessionsRealisees,
+  aujourdHui
+) {
+  const dateStage = obtenirDateSansHeure_(dateStageValeur);
+
+  if (dateStage) {
+    const difference = dateStage.getTime() - aujourdHui.getTime();
+
+    if (difference < 0) {
+      return 'Stage passé';
+    }
+
+    if (difference === 0) {
+      return 'Stage aujourd\'hui';
+    }
+
+    if (nombreSessionsRealisees > 0) {
+      return 'En préparation';
+    }
+  }
+
+  return 'À préparer';
+}
+
+
+function normaliserStatutStagiaire_(statut) {
+  const normalise = normaliserEntete_(statut);
+  const correspondances = {
+    A_PREPARER: 'À préparer',
+    EN_PREPARATION: 'En préparation',
+    STAGE_AUJOURD_HUI: 'Stage aujourd\'hui',
+    STAGE_PASSE: 'Stage passé',
+    ECHEANCE_ATTEINTE: '',
+    CLOTURE: 'Clôturé',
+    PREPARATION_TERMINEE: 'Clôturé',
+    TERMINE: 'Clôturé',
+    ABANDON: 'Abandon',
+    ABANDONNE: 'Abandon',
+    PREPARATION_ABANDONNEE: 'Abandon'
+  };
+
+  return Object.prototype.hasOwnProperty.call(
+    correspondances,
+    normalise
+  )
+    ? correspondances[normalise]
+    : '';
+}
+
+
+function convertirDateHeureStatutPourInterface_(valeur) {
+  if (!valeur) {
+    return '';
+  }
+
+  const date = valeur instanceof Date
+    ? valeur
+    : new Date(valeur);
+
+  if (isNaN(date.getTime())) {
+    return '';
+  }
+
+  return Utilities.formatDate(
+    date,
+    Session.getScriptTimeZone(),
+    'dd/MM/yyyy HH:mm'
+  );
 }
 
 
@@ -179,6 +485,16 @@ function getSuiviStagiaire(uuid) {
     'ITEMS_SESSIONS'
   );
 
+  const tablePrestations = lireFeuillePourSuivi_(
+    classeur,
+    'PRESTATIONS_FORMATEURS'
+  );
+
+  const tableFormateurs = lireFeuillePourSuivi_(
+    classeur,
+    'FORMATEURS'
+  );
+
   const idsSessionsSuivies = new Set();
   const indexPresences = tablePresences.index;
 
@@ -197,6 +513,73 @@ function getSuiviStagiaire(uuid) {
 
       if (idStagiaire === String(uuid) && idSession) {
         idsSessionsSuivies.add(idSession);
+      }
+    });
+  }
+
+  const formateursParId = {};
+  const indexFormateurs = tableFormateurs.index;
+
+  if (Number.isInteger(indexFormateurs.ID_FORMATEUR)) {
+    tableFormateurs.lignes.forEach(function (ligne) {
+      const idFormateur = String(
+        ligne[indexFormateurs.ID_FORMATEUR] || ''
+      );
+
+      if (!idFormateur) {
+        return;
+      }
+
+      formateursParId[idFormateur] = [
+        Number.isInteger(indexFormateurs.PRENOM)
+          ? String(
+            ligne[indexFormateurs.PRENOM] || ''
+          ).trim()
+          : '',
+        Number.isInteger(indexFormateurs.NOM)
+          ? String(
+            ligne[indexFormateurs.NOM] || ''
+          ).trim()
+          : ''
+      ].filter(Boolean).join(' ');
+    });
+  }
+
+  const formateursParSession = {};
+  const indexPrestations = tablePrestations.index;
+
+  if (
+    Number.isInteger(indexPrestations.ID_SESSION) &&
+    Number.isInteger(indexPrestations.ID_FORMATEUR)
+  ) {
+    tablePrestations.lignes.forEach(function (ligne) {
+      const idSession = String(
+        ligne[indexPrestations.ID_SESSION] || ''
+      );
+
+      const idFormateur = String(
+        ligne[indexPrestations.ID_FORMATEUR] || ''
+      );
+
+      if (!idSession || !idFormateur) {
+        return;
+      }
+
+      if (!formateursParSession[idSession]) {
+        formateursParSession[idSession] = [];
+      }
+
+      const nomFormateur = formateursParId[idFormateur] ||
+        'Formateur non identifié';
+
+      if (
+        !formateursParSession[idSession].includes(
+          nomFormateur
+        )
+      ) {
+        formateursParSession[idSession].push(
+          nomFormateur
+        );
       }
     });
   }
@@ -313,7 +696,17 @@ function getSuiviStagiaire(uuid) {
           ? convertirNombre_(
             ligne[indexSessions.DUREE_HEURES]
           )
-          : 0
+          : 0,
+
+        formateurs: (
+          formateursParSession[idSession] || []
+        ).slice().sort(function (a, b) {
+          return a.localeCompare(
+            b,
+            'fr',
+            { sensitivity: 'base' }
+          );
+        })
       });
     });
   }
@@ -326,8 +719,15 @@ function getSuiviStagiaire(uuid) {
     idItem,
     source
   ) {
+    const session = sessionsParId[idSession];
+
     if (
       !idsSessionsSuivies.has(idSession) ||
+      !session ||
+      (
+        session.dateObjet &&
+        session.dateObjet > maintenant
+      ) ||
       !idItem
     ) {
       return;
@@ -367,6 +767,7 @@ function getSuiviStagiaire(uuid) {
 
   const indexEvaluations = tableEvaluations.index;
   const evaluationsParItem = {};
+  const evaluationsParSession = {};
   let nombreEvaluations = 0;
 
   if (
@@ -424,12 +825,13 @@ function getSuiviStagiaire(uuid) {
 
         const evaluation = evaluationsParItem[idItem];
 
-        if (
+        const evaluationAcquise =
           evaluationEstAcquiseSuivi_(
             ligne,
             indexEvaluations
-          )
-        ) {
+          );
+
+        if (evaluationAcquise) {
           evaluation.acquis = true;
         }
 
@@ -440,6 +842,45 @@ function getSuiviStagiaire(uuid) {
             ligne[indexEvaluations.REMARQUE] || ''
           ).trim()
           : '';
+
+        if (
+          idSession &&
+          idsSessionsSuivies.has(idSession)
+        ) {
+          if (!evaluationsParSession[idSession]) {
+            evaluationsParSession[idSession] = {
+              idsItemsAcquis: new Set(),
+              commentaires: [],
+              clesCommentaires: new Set()
+            };
+          }
+
+          const evaluationSession =
+            evaluationsParSession[idSession];
+
+          if (evaluationAcquise) {
+            evaluationSession.idsItemsAcquis.add(idItem);
+          }
+
+          const cleCommentaire = idItem + '::' +
+            commentaire;
+
+          if (
+            commentaire &&
+            !evaluationSession.clesCommentaires.has(
+              cleCommentaire
+            )
+          ) {
+            evaluationSession.clesCommentaires.add(
+              cleCommentaire
+            );
+
+            evaluationSession.commentaires.push({
+              idItem: idItem,
+              commentaire: commentaire
+            });
+          }
+        }
 
         if (!commentaire) {
           return;
@@ -502,6 +943,80 @@ function getSuiviStagiaire(uuid) {
         : [];
   });
 
+  const idsItemsDejaAcquis = new Set();
+
+  const chronologiePedagogique = sessionsSuivies
+    .slice()
+    .sort(function (a, b) {
+      return (
+        String(a.date).localeCompare(String(b.date)) ||
+        String(a.heureDebut).localeCompare(
+          String(b.heureDebut)
+        )
+      );
+    })
+    .map(function (session) {
+      const evaluationSession =
+        evaluationsParSession[session.idSession] || {
+          idsItemsAcquis: new Set(),
+          commentaires: []
+        };
+
+      const nouveauxItemsAcquis = [
+        ...evaluationSession.idsItemsAcquis
+      ]
+        .filter(function (idItem) {
+          return !idsItemsDejaAcquis.has(idItem);
+        })
+        .sort(function (a, b) {
+          return (
+            (positionItems[a] ?? 999999) -
+            (positionItems[b] ?? 999999)
+          );
+        })
+        .map(function (idItem) {
+          return itemsParId[idItem]
+            ? itemsParId[idItem].intitule
+            : 'Item historique';
+        });
+
+      evaluationSession.idsItemsAcquis.forEach(
+        function (idItem) {
+          idsItemsDejaAcquis.add(idItem);
+        }
+      );
+
+      const commentairesIndividuels =
+        evaluationSession.commentaires
+          .slice()
+          .sort(function (a, b) {
+            return (
+              (positionItems[a.idItem] ?? 999999) -
+              (positionItems[b.idItem] ?? 999999)
+            );
+          })
+          .map(function (commentaire) {
+            return {
+              item: itemsParId[commentaire.idItem]
+                ? itemsParId[commentaire.idItem].intitule
+                : 'Item historique',
+              commentaire: commentaire.commentaire
+            };
+          });
+
+      return {
+        idSession: session.idSession,
+        date: session.date,
+        heureDebut: session.heureDebut,
+        formateurs: session.formateurs,
+        itemsTravailles: session.itemsTravailles,
+        nouveauxItemsAcquis: nouveauxItemsAcquis,
+        commentairesIndividuels:
+          commentairesIndividuels
+      };
+    })
+    .reverse();
+
   sessionsSuivies.sort(function (a, b) {
     return (
       String(b.date).localeCompare(String(a.date)) ||
@@ -539,9 +1054,16 @@ function getSuiviStagiaire(uuid) {
       evaluationsParItem
     );
 
+  const tableauBordPedagogique =
+    construireTableauBordPedagogiqueStagiaire_(
+      suiviPedagogique
+    );
+
   return {
     sessions: sessionsSuivies,
     suiviPedagogique: suiviPedagogique,
+    tableauBordPedagogique: tableauBordPedagogique,
+    chronologiePedagogique: chronologiePedagogique,
 
     synthese: {
       sessionsRealisees: sessionsSuivies.length,
@@ -577,6 +1099,7 @@ function construireSuiviPedagogiqueStagiaire_(
       idCategorie: categorie.idCategorie,
       intitule: categorie.intitule,
       ordre: categorie.ordre,
+      actif: categorie.actif,
       items: []
     };
   });
@@ -627,7 +1150,14 @@ function construireSuiviPedagogiqueStagiaire_(
       idItem: item.idItem,
       intitule: item.intitule,
       ordre: item.ordre,
+      ordreCategorie: item.ordreCategorie,
+      idCategorie: item.idCategorie,
+      categorie: item.categorie,
+      categorieActive: item.categorieActive,
       actif: item.actif,
+      compteDansProgression: Boolean(
+        item.actif && item.categorieActive
+      ),
       nombreSeances: nombreSeances,
       statut: acquis
         ? 'Acquis'
@@ -648,6 +1178,7 @@ function construireSuiviPedagogiqueStagiaire_(
         intitule: item.categorie ||
           'Catégorie historique',
         ordre: item.ordreCategorie || 999999,
+        actif: false,
         items: []
       };
     }
@@ -685,6 +1216,129 @@ function construireSuiviPedagogiqueStagiaire_(
         )
       );
     });
+}
+
+
+function construireTableauBordPedagogiqueStagiaire_(
+  suiviPedagogique
+) {
+  const itemsActifs = [];
+
+  suiviPedagogique.forEach(function (categorie) {
+    categorie.items.forEach(function (item) {
+      if (item.compteDansProgression) {
+        itemsActifs.push(item);
+      }
+    });
+  });
+
+  const nombreItems = itemsActifs.length;
+  const nombreTravailles = itemsActifs.filter(
+    function (item) {
+      return item.nombreSeances > 0;
+    }
+  ).length;
+
+  const nombreAcquis = itemsActifs.filter(
+    function (item) {
+      return item.statut === 'Acquis';
+    }
+  ).length;
+
+  const progressionCategories = suiviPedagogique
+    .map(function (categorie) {
+      const itemsCategorie = categorie.items.filter(
+        function (item) {
+          return item.compteDansProgression;
+        }
+      );
+
+      const travailles = itemsCategorie.filter(
+        function (item) {
+          return item.nombreSeances > 0;
+        }
+      ).length;
+
+      const acquis = itemsCategorie.filter(
+        function (item) {
+          return item.statut === 'Acquis';
+        }
+      ).length;
+
+      return {
+        idCategorie: categorie.idCategorie,
+        intitule: categorie.intitule,
+        ordreReferentiel: categorie.ordre,
+        nombreItems: itemsCategorie.length,
+        travailles: travailles,
+        acquis: acquis,
+        pourcentage: itemsCategorie.length
+          ? Math.round(
+            acquis / itemsCategorie.length * 100
+          )
+          : 0
+      };
+    })
+    .filter(function (categorie) {
+      return categorie.nombreItems > 0;
+    })
+    .sort(function (a, b) {
+      return (
+        a.pourcentage - b.pourcentage ||
+        a.ordreReferentiel - b.ordreReferentiel ||
+        a.intitule.localeCompare(
+          b.intitule,
+          'fr',
+          { sensitivity: 'base' }
+        )
+      );
+    });
+
+  const itemsPrioritaires = itemsActifs
+    .filter(function (item) {
+      return item.statut !== 'Acquis';
+    })
+    .sort(function (a, b) {
+      const prioriteA = a.nombreSeances > 0 ? 1 : 0;
+      const prioriteB = b.nombreSeances > 0 ? 1 : 0;
+
+      return (
+        prioriteA - prioriteB ||
+        a.ordreCategorie - b.ordreCategorie ||
+        a.ordre - b.ordre ||
+        a.intitule.localeCompare(
+          b.intitule,
+          'fr',
+          { sensitivity: 'base' }
+        )
+      );
+    })
+    .map(function (item) {
+      return {
+        idItem: item.idItem,
+        intitule: item.intitule,
+        categorie: item.categorie,
+        statut: item.nombreSeances > 0
+          ? 'Travaillé'
+          : 'Non travaillé',
+        nombreSeances: item.nombreSeances,
+        ordreCategorie: item.ordreCategorie,
+        ordre: item.ordre
+      };
+    });
+
+  return {
+    progressionGenerale: nombreItems
+      ? Math.round(nombreAcquis / nombreItems * 100)
+      : 0,
+    nombreItems: nombreItems,
+    nombreTravailles: nombreTravailles,
+    nombreAcquis: nombreAcquis,
+    nombreRestantATravailler:
+      Math.max(0, nombreItems - nombreTravailles),
+    progressionCategories: progressionCategories,
+    itemsPrioritaires: itemsPrioritaires
+  };
 }
 
 
@@ -782,7 +1436,18 @@ function obtenirOrdreEvaluationSuivi_(
 /**
  * Ajoute ou modifie un stagiaire.
  */
-function enregistrerStagiaire(donnees) {
+function enregistrerStagiaire(donnees, jetonAdministrateur) {
+  const sessionUtilisateur = exigerAdministrateur_(
+    jetonAdministrateur
+  );
+
+  return executerMutationMetier_(function () {
+    return enregistrerStagiaireInterne_(donnees, sessionUtilisateur);
+  });
+}
+
+
+function enregistrerStagiaireInterne_(donnees, sessionUtilisateur) {
   verifierDonneesStagiaire_(donnees);
 
   const feuille = obtenirFeuilleStagiaires_();
@@ -804,31 +1469,18 @@ function enregistrerStagiaire(donnees) {
     }
   }
 
-  const statut = String(
-    donnees.statut || 'À préparer'
-  ).trim();
+  const ligne = numeroLigne
+    ? valeurs[numeroLigne - 1].slice()
+    : new Array(entetes.length).fill('');
 
-  const preparationFermee = [
-    'Préparation terminée',
-    'Préparation abandonnée'
-  ].includes(statut);
+  const ancienStatut = numeroLigne
+    ? normaliserStatutStagiaire_(ligne[index.STATUT])
+    : '';
 
-  let dateCloture = convertirTexteEnDate_(
-    donnees.dateCloture
-  );
-
-  let motifCloture = String(
-    donnees.motifCloture || ''
-  ).trim();
-
-  if (!preparationFermee) {
-    dateCloture = '';
-    motifCloture = '';
-  } else if (!dateCloture) {
-    dateCloture = new Date();
-  }
-
-  const ligne = new Array(entetes.length).fill('');
+  const statutManuel = [
+    'Clôturé',
+    'Abandon'
+  ].includes(ancienStatut);
 
   ligne[index.UUID] = uuid;
 
@@ -854,11 +1506,9 @@ function enregistrerStagiaire(donnees) {
       donnees.dateStage
     );
 
-  ligne[index.STATUT] = statut;
-
-  ligne[index.DATE_CLOTURE] = dateCloture;
-
-  ligne[index.MOTIF_CLOTURE] = motifCloture;
+  ligne[index.STATUT] = statutManuel
+    ? ancienStatut
+    : 'À préparer';
 
   ligne[index.NOTES_ADMINISTRATIVES] = String(
     donnees.notesAdministratives || ''
@@ -905,6 +1555,23 @@ function enregistrerStagiaire(donnees) {
     numeroLigne
   );
 
+  synchroniserStatutsStagiaires_();
+
+  journaliserActionSensible_(
+    donnees.uuid
+      ? 'STAGIAIRE_MODIFICATION'
+      : 'STAGIAIRE_CREATION',
+    'STAGIAIRE',
+    uuid,
+    {
+      nom: ligne[index.NOM],
+      prenom: ligne[index.PRENOM],
+      formation: ligne[index.FORMATION],
+      dateStage: donnees.dateStage
+    },
+    sessionUtilisateur.identifiantHistorique
+  );
+
   return {
     succes: true,
     uuid: uuid,
@@ -917,15 +1584,244 @@ function enregistrerStagiaire(donnees) {
 
 
 /**
+ * Applique la seule décision manuelle autorisée sur le cycle
+ * de vie d'un stagiaire.
+ */
+function cloturerPreparationStagiaire(
+  donnees,
+  jetonAdministrateur
+) {
+  const sessionUtilisateur = exigerAdministrateur_(
+    jetonAdministrateur
+  );
+
+  return executerMutationMetier_(function () {
+    return cloturerPreparationStagiaireInterne_(
+      donnees,
+      sessionUtilisateur
+    );
+  });
+}
+
+
+function cloturerPreparationStagiaireInterne_(
+  donnees,
+  sessionUtilisateur
+) {
+
+  if (!donnees) {
+    throw new Error('Aucune donnée de clôture reçue.');
+  }
+
+  const uuid = String(donnees.uuid || '').trim();
+  const resultat = normaliserStatutStagiaire_(
+    donnees.resultat
+  );
+  const commentaire = String(
+    donnees.commentaire || ''
+  ).trim();
+  const dateCloture = convertirTexteEnDate_(donnees.date);
+
+  if (!uuid) {
+    throw new Error('Identifiant du stagiaire manquant.');
+  }
+
+  if (!['Clôturé', 'Abandon'].includes(resultat)) {
+    throw new Error(
+      'Le résultat doit être « Clôturé » ou « Abandon ».'
+    );
+  }
+
+  if (!dateCloture) {
+    throw new Error('La date de clôture est obligatoire.');
+  }
+
+  if (!commentaire) {
+    throw new Error('Le commentaire de clôture est obligatoire.');
+  }
+
+  synchroniserStatutsStagiaires_();
+
+    const feuille = obtenirFeuilleStagiaires_();
+    const valeurs = feuille.getDataRange().getValues();
+    const index = creerIndexEntetes_(valeurs[0]);
+    let numeroLigne = 0;
+
+    for (let i = 1; i < valeurs.length; i++) {
+      if (String(valeurs[i][index.UUID] || '') === uuid) {
+        numeroLigne = i + 1;
+        break;
+      }
+    }
+
+    if (!numeroLigne) {
+      throw new Error('Stagiaire introuvable.');
+    }
+
+    feuille
+      .getRange(numeroLigne, index.STATUT + 1)
+      .setValue(resultat);
+
+    feuille
+      .getRange(numeroLigne, index.DATE_CLOTURE + 1)
+      .setValue(dateCloture)
+      .setNumberFormat('dd/mm/yyyy');
+
+    feuille
+      .getRange(numeroLigne, index.MOTIF_CLOTURE + 1)
+      .setValue(commentaire);
+
+    SpreadsheetApp.flush();
+
+    journaliserActionSensible_(
+      resultat === 'Clôturé'
+        ? 'STAGIAIRE_CLOTURE'
+        : 'STAGIAIRE_ABANDON',
+      'STAGIAIRE',
+      uuid,
+      {
+        resultat: resultat,
+        date: donnees.date,
+        commentaire: commentaire
+      },
+      sessionUtilisateur.identifiantHistorique
+    );
+
+  return {
+    succes: true,
+    uuid: uuid,
+    statut: resultat,
+    message: resultat === 'Clôturé'
+      ? 'Préparation clôturée.'
+      : 'Abandon enregistré.'
+  };
+}
+
+
+/**
+ * Réactive une préparation clôturée ou abandonnée puis laisse
+ * le moteur automatique recalculer son statut courant.
+ */
+function reactiverPreparationStagiaire(
+  uuid,
+  jetonAdministrateur
+) {
+  const sessionUtilisateur = exigerAdministrateur_(
+    jetonAdministrateur
+  );
+
+  return executerMutationMetier_(function () {
+    return reactiverPreparationStagiaireInterne_(
+      uuid,
+      sessionUtilisateur
+    );
+  });
+}
+
+
+function reactiverPreparationStagiaireInterne_(
+  uuid,
+  sessionUtilisateur
+) {
+  const identifiant = String(uuid || '').trim();
+
+  if (!identifiant) {
+    throw new Error('Identifiant du stagiaire manquant.');
+  }
+
+  const feuille = obtenirFeuilleStagiaires_();
+    const valeurs = feuille.getDataRange().getValues();
+    const index = creerIndexEntetes_(valeurs[0]);
+    let numeroLigne = 0;
+    let ancienneDateCloture = '';
+    let ancienMotif = '';
+    let ancienStatut = '';
+
+    for (let i = 1; i < valeurs.length; i++) {
+      if (String(valeurs[i][index.UUID] || '') === identifiant) {
+        numeroLigne = i + 1;
+        ancienStatut = normaliserStatutStagiaire_(
+          valeurs[i][index.STATUT]
+        );
+        ancienneDateCloture = convertirDatePourInterface_(
+          valeurs[i][index.DATE_CLOTURE]
+        );
+        ancienMotif = String(
+          valeurs[i][index.MOTIF_CLOTURE] || ''
+        );
+        break;
+      }
+    }
+
+    if (!numeroLigne) {
+      throw new Error('Stagiaire introuvable.');
+    }
+
+    if (!['Clôturé', 'Abandon'].includes(ancienStatut)) {
+      throw new Error(
+        'Seule une préparation clôturée ou abandonnée peut être réactivée.'
+      );
+    }
+
+    feuille
+      .getRange(numeroLigne, index.STATUT + 1)
+      .setValue('À préparer');
+
+    feuille
+      .getRange(numeroLigne, index.DATE_CLOTURE + 1)
+      .clearContent();
+
+    feuille
+      .getRange(numeroLigne, index.MOTIF_CLOTURE + 1)
+      .clearContent();
+
+    feuille
+      .getRange(
+        numeroLigne,
+        index.DATE_CHANGEMENT_STATUT_AUTO + 1
+      )
+      .setValue(new Date())
+      .setNumberFormat('dd/mm/yyyy hh:mm');
+
+    SpreadsheetApp.flush();
+    synchroniserStatutsStagiaires_();
+
+    const statutRecalcule = String(
+      feuille
+        .getRange(numeroLigne, index.STATUT + 1)
+        .getValue() || 'À préparer'
+    );
+
+    journaliserActionSensible_(
+      'STAGIAIRE_REACTIVATION',
+      'STAGIAIRE',
+      identifiant,
+      {
+        ancienStatut: ancienStatut,
+        ancienneDateCloture: ancienneDateCloture,
+        ancienMotif: ancienMotif,
+        nouveauStatut: statutRecalcule
+      },
+      sessionUtilisateur.identifiantHistorique
+    );
+
+  return {
+    succes: true,
+    uuid: identifiant,
+    statut: statutRecalcule,
+    message: 'Préparation réactivée.'
+  };
+}
+
+
+/**
  * Retourne les formations actives configurées
  * dans la feuille FORMATIONS.
  */
 function getFormations() {
-  const classeur =
-    SpreadsheetApp.getActiveSpreadsheet();
-
-  const feuille =
-    classeur.getSheetByName('FORMATIONS');
+  const feuille = SpreadsheetApp
+    .getActiveSpreadsheet()
+    .getSheetByName('FORMATIONS');
 
   if (!feuille || feuille.getLastRow() < 2) {
     return [];
@@ -1022,56 +1918,10 @@ function getStatutsStagiaires() {
 function obtenirFeuilleStagiaires_() {
   const classeur =
     SpreadsheetApp.getActiveSpreadsheet();
-
-  let feuille = classeur.getSheetByName(
+  const feuille = assurerFeuilleMigration_(
+    classeur,
     CONFIG_STAGIAIRES.feuille
   );
-
-  if (!feuille) {
-    feuille = classeur.insertSheet(
-      CONFIG_STAGIAIRES.feuille
-    );
-  }
-
-  const premiereLigne = feuille
-    .getRange(
-      1,
-      1,
-      1,
-      CONFIG_STAGIAIRES.colonnes.length
-    )
-    .getValues()[0];
-
-  const ligneVide =
-    premiereLigne.every(function (valeur) {
-      return valeur === '';
-    });
-
-  if (ligneVide) {
-    feuille
-      .getRange(
-        1,
-        1,
-        1,
-        CONFIG_STAGIAIRES.colonnes.length
-      )
-      .setValues([
-        CONFIG_STAGIAIRES.colonnes
-      ]);
-
-    feuille
-      .getRange(
-        1,
-        1,
-        1,
-        CONFIG_STAGIAIRES.colonnes.length
-      )
-      .setFontWeight('bold')
-      .setBackground('#c62828')
-      .setFontColor('#ffffff');
-
-    feuille.setFrozenRows(1);
-  }
 
   const entetes = feuille
     .getRange(
@@ -1102,6 +1952,15 @@ function obtenirFeuilleStagiaires_() {
   );
 
   return feuille;
+}
+
+
+function obtenirFeuilleStagiairesLecture_() {
+  return obtenirFeuilleLecturePure_(
+    SpreadsheetApp.getActiveSpreadsheet(),
+    CONFIG_STAGIAIRES.feuille,
+    CONFIG_STAGIAIRES.colonnes
+  );
 }
 
 
@@ -1140,16 +1999,6 @@ function verifierDonneesStagiaire_(donnees) {
   if (!donnees.dateStage) {
     throw new Error(
       'La date du stage est obligatoire.'
-    );
-  }
-
-  if (
-    !CONFIG_STAGIAIRES.statuts.includes(
-      donnees.statut
-    )
-  ) {
-    throw new Error(
-      'Le statut sélectionné est invalide.'
     );
   }
 
@@ -1506,6 +2355,13 @@ function appliquerFormatsStagiaires_(
       )
       .setNumberFormat('dd/mm/yyyy');
   });
+
+  feuille
+    .getRange(
+      ligne,
+      index.DATE_CHANGEMENT_STATUT_AUTO + 1
+    )
+    .setNumberFormat('dd/mm/yyyy hh:mm');
 
   feuille
     .getRange(

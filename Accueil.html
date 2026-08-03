@@ -1,41 +1,266 @@
-<div class="page">
+<div class="page page-accueil-dynamique">
 
-  <div class="entete-page">
-    <h1>Tableau de bord</h1>
-    <p>Suivi des stagiaires, des sessions et des formateurs.</p>
+  <div class="entete-page entete-page-actions">
+    <div>
+      <h1>Tableau de bord</h1>
+      <p>
+        Vue d’ensemble des préparations, séances et indemnisations.
+      </p>
+    </div>
+    <div class="actualisation-accueil">
+      <span id="dateActualisationAccueil">
+        Actualisation en cours…
+      </span>
+      <button
+        type="button"
+        class="bouton-secondaire bouton-actualiser-accueil"
+        onclick="initialiserPageAccueil()"
+      >
+        ↻ Actualiser
+      </button>
+    </div>
   </div>
 
-  <div class="grille-cartes">
+  <div class="grille-cartes grille-cartes-accueil">
 
-    <div class="carte">
-      <div class="carte-titre">Stagiaires à préparer</div>
-      <div class="carte-valeur">—</div>
-    </div>
+    <button
+      type="button"
+      class="carte carte-accueil-interactive carte-accueil-stagiaires"
+      onclick="ouvrirModuleDepuisAccueil('Stagiaires')"
+    >
+      <span class="icone-carte-accueil">👨‍🚒</span>
+      <span class="contenu-carte-accueil">
+        <span class="carte-titre">Stagiaires à préparer</span>
+        <strong
+          id="indicateurStagiairesAccueil"
+          class="carte-valeur"
+        >—</strong>
+        <small>Statut « À préparer »</small>
+      </span>
+      <span class="fleche-carte-accueil">›</span>
+    </button>
 
-    <div class="carte">
-      <div class="carte-titre">Sessions réalisées</div>
-      <div class="carte-valeur">—</div>
-    </div>
+    <button
+      type="button"
+      class="carte carte-accueil-interactive carte-accueil-sessions"
+      onclick="ouvrirModuleDepuisAccueil('Sessions')"
+    >
+      <span class="icone-carte-accueil">📅</span>
+      <span class="contenu-carte-accueil">
+        <span class="carte-titre">Séances réalisées ce mois</span>
+        <strong
+          id="indicateurSessionsMoisAccueil"
+          class="carte-valeur"
+        >—</strong>
+        <small>Depuis le début du mois</small>
+      </span>
+      <span class="fleche-carte-accueil">›</span>
+    </button>
 
-    <div class="carte">
-      <div class="carte-titre">Heures formateurs</div>
-      <div class="carte-valeur">—</div>
-    </div>
+    <button
+      type="button"
+      class="carte carte-accueil-interactive carte-accueil-heures"
+      data-admin-only="true"
+      onclick="ouvrirModuleDepuisAccueil('Sessions')"
+    >
+      <span class="icone-carte-accueil">⏱</span>
+      <span class="contenu-carte-accueil">
+        <span class="carte-titre">Heures formateurs ce mois</span>
+        <strong
+          id="indicateurHeuresMoisAccueil"
+          class="carte-valeur"
+        >—</strong>
+        <small>Total des prestations réalisées</small>
+      </span>
+      <span class="fleche-carte-accueil">›</span>
+    </button>
 
-    <div class="carte">
-      <div class="carte-titre">Heures à indemniser</div>
-      <div class="carte-valeur">—</div>
-    </div>
+    <button
+      type="button"
+      class="carte carte-accueil-interactive carte-accueil-indemnisations"
+      data-admin-only="true"
+      onclick="ouvrirModuleDepuisAccueil('Indemnisation')"
+    >
+      <span class="icone-carte-accueil">€</span>
+      <span class="contenu-carte-accueil">
+        <span class="carte-titre">Prestations à demander</span>
+        <strong
+          id="indicateurPrestationsAccueil"
+          class="carte-valeur"
+        >—</strong>
+        <small>Demandes d’indemnisation non envoyées</small>
+      </span>
+      <span class="fleche-carte-accueil">›</span>
+    </button>
+
+    <button
+      type="button"
+      class="carte carte-accueil-interactive carte-accueil-cycle"
+      onclick="ouvrirModuleDepuisAccueil('Stagiaires')"
+    >
+      <span class="icone-carte-accueil">🚀</span>
+      <span class="contenu-carte-accueil">
+        <span class="carte-titre">Stagiaires en préparation</span>
+        <strong
+          id="indicateurEnPreparationAccueil"
+          class="carte-valeur"
+        >—</strong>
+        <small>Au moins une séance réalisée</small>
+      </span>
+      <span class="fleche-carte-accueil">›</span>
+    </button>
+
+    <button
+      type="button"
+      class="carte carte-accueil-interactive carte-accueil-aujourdhui"
+      onclick="ouvrirModuleDepuisAccueil('Stagiaires')"
+    >
+      <span class="icone-carte-accueil">🎯</span>
+      <span class="contenu-carte-accueil">
+        <span class="carte-titre">Stages aujourd'hui</span>
+        <strong
+          id="indicateurStagesAujourdhuiAccueil"
+          class="carte-valeur"
+        >—</strong>
+        <small>Date du stage = aujourd'hui</small>
+      </span>
+      <span class="fleche-carte-accueil">›</span>
+    </button>
+
+    <button
+      type="button"
+      class="carte carte-accueil-interactive carte-accueil-retard"
+      onclick="ouvrirModuleDepuisAccueil('Stagiaires')"
+    >
+      <span class="icone-carte-accueil">⚠</span>
+      <span class="contenu-carte-accueil">
+        <span class="carte-titre">Stages passés non clôturés</span>
+        <strong
+          id="indicateurStagesPassesAccueil"
+          class="carte-valeur"
+        >—</strong>
+        <small>Action de clôture attendue</small>
+      </span>
+      <span class="fleche-carte-accueil">›</span>
+    </button>
 
   </div>
 
-  <div class="bloc">
-    <h2>Bienvenue</h2>
+  <div class="grille-vigilance-accueil">
 
-    <p>
-      Utilise le menu pour gérer les stagiaires, les formateurs,
-      les sessions de préparation et les indemnisations.
-    </p>
+    <section class="bloc bloc-accueil bloc-echeances-accueil">
+      <div class="entete-bloc-accueil">
+        <div>
+          <span class="sur-titre-accueil">À anticiper</span>
+          <h2>Échéances proches</h2>
+          <p>Stages prévus dans moins de 30 jours.</p>
+        </div>
+        <button
+          type="button"
+          class="lien-module-accueil"
+          onclick="ouvrirModuleDepuisAccueil('Stagiaires')"
+        >Voir les stagiaires →</button>
+      </div>
+
+      <div id="echeancesProchesAccueil">
+        <div class="etat-accueil-chargement">
+          Chargement des échéances…
+        </div>
+      </div>
+    </section>
+
+    <section class="bloc bloc-accueil bloc-alertes-accueil">
+      <div class="entete-bloc-accueil">
+        <div>
+          <span class="sur-titre-accueil sur-titre-alerte-accueil">
+            Vigilance
+          </span>
+          <h2>
+            Alertes pédagogiques
+            <span
+              id="nombreAlertesAccueil"
+              class="compteur-alertes-accueil"
+            >0</span>
+          </h2>
+          <p>Situations nécessitant une attention particulière.</p>
+        </div>
+        <button
+          type="button"
+          class="lien-module-accueil"
+          onclick="ouvrirModuleDepuisAccueil('Stagiaires')"
+        >Ouvrir le suivi →</button>
+      </div>
+
+      <div id="alertesPedagogiquesAccueil">
+        <div class="etat-accueil-chargement">
+          Analyse des situations…
+        </div>
+      </div>
+    </section>
+
   </div>
+
+  <section
+    class="bloc bloc-accueil"
+  >
+    <div class="entete-bloc-accueil">
+      <div>
+        <span class="sur-titre-accueil">Activité récente</span>
+        <h2>Dernières séances</h2>
+        <p>Les cinq dernières séances réalisées.</p>
+      </div>
+      <button
+        type="button"
+        class="lien-module-accueil"
+        onclick="ouvrirModuleDepuisAccueil('Sessions')"
+      >Toutes les séances →</button>
+    </div>
+
+    <div class="tableau-responsive">
+      <table class="tableau tableau-dernieres-sessions-accueil">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Formation</th>
+            <th>Formateurs</th>
+            <th>Stagiaires</th>
+            <th>Durée</th>
+            <th class="colonne-actions-accueil">Action</th>
+          </tr>
+        </thead>
+        <tbody id="dernieresSessionsAccueil">
+          <tr>
+            <td colspan="6" class="etat-vide">
+              Chargement des séances…
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section
+    class="bloc bloc-accueil"
+    data-admin-only="true"
+  >
+    <div class="entete-bloc-accueil">
+      <div>
+        <span class="sur-titre-accueil">Administration</span>
+        <h2>Indemnisations en attente</h2>
+        <p>Prestations au statut « À demander », regroupées par formateur.</p>
+      </div>
+      <button
+        type="button"
+        class="lien-module-accueil"
+        onclick="ouvrirModuleDepuisAccueil('Indemnisation')"
+      >Gérer les indemnisations →</button>
+    </div>
+
+    <div id="indemnisationsAttenteAccueil">
+      <div class="etat-accueil-chargement">
+        Calcul des indemnisations…
+      </div>
+    </div>
+  </section>
 
 </div>

@@ -10,6 +10,7 @@
     <button
       type="button"
       class="bouton-principal"
+      data-admin-only="true"
       onclick="nouveauFormateur()"
     >
       + Nouveau formateur
@@ -51,6 +52,23 @@
 
   </div>
 
+</div>
+
+<div class="page page-recapitulatif-formateur">
+<section
+  id="blocMonRecapitulatifFormateur"
+  class="bloc bloc-recapitulatif-formateur masque"
+  data-formateur-only="true"
+>
+  <div class="entete-page">
+    <h2>Mon récapitulatif d’heures</h2>
+    <p id="resumeMonRecapitulatifFormateur">
+      Chargement…
+    </p>
+  </div>
+
+  <div id="contenuMonRecapitulatifFormateur"></div>
+</section>
 </div>
 
 <div
@@ -117,6 +135,19 @@
               required
               autocomplete="given-name"
             >
+          </div>
+
+          <div class="groupe-champ groupe-champ-large-grille">
+            <label for="formateurEmail">Adresse Google</label>
+            <input
+              type="email"
+              id="formateurEmail"
+              class="champ"
+              placeholder="prenom.nom@exemple.fr"
+            >
+            <small>
+              Utilisée pour afficher uniquement le récapitulatif d’heures du formateur connecté.
+            </small>
           </div>
 
         </div>

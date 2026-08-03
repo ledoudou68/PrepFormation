@@ -59,6 +59,44 @@ textarea {
   opacity: 0.86;
 }
 
+.identite-utilisateur-application {
+  margin-left: 0;
+  max-width: 360px;
+  padding: 7px 11px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  font-size: 12px;
+  text-align: right;
+}
+
+.actions-acces-administration {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bouton-acces-administrateur,
+.bouton-verrouiller-administration {
+  padding: 8px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--blanc);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.bouton-acces-administrateur:hover,
+.bouton-verrouiller-administration:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.modal-acces-administrateur {
+  max-width: 470px;
+}
+
 .bouton-menu-mobile {
   display: none;
   padding: 8px 10px;
@@ -595,6 +633,619 @@ button:disabled {
 }
 
 /* =====================================================
+   TABLEAU DE BORD D'ACCUEIL
+===================================================== */
+
+.page-accueil-dynamique {
+  max-width: 1440px;
+}
+
+.actualisation-accueil {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.actualisation-accueil > span {
+  color: var(--texte-secondaire);
+  font-size: 12px;
+}
+
+.bouton-actualiser-accueil {
+  padding: 9px 12px;
+}
+
+.grille-cartes-accueil {
+  align-items: stretch;
+}
+
+.carte-accueil-interactive {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  min-height: 150px;
+  padding: 20px;
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) 18px;
+  gap: 14px;
+  align-items: center;
+  border: 1px solid var(--bordure);
+  border-top: 4px solid var(--rouge);
+  background: var(--blanc);
+  color: var(--texte);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease,
+    border-color 0.16s ease;
+}
+
+.carte-accueil-interactive:hover {
+  transform: translateY(-3px);
+  border-color: #cbd3da;
+  box-shadow: 0 9px 24px rgba(0, 0, 0, 0.12);
+}
+
+.carte-accueil-interactive:focus-visible,
+.ligne-echeance-accueil:focus-visible,
+.ligne-alerte-accueil:focus-visible,
+.carte-indemnisation-accueil:focus-visible,
+.lien-module-accueil:focus-visible {
+  outline: 3px solid rgba(21, 101, 192, 0.25);
+  outline-offset: 2px;
+}
+
+.carte-accueil-sessions,
+.carte-accueil-heures {
+  border-top-color: var(--bleu);
+}
+
+.carte-accueil-indemnisations {
+  border-top-color: #d97706;
+}
+
+.carte-accueil-cycle {
+  border-top-color: #2563eb;
+}
+
+.carte-accueil-aujourdhui {
+  border-top-color: #16a34a;
+}
+
+.carte-accueil-retard {
+  border-top-color: #dc2626;
+}
+
+.champ-lecture-seule {
+  background: #f4f6f8;
+  color: var(--texte);
+  font-weight: 700;
+  cursor: default;
+}
+
+.aide-champ-cycle-vie {
+  color: var(--texte-secondaire);
+  line-height: 1.4;
+}
+
+.zone-cloture {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.zone-cloture p {
+  margin: 0;
+  color: var(--texte-secondaire);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.modal-cloture-stagiaire {
+  max-width: 560px;
+}
+
+@media (max-width: 700px) {
+  .zone-cloture {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+.icone-carte-accueil {
+  width: 50px;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 13px;
+  background: #fdecec;
+  font-size: 23px;
+}
+
+.carte-accueil-sessions .icone-carte-accueil,
+.carte-accueil-heures .icone-carte-accueil {
+  background: #eef5fc;
+}
+
+.carte-accueil-indemnisations .icone-carte-accueil {
+  background: #fff3df;
+  color: #a05200;
+  font-size: 25px;
+  font-weight: 800;
+}
+
+.contenu-carte-accueil {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.contenu-carte-accueil .carte-titre {
+  margin-bottom: 7px;
+}
+
+.contenu-carte-accueil .carte-valeur {
+  line-height: 1;
+}
+
+.contenu-carte-accueil small {
+  margin-top: 8px;
+  color: var(--texte-secondaire);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.fleche-carte-accueil,
+.fleche-liste-accueil {
+  color: #98a2ad;
+  font-size: 25px;
+  font-weight: 400;
+  transition: transform 0.16s ease;
+}
+
+.carte-accueil-interactive:hover .fleche-carte-accueil,
+.ligne-echeance-accueil:hover .fleche-liste-accueil,
+.ligne-alerte-accueil:hover .fleche-liste-accueil,
+.carte-indemnisation-accueil:hover .fleche-liste-accueil {
+  transform: translateX(3px);
+}
+
+.grille-vigilance-accueil {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.bloc-accueil {
+  min-width: 0;
+}
+
+.entete-bloc-accueil {
+  margin-bottom: 18px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.entete-bloc-accueil h2 {
+  margin: 2px 0 4px;
+  font-size: 20px;
+}
+
+.entete-bloc-accueil p {
+  margin: 0;
+  color: var(--texte-secondaire);
+  font-size: 13px;
+}
+
+.sur-titre-accueil {
+  color: var(--bleu);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.sur-titre-alerte-accueil {
+  color: var(--rouge);
+}
+
+.lien-module-accueil {
+  flex-shrink: 0;
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  color: var(--bleu);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.lien-module-accueil:hover {
+  color: var(--bleu-fonce);
+  text-decoration: underline;
+}
+
+.compteur-alertes-accueil {
+  min-width: 25px;
+  height: 25px;
+  margin-left: 5px;
+  padding: 0 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #fde8e8;
+  color: #a51f1f;
+  font-size: 12px;
+  vertical-align: 2px;
+}
+
+.liste-echeances-accueil,
+.liste-alertes-accueil {
+  max-height: 470px;
+  padding-right: 3px;
+  overflow-y: auto;
+}
+
+.ligne-echeance-accueil,
+.ligne-alerte-accueil {
+  width: 100%;
+  padding: 13px 12px;
+  display: grid;
+  align-items: center;
+  border: 1px solid #e5e9ed;
+  border-radius: 10px;
+  background: #fafbfc;
+  color: var(--texte);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.ligne-echeance-accueil {
+  grid-template-columns:
+    72px
+    minmax(130px, 1fr)
+    minmax(120px, 0.7fr)
+    14px;
+  gap: 12px;
+}
+
+.ligne-echeance-accueil +
+.ligne-echeance-accueil,
+.ligne-alerte-accueil +
+.ligne-alerte-accueil {
+  margin-top: 8px;
+}
+
+.ligne-echeance-accueil:hover,
+.ligne-alerte-accueil:hover {
+  border-color: #bfd3eb;
+  background: #f4f8fc;
+}
+
+.date-echeance-accueil,
+.identite-echeance-accueil,
+.progression-echeance-accueil,
+.contenu-alerte-accueil,
+.contenu-indemnisation-accueil,
+.heures-indemnisation-accueil {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.date-echeance-accueil strong {
+  color: var(--rouge-fonce);
+  font-size: 18px;
+}
+
+.date-echeance-accueil small,
+.identite-echeance-accueil small,
+.progression-echeance-accueil small,
+.contenu-alerte-accueil small,
+.contenu-indemnisation-accueil small,
+.heures-indemnisation-accueil small {
+  color: var(--texte-secondaire);
+  font-size: 11px;
+}
+
+.identite-echeance-accueil strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.progression-echeance-accueil > span:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.progression-echeance-accueil > span:first-child strong {
+  font-size: 12px;
+}
+
+.mini-barre-progression-accueil {
+  height: 6px;
+  margin-top: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e3e7eb;
+}
+
+.mini-barre-progression-accueil i {
+  height: 100%;
+  display: block;
+  border-radius: inherit;
+}
+
+.progression-accueil-rouge {
+  background: var(--rouge);
+}
+
+.progression-accueil-orange {
+  background: #d97706;
+}
+
+.progression-accueil-verte {
+  background: #2e7d32;
+}
+
+.ligne-alerte-accueil {
+  grid-template-columns: 38px minmax(0, 1fr) 14px;
+  gap: 11px;
+  border-left: 4px solid var(--rouge);
+}
+
+.alerte-accueil-inactivite {
+  border-left-color: #d97706;
+}
+
+.alerte-accueil-acquis {
+  border-left-color: #98a2ad;
+}
+
+.icone-alerte-accueil {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #fde8e8;
+  color: #a51f1f;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.alerte-accueil-inactivite .icone-alerte-accueil {
+  background: #fff3df;
+  color: #a05200;
+  font-size: 14px;
+}
+
+.alerte-accueil-acquis .icone-alerte-accueil {
+  background: #edf0f2;
+  color: #4f5b66;
+}
+
+.contenu-alerte-accueil > strong {
+  font-size: 13px;
+}
+
+.contenu-alerte-accueil > span {
+  margin: 2px 0 4px;
+  color: #404b56;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.etat-accueil-chargement {
+  min-height: 120px;
+  padding: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--bordure);
+  border-radius: 10px;
+  color: var(--texte-secondaire);
+  font-size: 13px;
+}
+
+.etat-vide-accueil {
+  min-height: 130px;
+  padding: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 13px;
+  border: 1px dashed #b9d5c0;
+  border-radius: 10px;
+  background: #f5fbf6;
+  color: #1b6e35;
+}
+
+.etat-vide-accueil > span {
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #e1f1e5;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.etat-vide-accueil p {
+  margin: 3px 0 0;
+  color: #5b7962;
+  font-size: 12px;
+}
+
+.tableau-dernieres-sessions-accueil {
+  min-width: 940px;
+}
+
+.ligne-cliquable-accueil {
+  cursor: pointer;
+}
+
+.ligne-cliquable-accueil:hover {
+  background: #f1f6fb !important;
+}
+
+.stagiaires-session-accueil {
+  min-width: 200px;
+  max-width: 360px;
+  color: var(--texte-secondaire);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.colonne-actions-accueil {
+  width: 125px;
+  text-align: right !important;
+}
+
+.grille-indemnisations-accueil {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.carte-indemnisation-accueil {
+  width: 100%;
+  min-width: 0;
+  padding: 14px 15px;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto 14px;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid #e5e9ed;
+  border-radius: 10px;
+  background: #fafbfc;
+  color: var(--texte);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.carte-indemnisation-accueil:hover {
+  border-color: #e7c98f;
+  background: #fffbf3;
+}
+
+.avatar-formateur-accueil {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 11px;
+  background: #fff3df;
+  color: #a05200;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.contenu-indemnisation-accueil > strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+.heures-indemnisation-accueil {
+  align-items: flex-end;
+}
+
+.heures-indemnisation-accueil strong {
+  color: #a05200;
+  font-size: 18px;
+}
+
+@media (max-width: 1100px) {
+
+  .grille-vigilance-accueil {
+    grid-template-columns: 1fr;
+  }
+
+}
+
+@media (max-width: 850px) {
+
+  .actualisation-accueil {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .grille-indemnisations-accueil {
+    grid-template-columns: 1fr;
+  }
+
+}
+
+@media (max-width: 620px) {
+
+  .actualisation-accueil {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .actualisation-accueil > span {
+    order: 2;
+  }
+
+  .carte-accueil-interactive {
+    min-height: 132px;
+  }
+
+  .entete-bloc-accueil {
+    flex-direction: column;
+  }
+
+  .ligne-echeance-accueil {
+    grid-template-columns: 62px minmax(0, 1fr) 14px;
+  }
+
+  .progression-echeance-accueil {
+    grid-column: 1 / -1;
+    padding-top: 8px;
+    border-top: 1px solid #e8ebee;
+  }
+
+  .ligne-echeance-accueil > .fleche-liste-accueil {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .carte-indemnisation-accueil {
+    grid-template-columns: 40px minmax(0, 1fr) 14px;
+  }
+
+  .heures-indemnisation-accueil {
+    grid-column: 2;
+    align-items: flex-start;
+  }
+
+  .carte-indemnisation-accueil > .fleche-liste-accueil {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+  }
+
+}
+
+/* =====================================================
    FICHE STAGIAIRE AVEC ONGLETS
 ===================================================== */
 
@@ -1052,6 +1703,473 @@ button:disabled {
   line-height: 1.55;
 }
 
+.bloc-progression-generale-stagiaire {
+  position: relative;
+  overflow: hidden;
+  padding: 24px;
+  background:
+    radial-gradient(
+      circle at 100% 0,
+      rgba(21, 101, 192, 0.11),
+      transparent 38%
+    ),
+    var(--blanc);
+}
+
+.entete-progression-generale-stagiaire {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.entete-progression-generale-stagiaire h2 {
+  margin: 0 0 5px;
+  font-size: 23px;
+}
+
+.entete-progression-generale-stagiaire > div > p:last-child {
+  margin: 0;
+  color: var(--texte-secondaire);
+  font-size: 14px;
+}
+
+.pourcentage-progression-generale {
+  min-width: 120px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  border-radius: 12px;
+  background: #eef5fc;
+  color: var(--bleu-fonce);
+}
+
+.pourcentage-progression-generale strong {
+  font-size: 31px;
+  line-height: 1;
+}
+
+.pourcentage-progression-generale span {
+  margin-top: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.barre-progression-generale-stagiaire {
+  height: 16px;
+  margin-top: 22px;
+  overflow: hidden;
+  border: 1px solid #d5dce3;
+  border-radius: 999px;
+  background: #e8ebee;
+}
+
+.barre-progression-generale-stagiaire > span {
+  width: 0;
+  height: 100%;
+  display: block;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2e7d32, #54a65b);
+  box-shadow: 0 0 12px rgba(46, 125, 50, 0.25);
+  transition: width 0.55s ease;
+}
+
+.grille-resume-pedagogique-stagiaire {
+  margin-top: 20px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.indicateur-pedagogique-stagiaire {
+  min-height: 88px;
+  padding: 15px 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border: 1px solid var(--bordure);
+  border-top: 4px solid var(--bleu);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.indicateur-pedagogique-stagiaire span {
+  color: var(--texte-secondaire);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.indicateur-pedagogique-stagiaire strong {
+  font-size: 27px;
+  line-height: 1;
+}
+
+.indicateur-pedagogique-orange {
+  border-top-color: #d97706;
+}
+
+.indicateur-pedagogique-orange strong {
+  color: #a05200;
+}
+
+.indicateur-pedagogique-vert {
+  border-top-color: #2e7d32;
+}
+
+.indicateur-pedagogique-vert strong {
+  color: #1b6e35;
+}
+
+.indicateur-pedagogique-gris {
+  border-top-color: #98a2ad;
+}
+
+.indicateur-pedagogique-gris strong {
+  color: #4f5b66;
+}
+
+.legende-statut-pedagogique {
+  margin-top: 17px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 22px;
+  color: var(--texte-secondaire);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.legende-statut-pedagogique span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.legende-statut-pedagogique i {
+  width: 10px;
+  height: 10px;
+  display: inline-block;
+  border-radius: 50%;
+}
+
+.pastille-statut-acquis {
+  background: #2e7d32;
+}
+
+.pastille-statut-travaille {
+  background: #d97706;
+}
+
+.pastille-statut-non-travaille {
+  background: #98a2ad;
+}
+
+.grille-pilotage-pedagogique-stagiaire {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  gap: 20px;
+}
+
+.grille-pilotage-pedagogique-stagiaire .fiche-bloc {
+  min-width: 0;
+}
+
+.progression-categorie-stagiaire {
+  padding: 15px 16px;
+  border: 1px solid #e3e7eb;
+  border-radius: 10px;
+  background: #fafbfc;
+}
+
+.progression-categorie-stagiaire +
+.progression-categorie-stagiaire {
+  margin-top: 10px;
+}
+
+.entete-progression-categorie-stagiaire {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.entete-progression-categorie-stagiaire h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+
+.entete-progression-categorie-stagiaire p {
+  margin: 0;
+  color: var(--texte-secondaire);
+  font-size: 12px;
+}
+
+.entete-progression-categorie-stagiaire > strong {
+  min-width: 54px;
+  color: var(--bleu-fonce);
+  font-size: 18px;
+  text-align: right;
+}
+
+.barre-progression-categorie-stagiaire {
+  height: 9px;
+  margin-top: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e3e7eb;
+}
+
+.barre-progression-categorie-stagiaire span {
+  height: 100%;
+  display: block;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--bleu), #4f91dc);
+}
+
+.liste-items-prioritaires-stagiaire {
+  max-height: 560px;
+  padding-right: 4px;
+  overflow-y: auto;
+}
+
+.item-prioritaire-stagiaire {
+  position: relative;
+  padding: 13px 12px 13px 34px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid #e3e7eb;
+  border-radius: 9px;
+  background: #fafbfc;
+}
+
+.item-prioritaire-stagiaire +
+.item-prioritaire-stagiaire {
+  margin-top: 9px;
+}
+
+.pastille-priorite-stagiaire {
+  position: absolute;
+  top: 17px;
+  left: 14px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #98a2ad;
+}
+
+.item-prioritaire-travaille
+.pastille-priorite-stagiaire {
+  background: #d97706;
+}
+
+.categorie-item-prioritaire-stagiaire {
+  display: block;
+  color: var(--texte-secondaire);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.item-prioritaire-stagiaire h3 {
+  margin: 3px 0 4px;
+  font-size: 14px;
+}
+
+.item-prioritaire-stagiaire p {
+  margin: 0;
+  color: var(--texte-secondaire);
+  font-size: 11px;
+}
+
+.etat-priorites-terminees-stagiaire {
+  min-height: 150px;
+  padding: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 15px;
+  border: 1px solid #b9dfc3;
+  border-radius: 10px;
+  background: #f1faf3;
+  color: #1b6e35;
+}
+
+.etat-priorites-terminees-stagiaire > span {
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #dcefe1;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.etat-priorites-terminees-stagiaire p {
+  margin: 4px 0 0;
+  color: #4c7758;
+  font-size: 12px;
+}
+
+.chronologie-pedagogique-stagiaire {
+  position: relative;
+}
+
+.chronologie-pedagogique-stagiaire::before {
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 15px;
+  width: 2px;
+  background: #d8dde3;
+  content: '';
+}
+
+.evenement-chronologie-stagiaire {
+  position: relative;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 14px;
+}
+
+.evenement-chronologie-stagiaire +
+.evenement-chronologie-stagiaire {
+  margin-top: 16px;
+}
+
+.repere-chronologie-stagiaire {
+  position: relative;
+  z-index: 1;
+  padding-top: 20px;
+  display: flex;
+  justify-content: center;
+}
+
+.repere-chronologie-stagiaire span {
+  width: 14px;
+  height: 14px;
+  border: 3px solid var(--blanc);
+  border-radius: 50%;
+  background: var(--bleu);
+  box-shadow: 0 0 0 2px #bfd3eb;
+}
+
+.carte-chronologie-stagiaire {
+  overflow: hidden;
+  border: 1px solid var(--bordure);
+  border-radius: 10px;
+  background: var(--blanc);
+}
+
+.carte-chronologie-stagiaire > header {
+  padding: 12px 15px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: #f8f9fa;
+  border-bottom: 1px solid var(--bordure);
+}
+
+.carte-chronologie-stagiaire > header > div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.carte-chronologie-stagiaire > header > div strong {
+  font-size: 15px;
+}
+
+.carte-chronologie-stagiaire > header > div span,
+.formateur-chronologie-stagiaire {
+  color: var(--texte-secondaire);
+  font-size: 12px;
+}
+
+.formateur-chronologie-stagiaire {
+  font-weight: 700;
+  text-align: right;
+}
+
+.grille-contenu-chronologie-stagiaire {
+  padding: 14px 15px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.grille-contenu-chronologie-stagiaire h4 {
+  margin: 0 0 8px;
+  color: var(--texte-secondaire);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.badges-chronologie-stagiaire {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.badge-element-chronologie {
+  padding: 5px 8px;
+  display: inline-block;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.badge-element-travaille {
+  background: #fff3df;
+  color: #a05200;
+}
+
+.badge-element-acquis {
+  background: #e5f5ea;
+  color: #1b6e35;
+}
+
+.zone-commentaires-chronologie-stagiaire {
+  grid-column: 1 / -1;
+  padding-top: 12px;
+  border-top: 1px solid #edf0f2;
+}
+
+.commentaire-chronologie-stagiaire {
+  padding: 8px 10px;
+  display: grid;
+  grid-template-columns: minmax(150px, 0.4fr) minmax(0, 1fr);
+  gap: 10px;
+  border-left: 3px solid var(--bleu);
+  background: #f5f8fc;
+  font-size: 12px;
+}
+
+.commentaire-chronologie-stagiaire +
+.commentaire-chronologie-stagiaire {
+  margin-top: 6px;
+}
+
+.commentaire-chronologie-stagiaire span {
+  color: var(--texte-secondaire);
+  overflow-wrap: anywhere;
+}
+
+.texte-vide-chronologie {
+  color: #8a949f;
+  font-size: 12px;
+  font-style: italic;
+}
+
 @media (max-width: 1050px) {
 
   .fiche-informations {
@@ -1060,6 +2178,14 @@ button:disabled {
 
   .grille-synthese-stagiaire {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .grille-resume-pedagogique-stagiaire {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .grille-pilotage-pedagogique-stagiaire {
+    grid-template-columns: 1fr;
   }
 
 }
@@ -1114,7 +2240,52 @@ button:disabled {
   }
 
   .fiche-informations,
-  .grille-synthese-stagiaire {
+  .grille-synthese-stagiaire,
+  .grille-resume-pedagogique-stagiaire {
+    grid-template-columns: 1fr;
+  }
+
+  .bloc-progression-generale-stagiaire {
+    padding: 18px;
+  }
+
+  .entete-progression-generale-stagiaire {
+    flex-direction: column;
+  }
+
+  .pourcentage-progression-generale {
+    width: 100%;
+    align-items: flex-start;
+  }
+
+  .legende-statut-pedagogique {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .item-prioritaire-stagiaire {
+    grid-template-columns: 1fr;
+  }
+
+  .item-prioritaire-stagiaire > .badge-statut {
+    width: max-content;
+  }
+
+  .carte-chronologie-stagiaire > header,
+  .grille-contenu-chronologie-stagiaire {
+    grid-template-columns: 1fr;
+  }
+
+  .carte-chronologie-stagiaire > header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .formateur-chronologie-stagiaire {
+    text-align: left;
+  }
+
+  .commentaire-chronologie-stagiaire {
     grid-template-columns: 1fr;
   }
 
@@ -2161,4 +3332,1587 @@ button:disabled {
   }
 
 }
+
+/* =====================================================
+   INDEMNISATIONS
+===================================================== */
+
+.page-indemnisations {
+  max-width: 1500px;
+}
+
+.bloc-filtres-indemnisations {
+  margin-top: 0;
+}
+
+.grille-filtres-indemnisations {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(160px, 1fr));
+  gap: 14px;
+  align-items: end;
+}
+
+.actions-filtres-indemnisations {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.filtre-case-indemnisation {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--texte);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.filtre-case-indemnisation input,
+.colonne-selection-indemnisation input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--bleu);
+  cursor: pointer;
+}
+
+.bouton-reinitialiser-filtres {
+  padding: 9px 13px;
+}
+
+.grille-synthese-indemnisations {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(180px, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.carte-indemnisation {
+  min-height: 126px;
+}
+
+.carte-detail-indemnisation {
+  margin-top: 5px;
+  color: var(--texte-secondaire);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.bloc-prestations-indemnisations {
+  padding: 0;
+  overflow: hidden;
+}
+
+.barre-actions-indemnisations {
+  padding: 18px 20px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  border-bottom: 1px solid var(--bordure);
+}
+
+.barre-actions-indemnisations > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.barre-actions-indemnisations
+  #compteurIndemnisations {
+  color: var(--texte-secondaire);
+  font-size: 13px;
+}
+
+.boutons-actions-indemnisations {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.boutons-actions-indemnisations button {
+  padding: 9px 12px;
+  font-size: 13px;
+}
+
+.boutons-actions-indemnisations button:disabled {
+  cursor: not-allowed;
+}
+
+.tableau-indemnisations {
+  min-width: 1500px;
+}
+
+.tableau-indemnisations th,
+.tableau-indemnisations td {
+  padding: 12px 10px;
+  font-size: 13px;
+}
+
+.tableau-indemnisations .colonne-selection-indemnisation {
+  width: 48px;
+  text-align: center;
+}
+
+.tableau-indemnisations
+  .cellule-reference-indemnisation {
+  max-width: 180px;
+  overflow-wrap: anywhere;
+}
+
+.cellule-remarque-indemnisation {
+  min-width: 230px;
+  max-width: 330px;
+  white-space: pre-line;
+}
+
+.ligne-selectionnee-indemnisation {
+  background: #eef5fc !important;
+}
+
+.alerte-doublon-indemnisation {
+  margin-left: 5px;
+  color: #a05200;
+  cursor: help;
+}
+
+.entete-recapitulatif-indemnisations h2 {
+  margin: 0 0 5px;
+}
+
+.entete-recapitulatif-indemnisations p {
+  margin: 0 0 18px;
+  color: var(--texte-secondaire);
+  font-size: 14px;
+}
+
+.recapitulatif-formateur-indemnisation {
+  margin-top: 14px;
+  border: 1px solid var(--bordure);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.recapitulatif-formateur-indemnisation:first-child {
+  margin-top: 0;
+}
+
+.entete-formateur-indemnisation {
+  padding: 15px 17px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  background: #f8f9fa;
+  border-bottom: 1px solid var(--bordure);
+}
+
+.entete-formateur-indemnisation h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.entete-formateur-indemnisation > div {
+  color: var(--texte-secondaire);
+  font-size: 14px;
+}
+
+.tableau-recapitulatif-indemnisation {
+  min-width: 720px;
+}
+
+.modal-action-indemnisation {
+  max-width: 620px;
+}
+
+.groupe-champ small {
+  color: var(--texte-secondaire);
+  font-size: 12px;
+}
+
+.confirmation-indemnisation {
+  margin-top: 20px;
+  padding: 14px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid #efb4b4;
+  border-radius: 9px;
+  background: #fff6f6;
+  color: #8e1d1d;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.confirmation-indemnisation input {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  margin: 0;
+  accent-color: var(--rouge);
+}
+
+.etat-impression-ouvert {
+  overflow: hidden;
+}
+
+.etat-impression-indemnisation {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  overflow-y: auto;
+  padding: 82px 24px 40px;
+  background: #e9edf1;
+}
+
+.barre-etat-impression {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  min-height: 64px;
+  padding: 10px 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: #27313b;
+  color: var(--blanc);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+}
+
+.barre-etat-impression > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.barre-etat-impression span {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.actions-etat-impression {
+  display: flex;
+  gap: 9px;
+}
+
+.document-etat-indemnisation {
+  width: min(1120px, 100%);
+  min-height: 297mm;
+  margin: 0 auto;
+  padding: 34px;
+  background: var(--blanc);
+  box-shadow: var(--ombre);
+}
+
+.entete-document-indemnisation {
+  padding-bottom: 22px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  border-bottom: 3px solid var(--rouge);
+}
+
+.marque-etat-indemnisation {
+  margin-bottom: 4px;
+  color: var(--rouge);
+  font-size: 14px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.entete-document-indemnisation h1 {
+  margin: 0 0 7px;
+  font-size: 27px;
+}
+
+.entete-document-indemnisation p {
+  margin: 0;
+  color: var(--texte-secondaire);
+}
+
+.date-generation-indemnisation {
+  color: var(--texte-secondaire);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.groupe-etat-indemnisation {
+  margin-top: 28px;
+  page-break-inside: avoid;
+}
+
+.entete-groupe-etat-indemnisation {
+  margin-bottom: 10px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.entete-groupe-etat-indemnisation h2 {
+  margin: 0;
+  font-size: 19px;
+}
+
+.entete-groupe-etat-indemnisation > div {
+  color: var(--texte-secondaire);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.groupe-etat-indemnisation table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.groupe-etat-indemnisation th,
+.groupe-etat-indemnisation td {
+  padding: 8px 7px;
+  border: 1px solid #cfd5da;
+  text-align: left;
+}
+
+.groupe-etat-indemnisation th {
+  background: #f1f3f5;
+}
+
+.document-etat-indemnisation > footer {
+  margin-top: 30px;
+  padding-top: 12px;
+  border-top: 1px solid var(--bordure);
+  color: var(--texte-secondaire);
+  font-size: 12px;
+  text-align: right;
+}
+
+@media (max-width: 1100px) {
+
+  .grille-filtres-indemnisations {
+    grid-template-columns: repeat(3, minmax(160px, 1fr));
+  }
+
+  .barre-actions-indemnisations {
+    flex-direction: column;
+  }
+
+  .boutons-actions-indemnisations {
+    justify-content: flex-start;
+  }
+
+}
+
+@media (max-width: 800px) {
+
+  .grille-synthese-indemnisations {
+    grid-template-columns: repeat(2, minmax(150px, 1fr));
+  }
+
+  .grille-filtres-indemnisations {
+    grid-template-columns: repeat(2, minmax(150px, 1fr));
+  }
+
+  .barre-etat-impression {
+    position: static;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .etat-impression-indemnisation {
+    padding: 0 0 25px;
+  }
+
+  .document-etat-indemnisation {
+    padding: 22px 16px;
+  }
+
+}
+
+@media (max-width: 600px) {
+
+  .grille-filtres-indemnisations,
+  .grille-synthese-indemnisations {
+    grid-template-columns: 1fr;
+  }
+
+  .actions-filtres-indemnisations,
+  .entete-formateur-indemnisation,
+  .entete-document-indemnisation,
+  .entete-groupe-etat-indemnisation {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .bouton-reinitialiser-filtres,
+  .boutons-actions-indemnisations,
+  .boutons-actions-indemnisations button,
+  .actions-etat-impression,
+  .actions-etat-impression button {
+    width: 100%;
+  }
+
+  .boutons-actions-indemnisations,
+  .actions-etat-impression {
+    flex-direction: column;
+  }
+
+  .date-generation-indemnisation {
+    white-space: normal;
+  }
+
+}
+
+@media print {
+
+  @page {
+    size: A4 landscape;
+    margin: 10mm;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .etat-impression-indemnisation,
+  .etat-impression-indemnisation * {
+    visibility: visible !important;
+  }
+
+  .etat-impression-indemnisation {
+    position: absolute;
+    inset: 0;
+    overflow: visible;
+    padding: 0;
+    background: var(--blanc);
+  }
+
+  .barre-etat-impression {
+    display: none !important;
+  }
+
+  .document-etat-indemnisation {
+    width: 100%;
+    min-height: auto;
+    padding: 0;
+    box-shadow: none;
+  }
+
+  .groupe-etat-indemnisation {
+    page-break-inside: auto;
+  }
+
+  .groupe-etat-indemnisation table {
+    page-break-inside: auto;
+  }
+
+  .groupe-etat-indemnisation tr {
+    page-break-inside: avoid;
+  }
+
+}
+.page-administration,
+.page-recapitulatif-formateur {
+  max-width: 1320px;
+}
+
+.bloc-parametre-administration {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(300px, 1.2fr);
+  gap: 22px;
+  align-items: end;
+}
+
+.bloc-parametre-administration h2,
+.entete-formations-administration h2 {
+  margin: 0 0 6px;
+}
+
+.bloc-parametre-administration p,
+.entete-formations-administration p {
+  margin: 0;
+  color: var(--texte-secondaire);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.diagnostic-identification-administration {
+  padding: 12px 14px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid #b8dfc4;
+  border-radius: 9px;
+  background: #edf9f0;
+  color: #176b32;
+}
+
+.diagnostic-identification-administration span {
+  color: inherit;
+  font-size: 13px;
+}
+
+.modal-formation-administration {
+  max-width: 620px;
+}
+
+.entete-diagnostic-administration {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.entete-diagnostic-administration h2,
+.grille-details-diagnostic-administration h3,
+.erreurs-diagnostic-administration h3 {
+  margin: 0 0 6px;
+}
+
+.actions-diagnostic-administration {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.grille-diagnostic-administration {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.carte-diagnostic-administration {
+  padding: 15px;
+  border: 1px solid var(--bordure);
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.carte-diagnostic-administration span {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--texte-secondaire);
+  font-size: 12px;
+}
+
+.carte-diagnostic-administration strong {
+  font-size: 22px;
+}
+
+.grille-details-diagnostic-administration {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.liste-diagnostic-administration {
+  overflow: auto;
+  max-height: 320px;
+  border: 1px solid var(--bordure);
+  border-radius: 9px;
+}
+
+.ligne-diagnostic-administration {
+  padding: 10px 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  border-bottom: 1px solid var(--bordure);
+}
+
+.ligne-diagnostic-administration:last-child {
+  border-bottom: 0;
+}
+
+.ligne-diagnostic-administration > span:first-child {
+  font-weight: 800;
+}
+
+.ligne-diagnostic-administration strong,
+.ligne-diagnostic-administration small {
+  display: block;
+}
+
+.ligne-diagnostic-administration small {
+  margin-top: 2px;
+  color: var(--texte-secondaire);
+}
+
+.diagnostic-ok > span:first-child {
+  color: #1f8f46;
+}
+
+.diagnostic-attente > span:first-child {
+  color: #9a6700;
+}
+
+.diagnostic-erreur > span:first-child {
+  color: var(--rouge);
+}
+
+.erreurs-diagnostic-administration {
+  margin-top: 18px;
+}
+
+.etat-integrite-valide-administration {
+  padding: 13px 14px;
+  border: 1px solid #b8dfc4;
+  border-radius: 9px;
+  background: #edf9f0;
+  color: #176b32;
+  font-weight: 700;
+}
+
+.liste-erreurs-integrite-administration {
+  overflow: auto;
+  max-height: 360px;
+  border: 1px solid #f0b8b8;
+  border-radius: 9px;
+  background: #fff7f7;
+}
+
+.liste-erreurs-integrite-administration > div {
+  padding: 10px 12px;
+  display: grid;
+  grid-template-columns: minmax(140px, 220px) 1fr;
+  gap: 10px;
+  border-bottom: 1px solid #f3d1d1;
+}
+
+.liste-erreurs-integrite-administration > div:last-child {
+  border-bottom: 0;
+}
+
+.avertissement-diagnostic-administration {
+  color: var(--rouge);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.entete-sauvegardes-administration {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.entete-sauvegardes-administration h2 {
+  margin: 0 0 6px;
+}
+
+.entete-sauvegardes-administration p {
+  margin: 0;
+  color: var(--texte-secondaire);
+  font-size: 13px;
+}
+
+.badge-phase-sauvegarde {
+  flex-shrink: 0;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #eef5fc;
+  color: var(--bleu-fonce);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.grille-creation-sauvegarde-administration {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 300px);
+  gap: 18px;
+  align-items: end;
+}
+
+.zone-commentaire-sauvegarde {
+  margin: 0;
+}
+
+.zone-commentaire-sauvegarde textarea {
+  min-height: 98px;
+  resize: vertical;
+}
+
+.entete-champ-sauvegarde {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.entete-champ-sauvegarde span {
+  color: var(--texte-secondaire);
+  font-size: 11px;
+}
+
+.actions-creation-sauvegarde {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.actions-creation-sauvegarde .bouton-principal {
+  width: 100%;
+}
+
+.actions-creation-sauvegarde p {
+  margin: 0;
+  color: var(--texte-secondaire);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.etat-progression-sauvegarde {
+  margin: 16px 0;
+  padding: 11px 13px;
+  border: 1px solid var(--bordure);
+  border-radius: 8px;
+  background: #f8fafc;
+  color: var(--texte-secondaire);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.etat-progression-sauvegarde[data-statut="en-cours"] {
+  border-color: #b9d4ee;
+  background: #f1f7fc;
+  color: var(--bleu-fonce);
+}
+
+.etat-progression-sauvegarde[data-statut="succes"] {
+  border-color: #b8dfc4;
+  background: #edf9f0;
+  color: #176b32;
+}
+
+.etat-progression-sauvegarde[data-statut="avertissement"] {
+  border-color: #efd39a;
+  background: #fff8e8;
+  color: #8a5700;
+}
+
+.etat-progression-sauvegarde[data-statut="erreur"] {
+  border-color: #efb6b6;
+  background: #fff3f3;
+  color: var(--rouge-fonce);
+}
+
+.resultat-sauvegarde-administration {
+  overflow: hidden;
+  border: 1px solid var(--bordure);
+  border-radius: 10px;
+  background: #fafbfc;
+}
+
+.etat-vide-sauvegarde {
+  padding: 28px 18px;
+}
+
+.entete-resultat-sauvegarde {
+  padding: 16px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  border-bottom: 1px solid var(--bordure);
+  background: var(--blanc);
+}
+
+.sur-titre-sauvegarde {
+  color: var(--bleu);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.entete-resultat-sauvegarde h3 {
+  margin: 4px 0;
+  overflow-wrap: anywhere;
+  font-size: 15px;
+}
+
+.entete-resultat-sauvegarde p {
+  margin: 0;
+  color: var(--texte-secondaire);
+  font-size: 11px;
+}
+
+.badges-resultat-sauvegarde {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.badge-sauvegarde {
+  padding: 5px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.badge-sauvegarde-manuelle {
+  background: #eef5fc;
+  color: var(--bleu-fonce);
+}
+
+.badge-sauvegarde-conforme {
+  background: #e7f6eb;
+  color: #176b32;
+}
+
+.badge-sauvegarde-anomalies {
+  background: #fff0d8;
+  color: #8a5700;
+}
+
+.grille-compteurs-sauvegarde {
+  padding: 14px 16px;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(75px, 1fr));
+  gap: 8px;
+}
+
+.grille-compteurs-sauvegarde > div {
+  padding: 10px 8px;
+  border: 1px solid #e4e8ec;
+  border-radius: 8px;
+  background: var(--blanc);
+  text-align: center;
+}
+
+.grille-compteurs-sauvegarde strong,
+.grille-compteurs-sauvegarde span {
+  display: block;
+}
+
+.grille-compteurs-sauvegarde strong {
+  margin-bottom: 3px;
+  font-size: 17px;
+}
+
+.grille-compteurs-sauvegarde span {
+  color: var(--texte-secondaire);
+  font-size: 10px;
+}
+
+.pied-resultat-sauvegarde {
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid var(--bordure);
+  background: var(--blanc);
+}
+
+.verification-resultat-sauvegarde {
+  min-width: 0;
+}
+
+.verification-resultat-sauvegarde strong,
+.verification-resultat-sauvegarde span {
+  display: block;
+}
+
+.verification-resultat-sauvegarde strong {
+  margin-bottom: 3px;
+  font-size: 12px;
+}
+
+.verification-resultat-sauvegarde span {
+  color: var(--texte-secondaire);
+  font-size: 11px;
+}
+
+.verification-sauvegarde-ok strong {
+  color: #176b32;
+}
+
+.verification-sauvegarde-erreur strong {
+  color: var(--rouge);
+}
+
+.avertissement-taille-sauvegarde,
+.avertissement-anomalies-sauvegarde,
+.erreur-sauvegarde-administration {
+  padding: 11px 14px;
+  border-top: 1px solid #efd39a;
+  background: #fff8e8;
+  color: #8a5700;
+  font-size: 12px;
+}
+
+.erreur-sauvegarde-administration {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-top: 0;
+  background: #fff3f3;
+  color: var(--rouge-fonce);
+}
+
+.separateur-inventaire-sauvegardes {
+  height: 1px;
+  margin: 24px 0;
+  background: var(--bordure);
+}
+
+.entete-inventaire-sauvegardes {
+  margin-bottom: 14px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.entete-inventaire-sauvegardes h3,
+.entete-inventaire-sauvegardes p {
+  margin: 0;
+}
+
+.entete-inventaire-sauvegardes p {
+  margin-top: 5px;
+  color: var(--texte-secondaire);
+  font-size: 12px;
+}
+
+.liste-sauvegardes-restaurabilite {
+  display: grid;
+  gap: 12px;
+}
+
+.avertissement-inventaire-sauvegardes {
+  padding: 10px 12px;
+  border: 1px solid #efd39a;
+  border-radius: 8px;
+  background: #fff8e8;
+  color: #8a5700;
+  font-size: 12px;
+}
+
+.carte-inventaire-sauvegarde {
+  overflow: hidden;
+  border: 1px solid var(--bordure);
+  border-radius: 10px;
+  background: var(--blanc);
+}
+
+.entete-carte-inventaire-sauvegarde {
+  padding: 14px 16px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.entete-carte-inventaire-sauvegarde h4 {
+  margin: 3px 0;
+  font-size: 15px;
+}
+
+.entete-carte-inventaire-sauvegarde p {
+  margin: 0;
+  color: var(--texte-secondaire);
+  font-size: 12px;
+}
+
+.metadonnees-inventaire-sauvegarde {
+  padding: 10px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  border-top: 1px solid var(--bordure);
+  border-bottom: 1px solid var(--bordure);
+  background: #f8fafc;
+}
+
+.metadonnees-inventaire-sauvegarde span {
+  padding: 4px 7px;
+  border-radius: 6px;
+  background: var(--blanc);
+  color: var(--texte-secondaire);
+  font-size: 10px;
+}
+
+.compteurs-inventaire-sauvegarde {
+  padding: 12px 16px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.compteurs-inventaire-sauvegarde > div {
+  padding: 8px;
+  border: 1px solid #e4e8ec;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.compteurs-inventaire-sauvegarde strong,
+.compteurs-inventaire-sauvegarde span {
+  display: block;
+}
+
+.compteurs-inventaire-sauvegarde strong {
+  font-size: 16px;
+}
+
+.compteurs-inventaire-sauvegarde span {
+  margin-top: 2px;
+  color: var(--texte-secondaire);
+  font-size: 10px;
+}
+
+.pied-carte-inventaire-sauvegarde {
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--bordure);
+}
+
+.pied-carte-inventaire-sauvegarde > span {
+  color: var(--texte-secondaire);
+  font-size: 10px;
+}
+
+.actions-carte-inventaire-sauvegarde {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.actions-carte-inventaire-sauvegarde button {
+  padding: 7px 9px;
+  font-size: 10px;
+}
+
+.badge-restaurabilite {
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: #eef1f4;
+  color: #59636e;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.badge-restaurabilite-restaurable {
+  background: #e7f6eb;
+  color: #176b32;
+}
+
+.badge-restaurabilite-restaurable-avec-migrations {
+  background: #e7f1fb;
+  color: var(--bleu-fonce);
+}
+
+.badge-restaurabilite-non-restaurable {
+  background: #ffe7e7;
+  color: var(--rouge-fonce);
+}
+
+.badge-restaurabilite-avec-avertissements,
+.badge-restaurabilite-obsolete {
+  background: #fff0d8;
+  color: #8a5700;
+}
+
+.modal-restaurabilite-sauvegarde {
+  width: min(1180px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+}
+
+.contenu-modal-restaurabilite {
+  overflow-y: auto;
+  display: grid;
+  gap: 14px;
+  background: #f6f8fa;
+}
+
+.section-rapport-restaurabilite {
+  padding: 15px;
+  border: 1px solid var(--bordure);
+  border-radius: 9px;
+  background: var(--blanc);
+}
+
+.section-rapport-restaurabilite > h3 {
+  margin: 0 0 12px;
+  font-size: 14px;
+}
+
+.entete-rapport-restaurabilite {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.entete-rapport-restaurabilite h3 {
+  margin: 3px 0;
+}
+
+.entete-rapport-restaurabilite p {
+  margin: 0;
+  color: var(--texte-secondaire);
+  font-size: 11px;
+}
+
+.grille-metadonnees-restaurabilite,
+.grille-validations-restaurabilite {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.grille-metadonnees-restaurabilite > div,
+.grille-validations-restaurabilite > div {
+  padding: 9px;
+  border: 1px solid #e4e8ec;
+  border-radius: 7px;
+}
+
+.grille-metadonnees-restaurabilite span,
+.grille-metadonnees-restaurabilite strong {
+  display: block;
+}
+
+.grille-metadonnees-restaurabilite span {
+  margin-bottom: 3px;
+  color: var(--texte-secondaire);
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.grille-metadonnees-restaurabilite strong {
+  font-size: 12px;
+}
+
+.grille-validations-restaurabilite > div {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10px;
+}
+
+.validation-ok {
+  color: #176b32;
+}
+
+.validation-erreur {
+  color: var(--rouge-fonce);
+}
+
+.liste-validations-restaurabilite {
+  display: grid;
+  gap: 8px;
+}
+
+.liste-validations-restaurabilite > div {
+  min-width: 0;
+  font-size: 11px;
+}
+
+.liste-validations-restaurabilite strong,
+.liste-validations-restaurabilite code {
+  display: block;
+}
+
+.liste-validations-restaurabilite code,
+.tableau-manifeste-restaurabilite code {
+  overflow-wrap: anywhere;
+  color: #4c5661;
+  font-size: 9px;
+}
+
+.tableau-manifeste-restaurabilite td:first-child strong,
+.tableau-manifeste-restaurabilite td:first-child small {
+  display: block;
+}
+
+.tableau-manifeste-restaurabilite td:first-child small {
+  margin-top: 2px;
+  color: var(--texte-secondaire);
+  font-size: 9px;
+}
+
+.grille-alertes-rapport-restaurabilite {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.grille-alertes-rapport-restaurabilite > div > h3 {
+  margin: 0 0 9px;
+  font-size: 12px;
+}
+
+.liste-alertes-restaurabilite,
+.liste-migrations-restaurabilite {
+  display: grid;
+  gap: 6px;
+}
+
+.liste-alertes-restaurabilite > div,
+.liste-migrations-restaurabilite > div {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid #efd39a;
+  border-radius: 7px;
+  background: #fff8e8;
+  color: #8a5700;
+  font-size: 10px;
+}
+
+.liste-alertes-restaurabilite-erreurs > div {
+  border-color: #efb6b6;
+  background: #fff3f3;
+  color: var(--rouge-fonce);
+}
+
+.liste-migrations-restaurabilite > div {
+  border-color: #b9d4ee;
+  background: #f1f7fc;
+  color: var(--bleu-fonce);
+}
+
+.tableau-differences-restaurabilite details small {
+  display: block;
+  max-width: 260px;
+  margin-top: 5px;
+  overflow-wrap: anywhere;
+}
+
+.confirmation-lecture-seule-restaurabilite {
+  padding: 11px 13px;
+  border: 1px solid #b8dfc4;
+  border-radius: 8px;
+  background: #edf9f0;
+  color: #176b32;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.etat-restauration-administration:empty {
+  display: none;
+}
+
+.carte-etat-restauration,
+.derniere-restauration-administration {
+  margin: 22px 0;
+  padding: 18px;
+  border: 1px solid #bfdbfe;
+  border-radius: 16px;
+  background: #eff6ff;
+  display: grid;
+  gap: 12px;
+}
+
+.carte-etat-restauration.restauration-interrompue {
+  border-color: #fca5a5;
+  background: #fef2f2;
+}
+
+.carte-etat-restauration > div:first-child,
+.derniere-restauration-administration {
+  display: grid;
+  gap: 4px;
+}
+
+.carte-etat-restauration strong,
+.derniere-restauration-administration strong {
+  color: #172554;
+}
+
+.carte-etat-restauration small,
+.derniere-restauration-administration span {
+  color: #64748b;
+}
+
+.barre-progression-restauration {
+  width: 100%;
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #dbeafe;
+}
+
+.barre-progression-restauration span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2563eb, #0ea5e9);
+  transition: width 220ms ease;
+}
+
+.modal-preparation-restauration {
+  width: min(1120px, calc(100vw - 36px));
+  max-height: calc(100vh - 36px);
+}
+
+.contenu-preparation-restauration {
+  display: grid;
+  gap: 20px;
+}
+
+.avertissement-remplacement-restauration {
+  padding: 16px;
+  border: 1px solid #f59e0b;
+  border-radius: 14px;
+  background: #fffbeb;
+  color: #92400e;
+  display: grid;
+  gap: 5px;
+}
+
+.section-previsualisation-restauration {
+  display: grid;
+  gap: 12px;
+}
+
+.section-previsualisation-restauration h3 {
+  margin: 0;
+  color: #172554;
+}
+
+.liste-feuilles-remplacees-restauration {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.liste-feuilles-remplacees-restauration span {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #334155;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.confirmation-restauration-administration {
+  padding: 18px 24px;
+  border-top: 1px solid #e2e8f0;
+  background: #fff7ed;
+  display: grid;
+  gap: 16px;
+}
+
+.case-confirmation-restauration {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: #7c2d12;
+  font-weight: 650;
+}
+
+.case-confirmation-restauration input {
+  margin-top: 3px;
+}
+
+.grille-confirmation-restauration {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.progression-detaillee-restauration,
+.resultat-restauration-reussie {
+  display: grid;
+  gap: 18px;
+  padding: 20px;
+  border-radius: 16px;
+  background: #f8fafc;
+}
+
+.progression-detaillee-restauration h3 {
+  margin: 0;
+  color: #172554;
+}
+
+.liste-etapes-restauration {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.liste-etapes-restauration > div {
+  min-height: 66px;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #64748b;
+}
+
+.liste-etapes-restauration .etape-active {
+  border-color: #60a5fa;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.liste-etapes-restauration .etape-terminee {
+  border-color: #86efac;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.resultat-restauration-reussie {
+  border: 1px solid #86efac;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.resultat-restauration-reussie strong {
+  font-size: 1.05rem;
+}
+
+.bouton-suppression-formation {
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.bloc-recapitulatif-formateur {
+  margin-top: 0;
+}
+
+.etat-acces-limite {
+  border: 1px solid #f2c879;
+  border-radius: 9px;
+  background: #fff7e6;
+  color: #8a5700;
+}
+
+@media (max-width: 800px) {
+  .topbar {
+    flex-wrap: wrap;
+  }
+
+  .actions-acces-administration {
+    order: 3;
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .actions-acces-administration button {
+    flex: 1;
+  }
+
+  .identite-utilisateur-application {
+    margin-left: auto;
+    max-width: 220px;
+    font-size: 10px;
+  }
+
+  .bloc-parametre-administration {
+    grid-template-columns: 1fr;
+  }
+
+  .entete-diagnostic-administration {
+    flex-direction: column;
+  }
+
+  .entete-sauvegardes-administration,
+  .entete-resultat-sauvegarde,
+  .pied-resultat-sauvegarde,
+  .entete-inventaire-sauvegardes,
+  .entete-carte-inventaire-sauvegarde,
+  .pied-carte-inventaire-sauvegarde,
+  .entete-rapport-restaurabilite {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .badges-resultat-sauvegarde {
+    justify-content: flex-start;
+  }
+
+  .grille-creation-sauvegarde-administration {
+    grid-template-columns: 1fr;
+  }
+
+  .grille-compteurs-sauvegarde {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .compteurs-inventaire-sauvegarde,
+  .grille-metadonnees-restaurabilite,
+  .grille-validations-restaurabilite,
+  .grille-alertes-rapport-restaurabilite {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .actions-carte-inventaire-sauvegarde {
+    justify-content: flex-start;
+  }
+
+  .actions-carte-inventaire-sauvegarde button,
+  .entete-inventaire-sauvegardes button {
+    flex: 1;
+  }
+
+  .pied-resultat-sauvegarde .bouton-secondaire {
+    width: 100%;
+  }
+
+  .actions-diagnostic-administration,
+  .actions-diagnostic-administration button {
+    width: 100%;
+  }
+
+  .grille-diagnostic-administration,
+  .grille-details-diagnostic-administration {
+    grid-template-columns: 1fr;
+  }
+
+  .liste-erreurs-integrite-administration > div {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  .compteurs-inventaire-sauvegarde,
+  .grille-metadonnees-restaurabilite,
+  .grille-validations-restaurabilite,
+  .grille-alertes-rapport-restaurabilite {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .grille-confirmation-restauration,
+  .liste-etapes-restauration {
+    grid-template-columns: 1fr;
+  }
+
+  .confirmation-restauration-administration {
+    padding: 16px;
+  }
+
+  .modal-preparation-restauration {
+    width: calc(100vw - 20px);
+    max-height: calc(100vh - 20px);
+  }
+}
+
 </style>

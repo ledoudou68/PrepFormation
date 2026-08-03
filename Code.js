@@ -1,4 +1,15 @@
-function initialiserApplication() {
+function initialiserApplication(jetonAdministrateur) {
+  const sessionUtilisateur = exigerAdministrateur_(
+    jetonAdministrateur
+  );
+
+  return executerMutationMetier_(function () {
+    return initialiserApplicationInterne_(sessionUtilisateur);
+  });
+}
+
+
+function initialiserApplicationInterne_(sessionUtilisateur) {
   const classeur = SpreadsheetApp.getActiveSpreadsheet();
 
   const feuilles = {
@@ -17,7 +28,7 @@ function initialiserApplication() {
     ],
 
     STAGIAIRES: [
-      'ID_STAGIAIRE',
+      'UUID',
       'NOM',
       'PRENOM',
       'FORMATION',
@@ -26,7 +37,13 @@ function initialiserApplication() {
       'STATUT',
       'DATE_CLOTURE',
       'MOTIF_CLOTURE',
-      'REMARQUES_ADMINISTRATIVES',
+      'NOTES_ADMINISTRATIVES',
+      'GRADE',
+      'TELEPHONE',
+      'EMAIL',
+      'PHOTO_URL',
+      'FORMATEUR_REFERENT',
+      'DATE_CHANGEMENT_STATUT_AUTO',
       'DATE_CREATION',
       'DATE_MODIFICATION'
     ],
@@ -36,6 +53,7 @@ function initialiserApplication() {
       'NOM',
       'PRENOM',
       'ACTIF',
+      'EMAIL',
       'DATE_CREATION',
       'DATE_MODIFICATION'
     ],
@@ -101,6 +119,16 @@ function initialiserApplication() {
       'REMARQUE',
       'DATE_CREATION',
       'DATE_MODIFICATION'
+    ],
+
+    HISTORIQUE: [
+      'ID_HISTORIQUE',
+      'DATE_ACTION',
+      'UTILISATEUR',
+      'ACTION',
+      'OBJET',
+      'IDENTIFIANT',
+      'DETAILS'
     ]
   };
 
@@ -130,11 +158,19 @@ function initialiserApplication() {
       .createFilter();
   });
 
-  remplirFormations(classeur);
-  remplirParametres(classeur);
-  appliquerFormats(classeur);
+  remplirFormations_(classeur);
+  remplirParametres_(classeur);
+  appliquerFormats_(classeur);
 
   SpreadsheetApp.flush();
+
+  journaliserActionSensible_(
+    'APPLICATION_INITIALISATION',
+    'APPLICATION',
+    'PrepFormation',
+    { feuilles: Object.keys(feuilles) },
+    sessionUtilisateur.identifiantHistorique
+  );
 
   SpreadsheetApp.getUi().alert(
     'Initialisation terminée',
@@ -143,14 +179,16 @@ function initialiserApplication() {
   );
 }
 
-function remplirParametres(classeur) {
+function remplirParametres_(classeur) {
   const feuille = classeur.getSheetByName('PARAMETRES');
 
   const donnees = [
-    ['STATUT_STAGIAIRE', 'À préparer', 1, 'Oui'],
-    ['STATUT_STAGIAIRE', 'Échéance atteinte', 2, 'Oui'],
-    ['STATUT_STAGIAIRE', 'Préparation terminée', 3, 'Oui'],
-    ['STATUT_STAGIAIRE', 'Préparation abandonnée', 4, 'Oui'],
+    ['STATUT_STAGIAIRE', 'À préparer', 10, 'Oui'],
+    ['STATUT_STAGIAIRE', 'En préparation', 11, 'Oui'],
+    ['STATUT_STAGIAIRE', 'Stage aujourd\'hui', 12, 'Oui'],
+    ['STATUT_STAGIAIRE', 'Stage passé', 13, 'Oui'],
+    ['STATUT_STAGIAIRE', 'Clôturé', 14, 'Oui'],
+    ['STATUT_STAGIAIRE', 'Abandon', 15, 'Oui'],
 
     ['NIVEAU_EVALUATION', 'Non acquis', 1, 'Oui'],
     ['NIVEAU_EVALUATION', 'En cours d’acquisition', 2, 'Oui'],
@@ -167,7 +205,7 @@ function remplirParametres(classeur) {
     .setValues(donnees);
 }
 
-function remplirFormations(classeur) {
+function remplirFormations_(classeur) {
   const feuille = classeur.getSheetByName('FORMATIONS');
 
   const donnees = [
@@ -181,7 +219,7 @@ function remplirFormations(classeur) {
     .setValues(donnees);
 }
 
-function appliquerFormats(classeur) {
+function appliquerFormats_(classeur) {
   const formatsDates = {
     STAGIAIRES: [5, 6, 8, 11, 12],
     FORMATEURS: [5, 6],

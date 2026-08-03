@@ -12,6 +12,7 @@
     <button
       type="button"
       class="bouton-principal"
+      data-admin-only="true"
       onclick="nouveauStagiaire()"
     >
       + Nouveau stagiaire
@@ -315,15 +316,21 @@
             <div class="groupe-champ">
 
               <label for="stagiaireStatut">
-                Statut *
+                Statut calculé
               </label>
 
-              <select
+              <input
+                type="text"
                 id="stagiaireStatut"
-                class="champ"
-                required
-                onchange="mettreAJourChampsCloture()"
-              ></select>
+                class="champ champ-lecture-seule"
+                value="À préparer"
+                readonly
+                aria-readonly="true"
+              >
+
+              <small class="aide-champ-cycle-vie">
+                Mis à jour automatiquement selon les séances et la date du stage.
+              </small>
 
             </div>
 
@@ -376,43 +383,35 @@
 
           <div
             id="zoneClotureStagiaire"
-            class="zone-cloture masque"
+            class="zone-cloture"
           >
 
-            <h3>Clôture de la préparation</h3>
-
-            <div class="grille-formulaire">
-
-              <div class="groupe-champ">
-
-                <label for="stagiaireDateCloture">
-                  Date de clôture
-                </label>
-
-                <input
-                  type="date"
-                  id="stagiaireDateCloture"
-                  class="champ"
-                >
-
-              </div>
-
-              <div class="groupe-champ">
-
-                <label for="stagiaireMotifCloture">
-                  Motif ou précision
-                </label>
-
-                <input
-                  type="text"
-                  id="stagiaireMotifCloture"
-                  class="champ"
-                  placeholder="Exemple : stage réalisé"
-                >
-
-              </div>
-
+            <div>
+              <h3>Cycle de vie de la préparation</h3>
+              <p id="resumeCycleVieStagiaire">
+                Enregistre d'abord le stagiaire pour pouvoir clôturer sa préparation.
+              </p>
             </div>
+
+            <button
+              type="button"
+              id="boutonCloturerStagiaire"
+              class="bouton-danger masque"
+              data-admin-only="true"
+              onclick="ouvrirModalClotureStagiaire()"
+            >
+              Clôturer la préparation
+            </button>
+
+            <button
+              type="button"
+              id="boutonReactiverStagiaire"
+              class="bouton-principal masque"
+              data-admin-only="true"
+              onclick="reactiverPreparationStagiaire()"
+            >
+              Réactiver la préparation
+            </button>
 
           </div>
 
@@ -462,6 +461,89 @@
 
       </div>
 
+    </form>
+
+  </div>
+
+</div>
+
+<div
+  id="modalClotureStagiaire"
+  class="modal-overlay masque"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="titreModalClotureStagiaire"
+>
+
+  <div class="modal-contenu modal-cloture-stagiaire">
+
+    <div class="modal-entete">
+      <div>
+        <h2 id="titreModalClotureStagiaire">
+          Clôturer la préparation
+        </h2>
+        <p>Cette décision remplace le statut calculé.</p>
+      </div>
+
+      <button
+        type="button"
+        class="bouton-fermer-modal"
+        onclick="fermerModalClotureStagiaire()"
+        aria-label="Fermer"
+      >×</button>
+    </div>
+
+    <form onsubmit="soumettreClotureStagiaire(event)">
+      <div class="modal-corps">
+
+        <div class="groupe-champ">
+          <label for="resultatClotureStagiaire">Résultat *</label>
+          <select
+            id="resultatClotureStagiaire"
+            class="champ"
+            required
+          >
+            <option value="Clôturé">Clôturé</option>
+            <option value="Abandon">Abandon</option>
+          </select>
+        </div>
+
+        <div class="groupe-champ groupe-champ-large">
+          <label for="dateClotureDedieeStagiaire">Date *</label>
+          <input
+            type="date"
+            id="dateClotureDedieeStagiaire"
+            class="champ"
+            required
+          >
+        </div>
+
+        <div class="groupe-champ groupe-champ-large">
+          <label for="commentaireClotureStagiaire">Commentaire *</label>
+          <textarea
+            id="commentaireClotureStagiaire"
+            class="champ"
+            rows="4"
+            required
+            placeholder="Préciser le résultat ou le motif de l'abandon…"
+          ></textarea>
+        </div>
+
+      </div>
+
+      <div class="modal-pied">
+        <button
+          type="button"
+          class="bouton-secondaire"
+          onclick="fermerModalClotureStagiaire()"
+        >Annuler</button>
+
+        <button
+          type="submit"
+          id="boutonConfirmerClotureStagiaire"
+          class="bouton-danger"
+        >Confirmer la clôture</button>
+      </div>
     </form>
 
   </div>

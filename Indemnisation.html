@@ -1,10 +1,347 @@
-<div class="page">
-  <div class="entete-page">
-    <h1>Indemnisations</h1>
-    <p>Suivi des heures réalisées par les formateurs.</p>
+<div class="page page-indemnisations">
+
+  <div class="entete-page entete-page-actions">
+
+    <div>
+      <h1>Indemnisations</h1>
+      <p>
+        Suivi des prestations réalisées par les formateurs.
+      </p>
+    </div>
+
+    <button
+      type="button"
+      class="bouton-principal"
+      onclick="ouvrirEtatImprimableIndemnisations()"
+    >
+      🖨 État imprimable / PDF
+    </button>
+
   </div>
 
-  <div class="bloc">
-    Module à venir.
+  <div class="bloc bloc-filtres-indemnisations">
+
+    <div class="grille-filtres-indemnisations">
+
+      <div class="groupe-champ">
+        <label for="filtreDateDebutIndemnisation">
+          Période du
+        </label>
+        <input
+          type="date"
+          id="filtreDateDebutIndemnisation"
+          class="champ"
+          onchange="filtrerIndemnisations()"
+        >
+      </div>
+
+      <div class="groupe-champ">
+        <label for="filtreDateFinIndemnisation">
+          Au
+        </label>
+        <input
+          type="date"
+          id="filtreDateFinIndemnisation"
+          class="champ"
+          onchange="filtrerIndemnisations()"
+        >
+      </div>
+
+      <div class="groupe-champ">
+        <label for="filtreFormateurIndemnisation">
+          Formateur
+        </label>
+        <select
+          id="filtreFormateurIndemnisation"
+          class="champ"
+          onchange="filtrerIndemnisations()"
+        >
+          <option value="">Tous les formateurs</option>
+        </select>
+      </div>
+
+      <div class="groupe-champ">
+        <label for="filtreFormationIndemnisation">
+          Formation
+        </label>
+        <select
+          id="filtreFormationIndemnisation"
+          class="champ"
+          onchange="filtrerIndemnisations()"
+        >
+          <option value="">Toutes les formations</option>
+        </select>
+      </div>
+
+      <div class="groupe-champ">
+        <label for="filtreStatutIndemnisation">
+          Statut d’indemnisation
+        </label>
+        <select
+          id="filtreStatutIndemnisation"
+          class="champ"
+          onchange="filtrerIndemnisations()"
+        >
+          <option value="">Tous les statuts</option>
+        </select>
+      </div>
+
+      <div class="actions-filtres-indemnisations">
+        <label class="filtre-case-indemnisation">
+          <input
+            type="checkbox"
+            id="filtreNonDemandeesIndemnisation"
+            onchange="filtrerIndemnisations()"
+          >
+          <span>Uniquement les prestations non demandées</span>
+        </label>
+
+        <button
+          type="button"
+          class="bouton-secondaire bouton-reinitialiser-filtres"
+          onclick="reinitialiserFiltresIndemnisations()"
+        >
+          Réinitialiser
+        </button>
+      </div>
+
+    </div>
+
+  </div>
+
+  <div class="grille-synthese-indemnisations">
+
+    <div class="carte carte-indemnisation">
+      <div class="carte-titre">Prestations affichées</div>
+      <div
+        id="nombrePrestationsIndemnisation"
+        class="carte-valeur"
+      >0</div>
+    </div>
+
+    <div class="carte carte-indemnisation">
+      <div class="carte-titre">Heures affichées</div>
+      <div
+        id="heuresPrestationsIndemnisation"
+        class="carte-valeur"
+      >0 h</div>
+    </div>
+
+    <div class="carte carte-indemnisation">
+      <div class="carte-titre">À demander</div>
+      <div
+        id="prestationsADemanderIndemnisation"
+        class="carte-valeur"
+      >0</div>
+      <div
+        id="heuresADemanderIndemnisation"
+        class="carte-detail-indemnisation"
+      >0 h</div>
+    </div>
+
+    <div class="carte carte-indemnisation">
+      <div class="carte-titre">Sélection</div>
+      <div
+        id="nombreSelectionIndemnisation"
+        class="carte-valeur"
+      >0</div>
+      <div
+        id="heuresSelectionIndemnisation"
+        class="carte-detail-indemnisation"
+      >0 h</div>
+    </div>
+
+  </div>
+
+  <div class="bloc bloc-prestations-indemnisations">
+
+    <div class="barre-actions-indemnisations">
+
+      <div>
+        <strong>Prestations formateurs</strong>
+        <span id="compteurIndemnisations">
+          Chargement…
+        </span>
+      </div>
+
+      <div class="boutons-actions-indemnisations">
+        <button
+          type="button"
+          class="bouton-principal action-selection-indemnisation"
+          disabled
+          onclick="ouvrirActionIndemnisation('Demande envoyée')"
+        >
+          Marquer comme demande envoyée
+        </button>
+        <button
+          type="button"
+          class="bouton-principal action-selection-indemnisation"
+          disabled
+          onclick="ouvrirActionIndemnisation('Indemnisée')"
+        >
+          Marquer comme indemnisée
+        </button>
+        <button
+          type="button"
+          class="bouton-danger action-selection-indemnisation"
+          disabled
+          onclick="ouvrirActionIndemnisation('À corriger')"
+        >
+          Marquer comme à corriger
+        </button>
+        <button
+          type="button"
+          class="bouton-secondaire action-selection-indemnisation"
+          disabled
+          onclick="ouvrirActionIndemnisation('À demander')"
+        >
+          Revenir à « À demander »
+        </button>
+      </div>
+
+    </div>
+
+    <div class="tableau-responsive">
+
+      <table class="tableau tableau-indemnisations">
+        <thead>
+          <tr>
+            <th class="colonne-selection-indemnisation">
+              <input
+                type="checkbox"
+                id="selectionToutesIndemnisations"
+                onchange="selectionnerToutesIndemnisations(this)"
+                aria-label="Sélectionner toutes les prestations affichées"
+              >
+            </th>
+            <th>Date de séance</th>
+            <th>Formation</th>
+            <th>Formateur</th>
+            <th>Début</th>
+            <th>Fin</th>
+            <th>Durée</th>
+            <th>Statut</th>
+            <th>Date de demande</th>
+            <th>Référence</th>
+            <th>Remarque administrative</th>
+          </tr>
+        </thead>
+        <tbody id="corpsTableauIndemnisations">
+          <tr>
+            <td colspan="11" class="etat-vide">
+              Chargement des prestations…
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+    </div>
+
+  </div>
+
+  <div class="bloc bloc-recapitulatif-indemnisations">
+    <div class="entete-recapitulatif-indemnisations">
+      <div>
+        <h2>Récapitulatif par formateur</h2>
+        <p>
+          Nombre de séances, total d’heures et détail de la sélection.
+        </p>
+      </div>
+    </div>
+    <div id="recapitulatifFormateursIndemnisation">
+      <div class="etat-vide">
+        Sélectionne une ou plusieurs prestations pour afficher le récapitulatif.
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div
+  id="modalActionIndemnisation"
+  class="modal-overlay masque"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="titreActionIndemnisation"
+>
+  <div class="modal-contenu modal-action-indemnisation">
+    <div class="modal-entete">
+      <div>
+        <h2 id="titreActionIndemnisation">
+          Mettre à jour les prestations
+        </h2>
+        <p id="sousTitreActionIndemnisation"></p>
+      </div>
+      <button
+        type="button"
+        class="bouton-fermer-modal"
+        onclick="fermerActionIndemnisation()"
+        aria-label="Fermer"
+      >×</button>
+    </div>
+
+    <form onsubmit="soumettreActionIndemnisation(event)">
+      <div class="modal-corps">
+        <input type="hidden" id="statutCibleIndemnisation">
+
+        <div
+          id="groupeReferenceIndemnisation"
+          class="groupe-champ masque"
+        >
+          <label for="referenceActionIndemnisation">
+            Référence commune de la demande
+          </label>
+          <input
+            type="text"
+            id="referenceActionIndemnisation"
+            class="champ"
+            maxlength="250"
+            placeholder="Ex. DEM-2026-042"
+          >
+          <small>
+            La date de demande sera automatiquement celle du jour.
+          </small>
+        </div>
+
+        <div class="groupe-champ groupe-champ-large">
+          <label for="remarqueActionIndemnisation">
+            Remarque administrative commune (facultatif)
+          </label>
+          <textarea
+            id="remarqueActionIndemnisation"
+            class="champ"
+            rows="4"
+            maxlength="2000"
+            placeholder="Précision ajoutée à l’historique des prestations sélectionnées…"
+          ></textarea>
+        </div>
+
+        <label
+          id="groupeConfirmationIndemnisee"
+          class="confirmation-indemnisation masque"
+        >
+          <input
+            type="checkbox"
+            id="confirmationIndemnisee"
+          >
+          <span>
+            Je confirme vouloir modifier une prestation déjà indemnisée.
+          </span>
+        </label>
+      </div>
+
+      <div class="modal-pied">
+        <button
+          type="button"
+          class="bouton-secondaire"
+          onclick="fermerActionIndemnisation()"
+        >Annuler</button>
+        <button
+          type="submit"
+          id="boutonConfirmerActionIndemnisation"
+          class="bouton-principal"
+        >Confirmer</button>
+      </div>
+    </form>
   </div>
 </div>

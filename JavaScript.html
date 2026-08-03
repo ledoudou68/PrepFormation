@@ -2,8 +2,14 @@
 
 'use strict';
 
+const CLE_JETON_ADMINISTRATION =
+  'prepformation.jetonAdministration';
+const DUREE_INACTIVITE_ADMINISTRATION_MS = 30 * 60 * 1000;
+const INTERVALLE_RENOUVELLEMENT_ADMINISTRATION_MS = 60 * 1000;
+
 const etatApplication = {
   pageActive: 'Accueil',
+  sessionUtilisateur: null,
   stagiaires: [],
   formateurs: [],
   formations: [],
@@ -21,11 +27,32 @@ const etatApplication = {
   idSessionSourceFormulaire: '',
   idsFormateursHistoriquesSession: {},
   idsStagiairesHistoriquesSession: {},
+  confirmationsStagiairesFermesSession: {},
   formationsReferentiel: [],
   categoriesReferentiel: [],
   itemsReferentiel: [],
   itemsReferentielEnCours: {},
-  formationReferentielActive: ''
+  formationReferentielActive: '',
+  prestationsIndemnisation: [],
+  prestationsFiltreesIndemnisation: [],
+  formateursIndemnisation: [],
+  formationsIndemnisation: [],
+  statutsIndemnisation: [],
+  selectionPrestationsIndemnisation: {},
+  donneesAccueil: null,
+  sessionAConsulterDepuisAccueil: '',
+  stagiaireAConsulterDepuisAccueil: '',
+  formationsAdministration: [],
+  diagnosticAdministration: null,
+  sauvegardesAdministration: null,
+  restaurationAdministration: null,
+  previewRestaurationActive: null,
+  minuterieProgressionRestauration: null,
+  backupIdRestaurabiliteActif: '',
+  consultationRestaurabiliteActive: null,
+  derniereActiviteAdministration: 0,
+  minuterieAdministration: null,
+  renouvellementAdministrationEnCours: false
 };
 
 document.addEventListener(
@@ -42,10 +69,60 @@ function initialiserInterface() {
       });
     });
 
-  chargerPage('Accueil');
+  afficherLoader();
+
+  ['pointerdown', 'keydown', 'touchstart'].forEach(
+    function (nomEvenement) {
+      document.addEventListener(
+        nomEvenement,
+        noterActiviteAdministration,
+        { passive: true }
+      );
+    }
+  );
+
+  google.script.run
+    .withSuccessHandler(function (sessionUtilisateur) {
+      etatApplication.sessionUtilisateur =
+        sessionUtilisateur || {
+          email: '',
+          estIdentifie: false,
+          estAdministrateur: false,
+          droits: {}
+        };
+
+      if (!etatApplication.sessionUtilisateur.estAdministrateur) {
+        retirerJetonAdministrateurApplication();
+      } else {
+        etatApplication.derniereActiviteAdministration = Date.now();
+      }
+
+      appliquerDroitsInterface();
+      demarrerSurveillanceAdministration();
+      chargerPage('Accueil');
+    })
+    .withFailureHandler(function (erreur) {
+      masquerLoader();
+      gererErreurServeur(erreur);
+    })
+    .getSessionUtilisateur(
+      obtenirJetonAdministrateurApplication()
+    );
 }
 
 function chargerPage(nomPage) {
+  if (
+    ['Referentiel', 'Indemnisation', 'Administration']
+      .includes(nomPage) &&
+    !estAdministrateurApplication()
+  ) {
+    afficherToast(
+      'Accès réservé à l’administrateur.',
+      true
+    );
+    return;
+  }
+
   afficherLoader();
 
   google.script.run
@@ -54,16 +131,24 @@ function chargerPage(nomPage) {
 
       etatApplication.pageActive = nomPage;
 
+      appliquerDroitsInterface();
       activerBoutonMenu(nomPage);
       fermerMenuMobile();
       masquerLoader();
       initialiserPageActive(nomPage);
     })
     .withFailureHandler(gererErreurServeur)
-    .getPage(nomPage);
+    .getPage(
+      nomPage,
+      obtenirJetonAdministrateurApplication()
+    );
 }
 
 function initialiserPageActive(nomPage) {
+  if (nomPage === 'Accueil') {
+    initialiserPageAccueil();
+  }
+
   if (nomPage === 'Stagiaires') {
     initialiserPageStagiaires();
   }
@@ -79,6 +164,315 @@ function initialiserPageActive(nomPage) {
   if (nomPage === 'Referentiel') {
     initialiserPageReferentiel();
   }
+
+  if (nomPage === 'Indemnisation') {
+    initialiserPageIndemnisations();
+  }
+
+  if (nomPage === 'Administration') {
+    initialiserPageAdministration();
+  }
+}
+
+function estAdministrateurApplication() {
+  return Boolean(
+    etatApplication.sessionUtilisateur &&
+    etatApplication.sessionUtilisateur.estAdministrateur
+  );
+}
+
+function appliquerDroitsInterface() {
+  const administrateur = estAdministrateurApplication();
+
+  document
+    .querySelectorAll('[data-admin-only="true"]')
+    .forEach(function (element) {
+      element.classList.toggle('masque', !administrateur);
+    });
+
+  const boutonAcces = document.getElementById(
+    'boutonAccesAdministrateur'
+  );
+  const boutonVerrouiller = document.getElementById(
+    'boutonVerrouillerAdministration'
+  );
+
+  boutonAcces?.classList.toggle('masque', administrateur);
+  boutonVerrouiller?.classList.toggle('masque', !administrateur);
+
+  document
+    .querySelectorAll('[data-formateur-only="true"]')
+    .forEach(function (element) {
+      element.classList.toggle('masque', administrateur);
+    });
+
+  const identite = document.getElementById(
+    'identiteUtilisateurApplication'
+  );
+
+  if (identite) {
+    const session = etatApplication.sessionUtilisateur || {};
+
+    identite.textContent = administrateur
+      ? 'Mode administrateur'
+      : 'Mode formateur';
+
+    if (session.email) {
+      identite.textContent += ' · ' + session.email;
+    }
+
+  }
+}
+
+function peutGererSessionsApplication() {
+  return Boolean(
+    etatApplication.sessionUtilisateur &&
+    etatApplication.sessionUtilisateur.droits &&
+    etatApplication.sessionUtilisateur.droits.gererSessions
+  );
+}
+
+function obtenirJetonAdministrateurApplication() {
+  try {
+    return sessionStorage.getItem(
+      CLE_JETON_ADMINISTRATION
+    ) || '';
+  } catch (erreur) {
+    return '';
+  }
+}
+
+function enregistrerJetonAdministrateurApplication(jeton) {
+  try {
+    sessionStorage.setItem(
+      CLE_JETON_ADMINISTRATION,
+      String(jeton || '')
+    );
+  } catch (erreur) {
+    throw new Error(
+      'Le navigateur refuse le stockage temporaire de la session administrateur.'
+    );
+  }
+}
+
+function retirerJetonAdministrateurApplication() {
+  try {
+    sessionStorage.removeItem(CLE_JETON_ADMINISTRATION);
+  } catch (erreur) {
+    console.error(erreur);
+  }
+}
+
+function ouvrirModalAccesAdministrateur() {
+  const modal = document.getElementById(
+    'modalAccesAdministrateur'
+  );
+  const champ = document.getElementById(
+    'motDePasseAdministrateur'
+  );
+
+  if (!modal || !champ) {
+    return;
+  }
+
+  champ.value = '';
+  modal.classList.remove('masque');
+  document.body.classList.add('modal-ouverte');
+  window.setTimeout(function () {
+    champ.focus();
+  }, 50);
+}
+
+function fermerModalAccesAdministrateur() {
+  const champ = document.getElementById(
+    'motDePasseAdministrateur'
+  );
+
+  if (champ) {
+    champ.value = '';
+  }
+
+  document.getElementById(
+    'modalAccesAdministrateur'
+  )?.classList.add('masque');
+  document.body.classList.remove('modal-ouverte');
+}
+
+function soumettreAccesAdministrateur(evenement) {
+  evenement.preventDefault();
+
+  const champ = document.getElementById(
+    'motDePasseAdministrateur'
+  );
+  const bouton = document.getElementById(
+    'boutonValiderAccesAdministrateur'
+  );
+  let motDePasse = champ ? champ.value : '';
+
+  if (champ) {
+    champ.value = '';
+  }
+
+  bouton.disabled = true;
+  bouton.textContent = 'Vérification…';
+
+  google.script.run
+    .withSuccessHandler(function (resultat) {
+      bouton.disabled = false;
+      bouton.textContent = 'Déverrouiller';
+
+      try {
+        enregistrerJetonAdministrateurApplication(
+          resultat.jeton
+        );
+      } catch (erreur) {
+        afficherToast(extraireMessageErreur(erreur), true);
+        return;
+      }
+
+      etatApplication.sessionUtilisateur =
+        resultat.sessionUtilisateur;
+      etatApplication.derniereActiviteAdministration = Date.now();
+      fermerModalAccesAdministrateur();
+      appliquerDroitsInterface();
+      rafraichirInterfaceApresChangementDroits();
+      afficherToast('Administration déverrouillée.', false);
+    })
+    .withFailureHandler(function (erreur) {
+      bouton.disabled = false;
+      bouton.textContent = 'Déverrouiller';
+      afficherToast(extraireMessageErreur(erreur), true);
+    })
+    .deverrouillerAdministration(motDePasse);
+
+  motDePasse = '';
+}
+
+function verrouillerAdministrationInterface() {
+  const jeton = obtenirJetonAdministrateurApplication();
+
+  verrouillerAdministrationLocale();
+
+  if (!jeton) {
+    return;
+  }
+
+  google.script.run
+    .withFailureHandler(function (erreur) {
+      console.error(erreur);
+    })
+    .verrouillerAdministration(jeton);
+}
+
+function verrouillerAdministrationLocale() {
+  retirerJetonAdministrateurApplication();
+  etatApplication.sessionUtilisateur = {
+    email: etatApplication.sessionUtilisateur?.email || '',
+    estIdentifie: Boolean(
+      etatApplication.sessionUtilisateur?.email
+    ),
+    estAdministrateur: false,
+    droits: {
+      consulterStagiaires: true,
+      consulterSuiviPedagogique: true,
+      gererSessions: true,
+      consulterFormateurs: true,
+      consulterMonRecapitulatifHeures: Boolean(
+        etatApplication.sessionUtilisateur?.email
+      )
+    }
+  };
+  etatApplication.derniereActiviteAdministration = 0;
+  fermerModalAccesAdministrateur();
+  appliquerDroitsInterface();
+
+  if ([
+    'Referentiel',
+    'Indemnisation',
+    'Administration'
+  ].includes(etatApplication.pageActive)) {
+    chargerPage('Accueil');
+  } else {
+    rafraichirInterfaceApresChangementDroits();
+  }
+}
+
+function rafraichirInterfaceApresChangementDroits() {
+  appliquerDroitsInterface();
+
+  if (etatApplication.pageActive === 'Stagiaires') {
+    afficherListeStagiaires();
+  }
+
+  if (etatApplication.pageActive === 'Formateurs') {
+    rechargerFormateurs();
+  }
+
+  if (etatApplication.pageActive === 'Accueil') {
+    initialiserPageAccueil();
+  }
+}
+
+function noterActiviteAdministration() {
+  if (estAdministrateurApplication()) {
+    etatApplication.derniereActiviteAdministration = Date.now();
+  }
+}
+
+function demarrerSurveillanceAdministration() {
+  window.clearInterval(etatApplication.minuterieAdministration);
+
+  etatApplication.minuterieAdministration = window.setInterval(
+    verifierActiviteAdministration,
+    INTERVALLE_RENOUVELLEMENT_ADMINISTRATION_MS
+  );
+}
+
+function verifierActiviteAdministration() {
+  if (!estAdministrateurApplication()) {
+    return;
+  }
+
+  const derniereActivite = Number(
+    etatApplication.derniereActiviteAdministration || 0
+  );
+
+  if (
+    !derniereActivite ||
+    Date.now() - derniereActivite >=
+      DUREE_INACTIVITE_ADMINISTRATION_MS
+  ) {
+    verrouillerAdministrationInterface();
+    afficherToast(
+      'Administration verrouillée après 30 minutes d’inactivité.',
+      false
+    );
+    return;
+  }
+
+  if (etatApplication.renouvellementAdministrationEnCours) {
+    return;
+  }
+
+  etatApplication.renouvellementAdministrationEnCours = true;
+
+  google.script.run
+    .withSuccessHandler(function (sessionUtilisateur) {
+      etatApplication.renouvellementAdministrationEnCours = false;
+      etatApplication.sessionUtilisateur = sessionUtilisateur;
+      appliquerDroitsInterface();
+    })
+    .withFailureHandler(function () {
+      etatApplication.renouvellementAdministrationEnCours = false;
+      verrouillerAdministrationLocale();
+      afficherToast(
+        'La session administrateur a expiré.',
+        true
+      );
+    })
+    .renouvelerSessionAdministration(
+      obtenirJetonAdministrateurApplication()
+    );
 }
 
 function activerBoutonMenu(nomPage) {
@@ -125,7 +519,16 @@ function extraireMessageErreur(erreur) {
     return 'Une erreur inconnue est survenue.';
   }
 
-  return erreur.message || String(erreur);
+  const message = erreur.message || String(erreur);
+
+  if (
+    estAdministrateurApplication() &&
+    message.includes('Accès réservé à l’administrateur.')
+  ) {
+    verrouillerAdministrationLocale();
+  }
+
+  return message;
 }
 
 function gererErreurServeur(erreur) {
@@ -152,6 +555,414 @@ function fermerMenuMobile() {
 }
 
 /* =====================================================
+   ACCUEIL
+===================================================== */
+
+function initialiserPageAccueil() {
+  afficherLoader();
+
+  google.script.run
+    .withSuccessHandler(function (donnees) {
+      if (etatApplication.pageActive !== 'Accueil') {
+        return;
+      }
+
+      etatApplication.donneesAccueil = donnees || {};
+      afficherTableauBordAccueil(
+        etatApplication.donneesAccueil
+      );
+      masquerLoader();
+    })
+    .withFailureHandler(function (erreur) {
+      if (etatApplication.pageActive === 'Accueil') {
+        gererErreurServeur(erreur);
+      }
+    })
+    .getDonneesTableauBordAccueil(
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+function afficherTableauBordAccueil(donnees) {
+  const indicateurs = donnees.indicateurs || {};
+
+  const valeurs = {
+    indicateurStagiairesAccueil:
+      Number(indicateurs.stagiairesAPreparer) || 0,
+    indicateurSessionsMoisAccueil:
+      Number(indicateurs.sessionsMois) || 0,
+    indicateurHeuresMoisAccueil:
+      formaterHeuresFormation(
+        indicateurs.heuresFormateursMois
+      ),
+    indicateurPrestationsAccueil:
+      Number(indicateurs.prestationsADemander) || 0,
+    indicateurEnPreparationAccueil:
+      Number(indicateurs.stagiairesEnPreparation) || 0,
+    indicateurStagesAujourdhuiAccueil:
+      Number(indicateurs.stagesAujourdhui) || 0,
+    indicateurStagesPassesAccueil:
+      Number(indicateurs.stagesPassesNonClotures) || 0
+  };
+
+  Object.keys(valeurs).forEach(function (identifiant) {
+    const element = document.getElementById(identifiant);
+
+    if (element) {
+      element.textContent = valeurs[identifiant];
+    }
+  });
+
+  const dateActualisation = document.getElementById(
+    'dateActualisationAccueil'
+  );
+
+  if (dateActualisation) {
+    dateActualisation.textContent = donnees.dateActualisation
+      ? 'Actualisé le ' + donnees.dateActualisation
+      : 'Données actualisées';
+  }
+
+  afficherEcheancesProchesAccueil(
+    Array.isArray(donnees.echeancesProches)
+      ? donnees.echeancesProches
+      : []
+  );
+
+  afficherAlertesPedagogiquesAccueil(
+    Array.isArray(donnees.alertesPedagogiques)
+      ? donnees.alertesPedagogiques
+      : []
+  );
+
+  afficherDernieresSessionsAccueil(
+    Array.isArray(donnees.dernieresSessions)
+      ? donnees.dernieresSessions
+      : []
+  );
+
+  afficherIndemnisationsAttenteAccueil(
+    Array.isArray(donnees.indemnisationsEnAttente)
+      ? donnees.indemnisationsEnAttente
+      : []
+  );
+}
+
+function afficherEcheancesProchesAccueil(echeances) {
+  const zone = document.getElementById(
+    'echeancesProchesAccueil'
+  );
+
+  if (!zone) {
+    return;
+  }
+
+  if (!echeances.length) {
+    zone.innerHTML = creerEtatVideAccueil(
+      '✓',
+      'Aucune échéance dans les 30 prochains jours',
+      'Les dates de stage à venir apparaîtront ici.'
+    );
+    return;
+  }
+
+  zone.innerHTML = `
+    <div class="liste-echeances-accueil">
+      ${echeances.map(function (echeance) {
+        const progression = Math.max(
+          0,
+          Math.min(
+            100,
+            Math.round(Number(echeance.progression) || 0)
+          )
+        );
+
+        return `
+          <button
+            type="button"
+            class="ligne-echeance-accueil"
+            data-id-stagiaire="${echapperHtml(echeance.idStagiaire)}"
+            onclick="ouvrirStagiaireDepuisAccueil(this.dataset.idStagiaire)"
+          >
+            <span class="date-echeance-accueil">
+              <strong>J-${Number(echeance.joursRestants) || 0}</strong>
+              <small>${echapperHtml(afficherDateFrancaise(echeance.dateStage))}</small>
+            </span>
+            <span class="identite-echeance-accueil">
+              <strong>
+                ${echapperHtml(echeance.prenom)}
+                ${echapperHtml(echeance.nom)}
+              </strong>
+              <small>${echapperHtml(echeance.formation || 'Formation non renseignée')}</small>
+            </span>
+            <span class="progression-echeance-accueil">
+              <span>
+                <small>Progression</small>
+                <strong>${progression} %</strong>
+              </span>
+              <span class="mini-barre-progression-accueil">
+                <i
+                  class="${obtenirClasseProgressionAccueil(progression)}"
+                  style="width: ${progression}%"
+                ></i>
+              </span>
+            </span>
+            <span class="fleche-liste-accueil">›</span>
+          </button>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+function afficherAlertesPedagogiquesAccueil(alertes) {
+  const zone = document.getElementById(
+    'alertesPedagogiquesAccueil'
+  );
+  const compteur = document.getElementById(
+    'nombreAlertesAccueil'
+  );
+
+  if (compteur) {
+    compteur.textContent = String(alertes.length);
+  }
+
+  if (!zone) {
+    return;
+  }
+
+  if (!alertes.length) {
+    zone.innerHTML = creerEtatVideAccueil(
+      '✓',
+      'Aucune alerte pédagogique',
+      'Toutes les préparations ouvertes sont dans une situation normale.'
+    );
+    return;
+  }
+
+  const configurations = {
+    progression: {
+      icone: '!',
+      classe: 'alerte-accueil-critique'
+    },
+    inactivite: {
+      icone: '⏱',
+      classe: 'alerte-accueil-inactivite'
+    },
+    aucun_acquis: {
+      icone: '○',
+      classe: 'alerte-accueil-acquis'
+    }
+  };
+
+  zone.innerHTML = `
+    <div class="liste-alertes-accueil">
+      ${alertes.map(function (alerte) {
+        const configuration = configurations[alerte.type] ||
+          configurations.inactivite;
+
+        let detail =
+          Math.round(Number(alerte.progression) || 0) +
+          ' % de progression';
+
+        if (alerte.type === 'progression') {
+          detail = 'J-' + (Number(alerte.valeur) || 0) +
+            ' · ' + detail;
+        }
+
+        if (alerte.type === 'inactivite') {
+          detail = (Number(alerte.valeur) || 0) +
+            ' jours sans séance';
+        }
+
+        if (alerte.type === 'aucun_acquis') {
+          detail = '0 / ' + (Number(alerte.valeur) || 0) +
+            ' item(s) acquis';
+        }
+
+        return `
+          <button
+            type="button"
+            class="ligne-alerte-accueil ${configuration.classe}"
+            data-id-stagiaire="${echapperHtml(alerte.idStagiaire)}"
+            onclick="ouvrirStagiaireDepuisAccueil(this.dataset.idStagiaire)"
+          >
+            <span class="icone-alerte-accueil">
+              ${configuration.icone}
+            </span>
+            <span class="contenu-alerte-accueil">
+              <strong>
+                ${echapperHtml(alerte.prenom)}
+                ${echapperHtml(alerte.nom)}
+              </strong>
+              <span>${echapperHtml(alerte.message)}</span>
+              <small>
+                ${echapperHtml(alerte.formation || 'Formation non renseignée')}
+                · ${echapperHtml(detail)}
+              </small>
+            </span>
+            <span class="fleche-liste-accueil">›</span>
+          </button>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+function afficherDernieresSessionsAccueil(sessions) {
+  const corps = document.getElementById(
+    'dernieresSessionsAccueil'
+  );
+
+  if (!corps) {
+    return;
+  }
+
+  if (!sessions.length) {
+    corps.innerHTML = `
+      <tr>
+        <td colspan="6" class="etat-vide">
+          Aucune séance réalisée pour le moment.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  corps.innerHTML = sessions.map(function (session) {
+    const formateurs = Array.isArray(session.formateurs) &&
+      session.formateurs.length
+      ? session.formateurs.map(echapperHtml).join('<br>')
+      : '—';
+
+    const stagiaires = Array.isArray(session.stagiaires) &&
+      session.stagiaires.length
+      ? session.stagiaires.map(echapperHtml).join(', ')
+      : '—';
+
+    return `
+      <tr
+        class="ligne-cliquable-accueil"
+        data-id-session="${echapperHtml(session.idSession)}"
+        onclick="ouvrirSessionDepuisAccueil(this.dataset.idSession)"
+      >
+        <td>
+          <strong>${echapperHtml(afficherDateFrancaise(session.date) || '—')}</strong>
+        </td>
+        <td>
+          <span class="badge-formation-session">
+            ${echapperHtml(session.formation || '—')}
+          </span>
+        </td>
+        <td>${formateurs}</td>
+        <td class="stagiaires-session-accueil">${stagiaires}</td>
+        <td>${echapperHtml(formaterHeuresFormation(session.dureeHeures))}</td>
+        <td class="colonne-actions-accueil">
+          <button
+            type="button"
+            class="bouton-consulter-session"
+            data-id-session="${echapperHtml(session.idSession)}"
+            onclick="event.stopPropagation(); ouvrirSessionDepuisAccueil(this.dataset.idSession)"
+          >
+            <span aria-hidden="true">👁</span>
+            Consulter
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function afficherIndemnisationsAttenteAccueil(groupes) {
+  const zone = document.getElementById(
+    'indemnisationsAttenteAccueil'
+  );
+
+  if (!zone) {
+    return;
+  }
+
+  if (!groupes.length) {
+    zone.innerHTML = creerEtatVideAccueil(
+      '✓',
+      'Aucune indemnisation à demander',
+      'Toutes les prestations ont déjà été traitées.'
+    );
+    return;
+  }
+
+  zone.innerHTML = `
+    <div class="grille-indemnisations-accueil">
+      ${groupes.map(function (groupe) {
+        return `
+          <button
+            type="button"
+            class="carte-indemnisation-accueil"
+            onclick="ouvrirModuleDepuisAccueil('Indemnisation')"
+          >
+            <span class="avatar-formateur-accueil">€</span>
+            <span class="contenu-indemnisation-accueil">
+              <strong>${echapperHtml(groupe.formateur)}</strong>
+              <small>
+                ${Number(groupe.nombrePrestations) || 0}
+                prestation${Number(groupe.nombrePrestations) > 1 ? 's' : ''}
+              </small>
+            </span>
+            <span class="heures-indemnisation-accueil">
+              <strong>${echapperHtml(formaterHeuresFormation(groupe.totalHeures))}</strong>
+              <small>à demander</small>
+            </span>
+            <span class="fleche-liste-accueil">›</span>
+          </button>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+function creerEtatVideAccueil(icone, titre, texte) {
+  return `
+    <div class="etat-vide-accueil">
+      <span>${icone}</span>
+      <div>
+        <strong>${echapperHtml(titre)}</strong>
+        <p>${echapperHtml(texte)}</p>
+      </div>
+    </div>
+  `;
+}
+
+function obtenirClasseProgressionAccueil(pourcentage) {
+  if (pourcentage < 50) {
+    return 'progression-accueil-rouge';
+  }
+
+  if (pourcentage < 80) {
+    return 'progression-accueil-orange';
+  }
+
+  return 'progression-accueil-verte';
+}
+
+function ouvrirModuleDepuisAccueil(nomPage) {
+  chargerPage(nomPage);
+}
+
+function ouvrirStagiaireDepuisAccueil(idStagiaire) {
+  etatApplication.stagiaireAConsulterDepuisAccueil =
+    String(idStagiaire || '');
+
+  chargerPage('Stagiaires');
+}
+
+function ouvrirSessionDepuisAccueil(idSession) {
+  etatApplication.sessionAConsulterDepuisAccueil =
+    String(idSession || '');
+
+  chargerPage('Sessions');
+}
+
+/* =====================================================
    STAGIAIRES
 ===================================================== */
 
@@ -171,6 +982,17 @@ function initialiserPageStagiaires() {
       remplirFiltresStagiaires();
       afficherListeStagiaires();
       masquerLoader();
+
+      const idStagiaire =
+        etatApplication.stagiaireAConsulterDepuisAccueil;
+
+      if (idStagiaire) {
+        etatApplication.stagiaireAConsulterDepuisAccueil = '';
+
+        window.setTimeout(function () {
+          consulterStagiaire(idStagiaire);
+        }, 50);
+      }
     }
   }
 
@@ -233,11 +1055,6 @@ function remplirFiltresStagiaires() {
     'Sélectionner une formation'
   );
 
-  remplirSelect(
-    'stagiaireStatut',
-    etatApplication.statutsStagiaires,
-    null
-  );
 }
 
 function remplirSelect(
@@ -391,6 +1208,19 @@ function creerLigneStagiaire(stagiaire) {
     stagiaire.dateDebutPreparation
   );
 
+  const boutonModifier = estAdministrateurApplication()
+    ? `
+      <button
+        type="button"
+        class="bouton-icone"
+        onclick="modifierStagiaire('${stagiaire.uuid}')"
+        title="Modifier"
+      >
+        ✎
+      </button>
+    `
+    : '';
+
   return `
     <tr>
       <td>
@@ -429,14 +1259,7 @@ function creerLigneStagiaire(stagiaire) {
           👁
         </button>
 
-        <button
-          type="button"
-          class="bouton-icone"
-          onclick="modifierStagiaire('${stagiaire.uuid}')"
-          title="Modifier"
-        >
-          ✎
-        </button>
+        ${boutonModifier}
       </td>
     </tr>
   `;
@@ -573,6 +1396,17 @@ function consulterStagiaire(uuid) {
               )}
 
               ${creerInformationFiche(
+                'Statut calculé',
+                stagiaire.statut
+              )}
+
+              ${creerInformationFiche(
+                'Dernier changement automatique',
+                stagiaire.dateChangementStatutAuto ||
+                  'Non disponible'
+              )}
+
+              ${creerInformationFiche(
                 'Début de préparation',
                 afficherDateFrancaise(
                   stagiaire.dateDebutPreparation
@@ -594,8 +1428,82 @@ function consulterStagiaire(uuid) {
                 'information-echeance'
               )}
 
+              ${creerInformationFiche(
+                'Date de clôture',
+                afficherDateFrancaise(
+                  stagiaire.dateCloture
+                ) || '—'
+              )}
+
+              ${creerInformationFiche(
+                'Motif de clôture',
+                stagiaire.motifCloture || '—'
+              )}
+
             </dl>
 
+          </div>
+
+        </section>
+
+        <section class="bloc fiche-bloc bloc-progression-generale-stagiaire">
+
+          <div class="entete-progression-generale-stagiaire">
+            <div>
+              <p class="fiche-sur-titre">
+                Tableau de bord pédagogique
+              </p>
+              <h2>Progression générale de la préparation</h2>
+              <p>
+                Calculée sur les items actifs du référentiel de la formation.
+              </p>
+            </div>
+
+            <div class="pourcentage-progression-generale">
+              <strong id="pourcentageProgressionGeneraleStagiaire">—</strong>
+              <span>acquis</span>
+            </div>
+          </div>
+
+          <div
+            id="barreProgressionGeneraleStagiaire"
+            class="barre-progression-generale-stagiaire"
+            role="progressbar"
+            aria-label="Progression générale de la préparation"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow="0"
+          >
+            <span></span>
+          </div>
+
+          <div class="grille-resume-pedagogique-stagiaire">
+            ${creerIndicateurPedagogiqueStagiaire(
+              'Total du référentiel',
+              'nombreItemsFormationStagiaire',
+              'indicateur-pedagogique-bleu'
+            )}
+            ${creerIndicateurPedagogiqueStagiaire(
+              'Items travaillés',
+              'nombreItemsTravaillesStagiaire',
+              'indicateur-pedagogique-orange'
+            )}
+            ${creerIndicateurPedagogiqueStagiaire(
+              'Items acquis',
+              'nombreItemsAcquisStagiaire',
+              'indicateur-pedagogique-vert'
+            )}
+            ${creerIndicateurPedagogiqueStagiaire(
+              'Restant à travailler',
+              'nombreItemsRestantsStagiaire',
+              'indicateur-pedagogique-gris'
+            )}
+          </div>
+
+          <div class="legende-statut-pedagogique">
+            <span><i class="pastille-statut-acquis"></i>Acquis</span>
+            <span><i class="pastille-statut-travaille"></i>Travaillé mais non acquis</span>
+            <span><i class="pastille-statut-non-travaille"></i>Jamais travaillé</span>
           </div>
 
         </section>
@@ -628,6 +1536,67 @@ function consulterStagiaire(uuid) {
             'Évaluations',
             'valeurEvaluations'
           )}
+
+        </section>
+
+        <div class="grille-pilotage-pedagogique-stagiaire">
+
+          <section class="bloc fiche-bloc bloc-progression-categories-stagiaire">
+
+            <div class="fiche-bloc-entete">
+              <div>
+                <h2>Progression par catégorie</h2>
+                <p>
+                  Les catégories les moins avancées apparaissent en premier.
+                </p>
+              </div>
+            </div>
+
+            <div id="progressionCategoriesFicheStagiaire">
+              <div class="etat-suivi-pedagogique">
+                Calcul de la progression…
+              </div>
+            </div>
+
+          </section>
+
+          <section class="bloc fiche-bloc bloc-items-prioritaires-stagiaire">
+
+            <div class="fiche-bloc-entete">
+              <div>
+                <h2>Items prioritaires</h2>
+                <p>
+                  À découvrir en premier, puis à consolider.
+                </p>
+              </div>
+            </div>
+
+            <div id="itemsPrioritairesFicheStagiaire">
+              <div class="etat-suivi-pedagogique">
+                Identification des priorités…
+              </div>
+            </div>
+
+          </section>
+
+        </div>
+
+        <section class="bloc fiche-bloc">
+
+          <div class="fiche-bloc-entete">
+            <div>
+              <h2>Chronologie pédagogique</h2>
+              <p>
+                Items travaillés, nouvelles acquisitions et commentaires par séance.
+              </p>
+            </div>
+          </div>
+
+          <div id="chronologiePedagogiqueFicheStagiaire">
+            <div class="etat-suivi-pedagogique">
+              Construction de la chronologie…
+            </div>
+          </div>
 
         </section>
 
@@ -772,6 +1741,19 @@ function creerCarteSyntheseStagiaire(
   `;
 }
 
+function creerIndicateurPedagogiqueStagiaire(
+  libelle,
+  identifiant,
+  classe
+) {
+  return `
+    <div class="indicateur-pedagogique-stagiaire ${classe}">
+      <span>${echapperHtml(libelle)}</span>
+      <strong id="${identifiant}">—</strong>
+    </div>
+  `;
+}
+
 function mettreAJourSuiviFicheStagiaire(
   uuid,
   suivi
@@ -824,6 +1806,306 @@ function mettreAJourSuiviFicheStagiaire(
       ? suivi.suiviPedagogique
       : []
   );
+
+  afficherTableauBordPedagogiqueFicheStagiaire(
+    suivi && suivi.tableauBordPedagogique
+      ? suivi.tableauBordPedagogique
+      : {}
+  );
+
+  afficherChronologiePedagogiqueFicheStagiaire(
+    Array.isArray(
+      suivi && suivi.chronologiePedagogique
+    )
+      ? suivi.chronologiePedagogique
+      : []
+  );
+}
+
+function afficherTableauBordPedagogiqueFicheStagiaire(
+  tableauBord
+) {
+  const pourcentage = Math.max(
+    0,
+    Math.min(
+      100,
+      Math.round(
+        Number(tableauBord.progressionGenerale) || 0
+      )
+    )
+  );
+
+  const elementPourcentage = document.getElementById(
+    'pourcentageProgressionGeneraleStagiaire'
+  );
+  const barre = document.getElementById(
+    'barreProgressionGeneraleStagiaire'
+  );
+
+  if (elementPourcentage) {
+    elementPourcentage.textContent = pourcentage + ' %';
+  }
+
+  if (barre) {
+    barre.setAttribute('aria-valuenow', String(pourcentage));
+
+    const remplissage = barre.querySelector('span');
+
+    if (remplissage) {
+      remplissage.style.width = pourcentage + '%';
+    }
+  }
+
+  const compteurs = {
+    nombreItemsFormationStagiaire:
+      tableauBord.nombreItems,
+    nombreItemsTravaillesStagiaire:
+      tableauBord.nombreTravailles,
+    nombreItemsAcquisStagiaire:
+      tableauBord.nombreAcquis,
+    nombreItemsRestantsStagiaire:
+      tableauBord.nombreRestantATravailler
+  };
+
+  Object.keys(compteurs).forEach(function (identifiant) {
+    const element = document.getElementById(identifiant);
+
+    if (element) {
+      element.textContent = String(
+        Number(compteurs[identifiant]) || 0
+      );
+    }
+  });
+
+  afficherProgressionCategoriesFicheStagiaire(
+    Array.isArray(tableauBord.progressionCategories)
+      ? tableauBord.progressionCategories
+      : []
+  );
+
+  afficherItemsPrioritairesFicheStagiaire(
+    Array.isArray(tableauBord.itemsPrioritaires)
+      ? tableauBord.itemsPrioritaires
+      : []
+  );
+}
+
+function afficherProgressionCategoriesFicheStagiaire(
+  categories
+) {
+  const zone = document.getElementById(
+    'progressionCategoriesFicheStagiaire'
+  );
+
+  if (!zone) {
+    return;
+  }
+
+  if (!categories.length) {
+    zone.innerHTML = `
+      <div class="etat-suivi-pedagogique">
+        Aucune catégorie active avec des items actifs.
+      </div>
+    `;
+    return;
+  }
+
+  zone.innerHTML = categories.map(function (categorie) {
+    const pourcentage = Math.max(
+      0,
+      Math.min(
+        100,
+        Math.round(Number(categorie.pourcentage) || 0)
+      )
+    );
+
+    return `
+      <article class="progression-categorie-stagiaire">
+        <div class="entete-progression-categorie-stagiaire">
+          <div>
+            <h3>${echapperHtml(categorie.intitule)}</h3>
+            <p>
+              ${Number(categorie.nombreItems) || 0} item${Number(categorie.nombreItems) > 1 ? 's' : ''}
+              · ${Number(categorie.travailles) || 0} travaillé${Number(categorie.travailles) > 1 ? 's' : ''}
+              · ${Number(categorie.acquis) || 0} acquis
+            </p>
+          </div>
+          <strong>${pourcentage} %</strong>
+        </div>
+        <div
+          class="barre-progression-categorie-stagiaire"
+          role="progressbar"
+          aria-label="Progression de ${echapperHtml(categorie.intitule)}"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          aria-valuenow="${pourcentage}"
+        >
+          <span style="width: ${pourcentage}%"></span>
+        </div>
+      </article>
+    `;
+  }).join('');
+}
+
+function afficherItemsPrioritairesFicheStagiaire(items) {
+  const zone = document.getElementById(
+    'itemsPrioritairesFicheStagiaire'
+  );
+
+  if (!zone) {
+    return;
+  }
+
+  if (!items.length) {
+    zone.innerHTML = `
+      <div class="etat-priorites-terminees-stagiaire">
+        <span>✓</span>
+        <div>
+          <strong>Tous les items actifs sont acquis</strong>
+          <p>Aucune priorité pédagogique en attente.</p>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  zone.innerHTML = `
+    <div class="liste-items-prioritaires-stagiaire">
+      ${items.map(function (item) {
+        const travaille = item.statut === 'Travaillé';
+
+        return `
+          <article class="item-prioritaire-stagiaire ${travaille
+            ? 'item-prioritaire-travaille'
+            : 'item-prioritaire-non-travaille'}">
+            <span class="pastille-priorite-stagiaire"></span>
+            <div>
+              <span class="categorie-item-prioritaire-stagiaire">
+                ${echapperHtml(item.categorie || 'Sans catégorie')}
+              </span>
+              <h3>${echapperHtml(item.intitule)}</h3>
+              <p>
+                ${travaille
+                  ? (Number(item.nombreSeances) || 0) + ' séance(s), acquisition à consolider'
+                  : 'Jamais travaillé'}
+              </p>
+            </div>
+            <span class="badge-statut ${travaille ? 'badge-orange' : 'badge-gris'}">
+              ${echapperHtml(item.statut)}
+            </span>
+          </article>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+function afficherChronologiePedagogiqueFicheStagiaire(
+  sessions
+) {
+  const zone = document.getElementById(
+    'chronologiePedagogiqueFicheStagiaire'
+  );
+
+  if (!zone) {
+    return;
+  }
+
+  if (!sessions.length) {
+    zone.innerHTML = `
+      <div class="etat-suivi-pedagogique">
+        Aucune séance à afficher dans la chronologie.
+      </div>
+    `;
+    return;
+  }
+
+  zone.innerHTML = `
+    <div class="chronologie-pedagogique-stagiaire">
+      ${sessions.map(function (session) {
+        const formateurs = Array.isArray(session.formateurs) &&
+          session.formateurs.length
+          ? session.formateurs.join(', ')
+          : 'Formateur non renseigné';
+
+        const itemsTravailles = Array.isArray(
+          session.itemsTravailles
+        ) && session.itemsTravailles.length
+          ? session.itemsTravailles.map(function (item) {
+            return `
+              <span class="badge-element-chronologie badge-element-travaille">
+                ${echapperHtml(item)}
+              </span>
+            `;
+          }).join('')
+          : '<span class="texte-vide-chronologie">Aucun item identifié</span>';
+
+        const nouveauxAcquis = Array.isArray(
+          session.nouveauxItemsAcquis
+        ) && session.nouveauxItemsAcquis.length
+          ? session.nouveauxItemsAcquis.map(function (item) {
+            return `
+              <span class="badge-element-chronologie badge-element-acquis">
+                ✓ ${echapperHtml(item)}
+              </span>
+            `;
+          }).join('')
+          : '<span class="texte-vide-chronologie">Aucune nouvelle acquisition</span>';
+
+        const commentaires = Array.isArray(
+          session.commentairesIndividuels
+        ) && session.commentairesIndividuels.length
+          ? session.commentairesIndividuels.map(
+            function (commentaire) {
+              return `
+                <div class="commentaire-chronologie-stagiaire">
+                  <strong>${echapperHtml(commentaire.item)}</strong>
+                  <span>${echapperHtml(commentaire.commentaire)}</span>
+                </div>
+              `;
+            }
+          ).join('')
+          : '<span class="texte-vide-chronologie">Aucun commentaire individuel</span>';
+
+        return `
+          <article class="evenement-chronologie-stagiaire">
+            <div class="repere-chronologie-stagiaire">
+              <span></span>
+            </div>
+            <div class="carte-chronologie-stagiaire">
+              <header>
+                <div>
+                  <strong>${echapperHtml(afficherDateFrancaise(session.date) || 'Date inconnue')}</strong>
+                  <span>${echapperHtml(session.heureDebut || '')}</span>
+                </div>
+                <span class="formateur-chronologie-stagiaire">
+                  👨‍🏫 ${echapperHtml(formateurs)}
+                </span>
+              </header>
+              <div class="grille-contenu-chronologie-stagiaire">
+                <div>
+                  <h4>Items travaillés</h4>
+                  <div class="badges-chronologie-stagiaire">
+                    ${itemsTravailles}
+                  </div>
+                </div>
+                <div>
+                  <h4>Nouveaux acquis</h4>
+                  <div class="badges-chronologie-stagiaire">
+                    ${nouveauxAcquis}
+                  </div>
+                </div>
+                <div class="zone-commentaires-chronologie-stagiaire">
+                  <h4>Commentaire individuel</h4>
+                  ${commentaires}
+                </div>
+              </div>
+            </div>
+          </article>
+        `;
+      }).join('')}
+    </div>
+  `;
 }
 
 function afficherSuiviPedagogiqueFicheStagiaire(
@@ -1007,6 +2289,8 @@ function gererErreurSuiviFicheStagiaire(
 
   afficherSessionsFicheStagiaire([]);
   afficherSuiviPedagogiqueFicheStagiaire([]);
+  afficherTableauBordPedagogiqueFicheStagiaire({});
+  afficherChronologiePedagogiqueFicheStagiaire([]);
 
   afficherToast(
     'Le suivi des sessions n’a pas pu être chargé : ' +
@@ -1093,6 +2377,11 @@ function calculerEcheanceStage(dateIso) {
 }
 
 function nouveauStagiaire() {
+  if (!estAdministrateurApplication()) {
+    afficherToast('Accès réservé à l’administrateur.', true);
+    return;
+  }
+
   const formulaire = document.getElementById(
     'formulaireStagiaire'
   );
@@ -1111,7 +2400,7 @@ function nouveauStagiaire() {
     'stagiaireDateDebut'
   ).value = dateDuJourPourChamp();
 
-  mettreAJourChampsCloture();
+  mettreAJourZoneCycleVieStagiaire();
   mettreAJourApercuPhotoStagiaire();
   changerOngletStagiaire('informations');
   ouvrirModalStagiaire();
@@ -1122,6 +2411,11 @@ function nouveauStagiaire() {
 }
 
 function modifierStagiaire(uuid) {
+  if (!estAdministrateurApplication()) {
+    afficherToast('Accès réservé à l’administrateur.', true);
+    return;
+  }
+
   const stagiaire =
     etatApplication.stagiaires.find(
       function (element) {
@@ -1164,14 +2458,6 @@ function modifierStagiaire(uuid) {
   ).value = stagiaire.dateStage;
 
   document.getElementById(
-    'stagiaireDateCloture'
-  ).value = stagiaire.dateCloture;
-
-  document.getElementById(
-    'stagiaireMotifCloture'
-  ).value = stagiaire.motifCloture;
-
-  document.getElementById(
     'stagiaireNotes'
   ).value = stagiaire.notesAdministratives;
 
@@ -1195,7 +2481,7 @@ function modifierStagiaire(uuid) {
     'stagiaireFormateurReferent'
   ).value = stagiaire.formateurReferent || '';
 
-  mettreAJourChampsCloture();
+  mettreAJourZoneCycleVieStagiaire(stagiaire);
   mettreAJourApercuPhotoStagiaire();
   changerOngletStagiaire('informations');
   ouvrirModalStagiaire();
@@ -1283,31 +2569,176 @@ function fermerModalStagiaire() {
   document.body.classList.remove('modal-ouverte');
 }
 
-function mettreAJourChampsCloture() {
-  const statut = document.getElementById(
-    'stagiaireStatut'
-  ).value;
+function mettreAJourZoneCycleVieStagiaire(stagiaire) {
+  const bouton = document.getElementById(
+    'boutonCloturerStagiaire'
+  );
+  const boutonReactiver = document.getElementById(
+    'boutonReactiverStagiaire'
+  );
+  const resume = document.getElementById(
+    'resumeCycleVieStagiaire'
+  );
+
+  if (!bouton || !boutonReactiver || !resume) {
+    return;
+  }
+
+  if (!stagiaire || !stagiaire.uuid) {
+    bouton.classList.add('masque');
+    boutonReactiver.classList.add('masque');
+    resume.textContent =
+      'Enregistre d\'abord le stagiaire pour pouvoir clôturer sa préparation.';
+    return;
+  }
 
   const preparationFermee = [
-    'Préparation terminée',
-    'Préparation abandonnée'
-  ].includes(statut);
+    'Clôturé',
+    'Abandon'
+  ].includes(stagiaire.statut);
 
-  document
-    .getElementById('zoneClotureStagiaire')
-    .classList
-    .toggle('masque', !preparationFermee);
+  const administrateur = estAdministrateurApplication();
 
-  if (
-    preparationFermee &&
-    !document.getElementById(
-      'stagiaireDateCloture'
-    ).value
-  ) {
-    document.getElementById(
-      'stagiaireDateCloture'
-    ).value = dateDuJourPourChamp();
+  bouton.classList.toggle(
+    'masque',
+    preparationFermee || !administrateur
+  );
+  boutonReactiver.classList.toggle(
+    'masque',
+    !preparationFermee || !administrateur
+  );
+
+  if (preparationFermee) {
+    resume.textContent =
+      stagiaire.statut +
+      (stagiaire.dateCloture
+        ? ' le ' + afficherDateFrancaise(stagiaire.dateCloture)
+        : '') +
+      (stagiaire.motifCloture
+        ? ' · ' + stagiaire.motifCloture
+        : '');
+  } else {
+    resume.textContent =
+      'Le statut est calculé automatiquement. Seules la clôture et l\'abandon sont des décisions manuelles.';
   }
+}
+
+function ouvrirModalClotureStagiaire() {
+  if (!estAdministrateurApplication()) {
+    afficherToast('Accès réservé à l’administrateur.', true);
+    return;
+  }
+
+  const uuid = document.getElementById(
+    'stagiaireUuid'
+  ).value;
+
+  if (!uuid) {
+    afficherToast(
+      'Enregistre d\'abord le stagiaire.',
+      true
+    );
+    return;
+  }
+
+  document.getElementById(
+    'resultatClotureStagiaire'
+  ).value = 'Clôturé';
+
+  document.getElementById(
+    'dateClotureDedieeStagiaire'
+  ).value = dateDuJourPourChamp();
+
+  document.getElementById(
+    'commentaireClotureStagiaire'
+  ).value = '';
+
+  document.getElementById(
+    'modalClotureStagiaire'
+  ).classList.remove('masque');
+}
+
+function reactiverPreparationStagiaire() {
+  if (!estAdministrateurApplication()) {
+    afficherToast('Accès réservé à l’administrateur.', true);
+    return;
+  }
+
+  const uuid = document.getElementById('stagiaireUuid').value;
+
+  if (!uuid) {
+    afficherToast('Stagiaire introuvable.', true);
+    return;
+  }
+
+  if (!window.confirm(
+    'Réactiver cette préparation et rétablir son statut automatique ?'
+  )) {
+    return;
+  }
+
+  afficherLoader();
+
+  google.script.run
+    .withSuccessHandler(function (resultat) {
+      fermerModalStagiaire();
+      afficherToast(resultat.message, false);
+      rechargerStagiaires();
+    })
+    .withFailureHandler(gererErreurServeur)
+    .reactiverPreparationStagiaire(
+      uuid,
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+function fermerModalClotureStagiaire() {
+  document.getElementById(
+    'modalClotureStagiaire'
+  )?.classList.add('masque');
+}
+
+function soumettreClotureStagiaire(evenement) {
+  evenement.preventDefault();
+
+  const bouton = document.getElementById(
+    'boutonConfirmerClotureStagiaire'
+  );
+
+  const donnees = {
+    uuid: document.getElementById('stagiaireUuid').value,
+    resultat: document.getElementById(
+      'resultatClotureStagiaire'
+    ).value,
+    date: document.getElementById(
+      'dateClotureDedieeStagiaire'
+    ).value,
+    commentaire: document.getElementById(
+      'commentaireClotureStagiaire'
+    ).value
+  };
+
+  bouton.disabled = true;
+  bouton.textContent = 'Enregistrement…';
+
+  google.script.run
+    .withSuccessHandler(function (resultat) {
+      bouton.disabled = false;
+      bouton.textContent = 'Confirmer la clôture';
+      fermerModalClotureStagiaire();
+      fermerModalStagiaire();
+      afficherToast(resultat.message, false);
+      rechargerStagiaires();
+    })
+    .withFailureHandler(function (erreur) {
+      bouton.disabled = false;
+      bouton.textContent = 'Confirmer la clôture';
+      afficherToast(extraireMessageErreur(erreur), true);
+    })
+    .cloturerPreparationStagiaire(
+      donnees,
+      obtenirJetonAdministrateurApplication()
+    );
 }
 
 function soumettreStagiaire(evenement) {
@@ -1337,10 +2768,6 @@ function soumettreStagiaire(evenement) {
       'stagiaireFormation'
     ).value,
 
-    statut: document.getElementById(
-      'stagiaireStatut'
-    ).value,
-
     dateDebutPreparation:
       document.getElementById(
         'stagiaireDateDebut'
@@ -1349,15 +2776,6 @@ function soumettreStagiaire(evenement) {
     dateStage: document.getElementById(
       'stagiaireDateStage'
     ).value,
-
-    dateCloture: document.getElementById(
-      'stagiaireDateCloture'
-    ).value,
-
-    motifCloture:
-      document.getElementById(
-        'stagiaireMotifCloture'
-      ).value,
 
     notesAdministratives:
       document.getElementById(
@@ -1410,7 +2828,10 @@ function soumettreStagiaire(evenement) {
         true
       );
     })
-    .enregistrerStagiaire(donnees);
+    .enregistrerStagiaire(
+      donnees,
+      obtenirJetonAdministrateurApplication()
+    );
 }
 
 function rechargerStagiaires() {
@@ -1431,9 +2852,11 @@ function rechargerStagiaires() {
 function obtenirClasseStatut(statut) {
   const correspondances = {
     'À préparer': 'badge-bleu',
-    'Échéance atteinte': 'badge-orange',
-    'Préparation terminée': 'badge-vert',
-    'Préparation abandonnée': 'badge-rouge'
+    'En préparation': 'badge-orange',
+    'Stage aujourd\'hui': 'badge-rouge',
+    'Stage passé': 'badge-rouge',
+    'Clôturé': 'badge-vert',
+    'Abandon': 'badge-gris'
   };
 
   return correspondances[statut] || 'badge-gris';
@@ -1494,10 +2917,17 @@ function initialiserPageFormateurs() {
         Array.isArray(formateurs) ? formateurs : [];
 
       afficherListeFormateurs();
+
+      if (!estAdministrateurApplication()) {
+        chargerMonRecapitulatifFormateur();
+      }
+
       masquerLoader();
     })
     .withFailureHandler(gererErreurServeur)
-    .getFormateurs();
+    .getFormateurs(
+      obtenirJetonAdministrateurApplication()
+    );
 }
 
 function afficherListeFormateurs() {
@@ -1544,6 +2974,20 @@ function afficherListeFormateurs() {
 
   corps.innerHTML = formateurs
     .map(function (formateur) {
+      const actionModifier = estAdministrateurApplication()
+        ? `
+          <button
+            type="button"
+            class="bouton-icone"
+            onclick="modifierFormateur('${formateur.idFormateur}')"
+            title="Modifier"
+            aria-label="Modifier ${echapperHtml(formateur.prenom)} ${echapperHtml(formateur.nom)}"
+          >
+            ✎
+          </button>
+        `
+        : '—';
+
       return `
         <tr>
           <td>
@@ -1556,15 +3000,7 @@ function afficherListeFormateurs() {
             </span>
           </td>
           <td class="colonne-actions">
-            <button
-              type="button"
-              class="bouton-icone"
-              onclick="modifierFormateur('${formateur.idFormateur}')"
-              title="Modifier"
-              aria-label="Modifier ${echapperHtml(formateur.prenom)} ${echapperHtml(formateur.nom)}"
-            >
-              ✎
-            </button>
+            ${actionModifier}
           </td>
         </tr>
       `;
@@ -1573,12 +3009,18 @@ function afficherListeFormateurs() {
 }
 
 function nouveauFormateur() {
+  if (!estAdministrateurApplication()) {
+    afficherToast('Accès réservé à l’administrateur.', true);
+    return;
+  }
+
   document
     .getElementById('formulaireFormateur')
     .reset();
 
   document.getElementById('formateurId').value = '';
   document.getElementById('formateurActif').checked = true;
+  document.getElementById('formateurEmail').value = '';
   document.getElementById(
     'titreModalFormateur'
   ).textContent = 'Nouveau formateur';
@@ -1591,6 +3033,11 @@ function nouveauFormateur() {
 }
 
 function modifierFormateur(idFormateur) {
+  if (!estAdministrateurApplication()) {
+    afficherToast('Accès réservé à l’administrateur.', true);
+    return;
+  }
+
   const formateur = etatApplication.formateurs.find(
     function (element) {
       return element.idFormateur === idFormateur;
@@ -1610,6 +3057,9 @@ function modifierFormateur(idFormateur) {
 
   document.getElementById('formateurPrenom').value =
     formateur.prenom;
+
+  document.getElementById('formateurEmail').value =
+    formateur.email || '';
 
   document.getElementById('formateurActif').checked =
     Boolean(formateur.actif);
@@ -1659,6 +3109,9 @@ function soumettreFormateur(evenement) {
     prenom: document.getElementById(
       'formateurPrenom'
     ).value,
+    email: document.getElementById(
+      'formateurEmail'
+    ).value,
     actif: document.getElementById(
       'formateurActif'
     ).checked
@@ -1689,7 +3142,109 @@ function soumettreFormateur(evenement) {
         true
       );
     })
-    .enregistrerFormateur(donnees);
+    .enregistrerFormateur(
+      donnees,
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+function chargerMonRecapitulatifFormateur() {
+  const bloc = document.getElementById(
+    'blocMonRecapitulatifFormateur'
+  );
+
+  if (!bloc) {
+    return;
+  }
+
+  bloc.classList.remove('masque');
+
+  google.script.run
+    .withSuccessHandler(afficherMonRecapitulatifFormateur)
+    .withFailureHandler(function (erreur) {
+      const contenu = document.getElementById(
+        'contenuMonRecapitulatifFormateur'
+      );
+
+      if (contenu) {
+        contenu.innerHTML = `
+          <div class="etat-vide">
+            ${echapperHtml(extraireMessageErreur(erreur))}
+          </div>
+        `;
+      }
+    })
+    .getMonRecapitulatifHeuresFormateur();
+}
+
+function afficherMonRecapitulatifFormateur(donnees) {
+  const resume = document.getElementById(
+    'resumeMonRecapitulatifFormateur'
+  );
+  const contenu = document.getElementById(
+    'contenuMonRecapitulatifFormateur'
+  );
+
+  if (!resume || !contenu) {
+    return;
+  }
+
+  if (!donnees.estIdentifie) {
+    resume.textContent =
+      'Adresse Google indisponible avec le déploiement actuel.';
+    contenu.innerHTML = `
+      <div class="etat-vide etat-acces-limite">
+        Ton récapitulatif ne peut pas être isolé tant que Google ne fournit pas ton adresse.
+      </div>
+    `;
+    return;
+  }
+
+  if (!donnees.formateurAssocie) {
+    resume.textContent = donnees.email;
+    contenu.innerHTML = `
+      <div class="etat-vide">
+        Aucun formateur n’est associé à cette adresse Google.
+      </div>
+    `;
+    return;
+  }
+
+  resume.textContent =
+    donnees.nombrePrestations +
+    (donnees.nombrePrestations > 1
+      ? ' prestations · '
+      : ' prestation · ') +
+    formaterHeuresFormation(donnees.totalHeures);
+
+  contenu.innerHTML = `
+    <div class="tableau-responsive">
+      <table class="tableau">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Formation</th>
+            <th>Durée</th>
+            <th>Indemnisation</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${(donnees.prestations || []).length
+            ? donnees.prestations.map(function (prestation) {
+              return `
+                <tr>
+                  <td>${afficherDateFrancaise(prestation.date) || '—'}</td>
+                  <td>${echapperHtml(prestation.formation || '—')}</td>
+                  <td>${formaterHeuresFormation(prestation.dureeHeures)}</td>
+                  <td>${echapperHtml(prestation.statut)}</td>
+                </tr>
+              `;
+            }).join('')
+            : '<tr><td colspan="4" class="etat-vide">Aucune prestation.</td></tr>'}
+        </tbody>
+      </table>
+    </div>
+  `;
 }
 
 function rechargerFormateurs() {
@@ -1704,7 +3259,9 @@ function rechargerFormateurs() {
       masquerLoader();
     })
     .withFailureHandler(gererErreurServeur)
-    .getFormateurs();
+    .getFormateurs(
+      obtenirJetonAdministrateurApplication()
+    );
 }
 
 /* =====================================================
@@ -2307,7 +3864,10 @@ function soumettreCategorieReferentiel(evenement) {
       bouton.textContent = 'Enregistrer';
       afficherToast(extraireMessageErreur(erreur), true);
     })
-    .enregistrerCategorieReferentiel(donnees);
+    .enregistrerCategorieReferentiel(
+      donnees,
+      obtenirJetonAdministrateurApplication()
+    );
 }
 
 function nouvelItemReferentiel() {
@@ -2538,7 +4098,10 @@ function soumettreItemReferentiel(evenement) {
         true
       );
     })
-    .enregistrerItemReferentiel(donnees);
+    .enregistrerItemReferentiel(
+      donnees,
+      obtenirJetonAdministrateurApplication()
+    );
 }
 
 function deplacerItemReferentiel(idItem, direction) {
@@ -2633,7 +4196,8 @@ function basculerItemReferentiel(cible, actifExplicite) {
     })
     .basculerActifItemReferentiel(
       idItem,
-      nouvelEtat
+      nouvelEtat,
+      obtenirJetonAdministrateurApplication()
     );
 }
 
@@ -2723,7 +4287,8 @@ function executerActionReferentiel(nomFonction, parametres) {
   if (nomFonction === 'deplacerItemReferentiel') {
     execution.deplacerItemReferentiel(
       parametres[0],
-      parametres[1]
+      parametres[1],
+      obtenirJetonAdministrateurApplication()
     );
     return;
   }
@@ -2731,7 +4296,8 @@ function executerActionReferentiel(nomFonction, parametres) {
   if (nomFonction === 'deplacerCategorieReferentiel') {
     execution.deplacerCategorieReferentiel(
       parametres[0],
-      parametres[1]
+      parametres[1],
+      obtenirJetonAdministrateurApplication()
     );
     return;
   }
@@ -2741,19 +4307,24 @@ function executerActionReferentiel(nomFonction, parametres) {
   ) {
     execution.basculerActifCategorieReferentiel(
       parametres[0],
-      parametres[1]
+      parametres[1],
+      obtenirJetonAdministrateurApplication()
     );
     return;
   }
 
   if (nomFonction === 'supprimerCategorieReferentiel') {
     execution.supprimerCategorieReferentiel(
-      parametres[0]
+      parametres[0],
+      obtenirJetonAdministrateurApplication()
     );
     return;
   }
 
-  execution.supprimerItemReferentiel(parametres[0]);
+  execution.supprimerItemReferentiel(
+    parametres[0],
+    obtenirJetonAdministrateurApplication()
+  );
 }
 
 /* =====================================================
@@ -2776,6 +4347,17 @@ function initialiserPageSessions() {
       afficherListeSessions();
       preparerFormulaireSession();
       masquerLoader();
+
+      const idSession =
+        etatApplication.sessionAConsulterDepuisAccueil;
+
+      if (idSession) {
+        etatApplication.sessionAConsulterDepuisAccueil = '';
+
+        window.setTimeout(function () {
+          consulterSession(idSession);
+        }, 50);
+      }
     }
   }
 
@@ -3023,6 +4605,25 @@ function afficherFicheSession(session) {
   modal.setAttribute('aria-labelledby', 'titreFicheSession');
   modal.dataset.sessionId = session.idSession;
 
+  const actionsEditionSession = peutGererSessionsApplication()
+    ? `
+      <button
+        type="button"
+        class="bouton-secondaire"
+        onclick="modifierSessionDepuisFiche()"
+      >
+        ✎ Modifier la séance
+      </button>
+      <button
+        type="button"
+        class="bouton-secondaire"
+        onclick="dupliquerSessionDepuisFiche()"
+      >
+        ⧉ Dupliquer la séance
+      </button>
+    `
+    : '';
+
   modal.innerHTML = `
     <article class="fiche-consultation fiche-session-consultation">
       <header class="fiche-consultation-barre fiche-session-barre">
@@ -3038,20 +4639,7 @@ function afficherFicheSession(session) {
         </div>
 
         <div class="actions-fiche-session">
-          <button
-            type="button"
-            class="bouton-secondaire"
-            onclick="modifierSessionDepuisFiche()"
-          >
-            ✎ Modifier la séance
-          </button>
-          <button
-            type="button"
-            class="bouton-secondaire"
-            onclick="dupliquerSessionDepuisFiche()"
-          >
-            ⧉ Dupliquer la séance
-          </button>
+          ${actionsEditionSession}
           <button
             type="button"
             class="bouton-principal bouton-fermer-fiche-session"
@@ -3306,6 +4894,14 @@ function afficherFormateursSession() {
 }
 
 function nouvelleSession() {
+  if (!peutGererSessionsApplication()) {
+    afficherToast(
+      'Utilisateur Google non identifiable. Vérifie le déploiement.',
+      true
+    );
+    return;
+  }
+
   const formulaire = document.getElementById(
     'formulaireSession'
   );
@@ -3367,6 +4963,7 @@ function reinitialiserEtatFormulaireSession() {
   etatApplication.idSessionSourceFormulaire = '';
   etatApplication.idsFormateursHistoriquesSession = {};
   etatApplication.idsStagiairesHistoriquesSession = {};
+  etatApplication.confirmationsStagiairesFermesSession = {};
 }
 
 function creerIdentifiantOperationSession() {
@@ -3382,6 +4979,14 @@ function creerIdentifiantOperationSession() {
 }
 
 function ouvrirFormulaireDepuisSession(session, mode) {
+  if (!peutGererSessionsApplication()) {
+    afficherToast(
+      'Utilisateur Google non identifiable. Vérifie le déploiement.',
+      true
+    );
+    return;
+  }
+
   if (!['modification', 'duplication'].includes(mode)) {
     afficherToast('Mode de séance invalide.', true);
     return;
@@ -3691,12 +5296,6 @@ function afficherStagiairesSession() {
   const stagiaires = etatApplication.stagiairesSession
     .filter(function (stagiaire) {
       return (
-        (
-          stagiaire.statut === 'À préparer' ||
-          etatApplication.idsStagiairesHistoriquesSession[
-            stagiaire.uuid
-          ]
-        ) &&
         stagiaire.formation === formation
       );
     });
@@ -3704,7 +5303,7 @@ function afficherStagiairesSession() {
   if (!stagiaires.length) {
     zone.innerHTML = `
       <div class="etat-selection-session">
-        Aucun stagiaire « À préparer » pour cette formation.
+        Aucun stagiaire pour cette formation.
       </div>
     `;
     mettreAJourCompteursParticipantsSession();
@@ -3719,14 +5318,14 @@ function afficherStagiairesSession() {
             type="checkbox"
             name="stagiaireSession"
             value="${echapperHtml(stagiaire.uuid)}"
-            onchange="changerStagiairesSession()"
+            onchange="changerStagiairesSession(this)"
           >
           <span>
             <strong>${echapperHtml(stagiaire.nom)}</strong>
             ${echapperHtml(stagiaire.prenom)}
-            ${stagiaire.statut === 'À préparer'
-              ? ''
-              : '<small class="indicateur-participant-historique-session">Historique · ' + echapperHtml(stagiaire.statut) + '</small>'}
+            <small class="indicateur-participant-historique-session">
+              ${echapperHtml(stagiaire.statut)}
+            </small>
           </span>
         </label>
       `;
@@ -3736,7 +5335,45 @@ function afficherStagiairesSession() {
   mettreAJourCompteursParticipantsSession();
 }
 
-function changerStagiairesSession() {
+function changerStagiairesSession(champ) {
+  if (champ) {
+    const stagiaire = etatApplication.stagiairesSession.find(
+      function (element) {
+        return element.uuid === champ.value;
+      }
+    );
+
+    if (!champ.checked) {
+      delete etatApplication
+        .confirmationsStagiairesFermesSession[champ.value];
+    } else if (stagiaire) {
+      if (stagiaire.statut === 'Stage passé') {
+        window.alert(
+          'Attention : la date de stage de ' +
+          stagiaire.prenom + ' ' + stagiaire.nom +
+          ' est passée. Le stagiaire peut tout de même être ajouté.'
+        );
+      }
+
+      if (['Clôturé', 'Abandon'].includes(stagiaire.statut)) {
+        const confirme = window.confirm(
+          stagiaire.prenom + ' ' + stagiaire.nom +
+          ' est au statut « ' + stagiaire.statut +
+          ' ». Confirmer explicitement son ajout à cette séance ?'
+        );
+
+        if (!confirme) {
+          champ.checked = false;
+          delete etatApplication
+            .confirmationsStagiairesFermesSession[champ.value];
+        } else {
+          etatApplication
+            .confirmationsStagiairesFermesSession[champ.value] = true;
+        }
+      }
+    }
+  }
+
   capturerValidationsSession();
   mettreAJourCompteursParticipantsSession();
   afficherValidationsSession();
@@ -4332,6 +5969,15 @@ function convertirHeureEnMinutes(heure) {
 
 function soumettreSession(evenement) {
   evenement.preventDefault();
+
+  if (!peutGererSessionsApplication()) {
+    afficherToast(
+      'Utilisateur Google non identifiable. Vérifie le déploiement.',
+      true
+    );
+    return;
+  }
+
   capturerValidationsSession();
 
   const formateurs = [...document.querySelectorAll(
@@ -4341,6 +5987,47 @@ function soumettreSession(evenement) {
   });
 
   const stagiaires = obtenirIdsStagiairesSession();
+
+  const stagiairesFermesSansConfirmation =
+    stagiaires.filter(function (idStagiaire) {
+      const stagiaire = etatApplication.stagiairesSession.find(
+        function (element) {
+          return element.uuid === idStagiaire;
+        }
+      );
+
+      return (
+        stagiaire &&
+        ['Clôturé', 'Abandon'].includes(stagiaire.statut) &&
+        !etatApplication.confirmationsStagiairesFermesSession[
+          idStagiaire
+        ] &&
+        !(
+          etatApplication.modeFormulaireSession === 'modification' &&
+          etatApplication.idsStagiairesHistoriquesSession[
+            idStagiaire
+          ]
+        )
+      );
+    });
+
+  if (stagiairesFermesSansConfirmation.length) {
+    const confirme = window.confirm(
+      'Cette séance contient un ou plusieurs stagiaires clôturés ou en abandon. Confirmer explicitement leur ajout ?'
+    );
+
+    if (!confirme) {
+      return;
+    }
+
+    stagiairesFermesSansConfirmation.forEach(
+      function (idStagiaire) {
+        etatApplication.confirmationsStagiairesFermesSession[
+          idStagiaire
+        ] = true;
+      }
+    );
+  }
 
   if (!formateurs.length) {
     afficherToast(
@@ -4399,6 +6086,11 @@ function soumettreSession(evenement) {
     ).value,
     formateurs: formateurs,
     stagiaires: stagiaires,
+    confirmationsStagiairesFermes: Object.keys(
+      etatApplication.confirmationsStagiairesFermesSession
+    ).filter(function (idStagiaire) {
+      return stagiaires.includes(idStagiaire);
+    }),
     itemsTravailles: itemsTravailles.map(
       function (item) {
         return item.idItem;
@@ -4470,6 +6162,3173 @@ function rechargerSessions() {
     })
     .withFailureHandler(gererErreurServeur)
     .getSessions();
+}
+
+/* =====================================================
+   INDEMNISATIONS
+===================================================== */
+
+function initialiserPageIndemnisations() {
+  afficherLoader();
+
+  google.script.run
+    .withSuccessHandler(function (donnees) {
+      appliquerDonneesIndemnisations(donnees);
+      masquerLoader();
+    })
+    .withFailureHandler(gererErreurServeur)
+    .getDonneesIndemnisations(
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+function appliquerDonneesIndemnisations(donnees) {
+  donnees = donnees || {};
+
+  etatApplication.prestationsIndemnisation =
+    Array.isArray(donnees.prestations)
+      ? donnees.prestations
+      : [];
+
+  etatApplication.formateursIndemnisation =
+    Array.isArray(donnees.formateurs)
+      ? donnees.formateurs
+      : [];
+
+  etatApplication.formationsIndemnisation =
+    Array.isArray(donnees.formations)
+      ? donnees.formations
+      : [];
+
+  etatApplication.statutsIndemnisation =
+    Array.isArray(donnees.statuts)
+      ? donnees.statuts
+      : [];
+
+  remplirFiltresIndemnisations();
+  filtrerIndemnisations();
+}
+
+function remplirFiltresIndemnisations() {
+  remplirSelectIndemnisation(
+    'filtreFormateurIndemnisation',
+    etatApplication.formateursIndemnisation.map(
+      function (formateur) {
+        return {
+          valeur: formateur.idFormateur,
+          libelle: formateur.libelle
+        };
+      }
+    ),
+    'Tous les formateurs'
+  );
+
+  remplirSelectIndemnisation(
+    'filtreFormationIndemnisation',
+    etatApplication.formationsIndemnisation.map(
+      function (formation) {
+        return {
+          valeur: formation,
+          libelle: formation
+        };
+      }
+    ),
+    'Toutes les formations'
+  );
+
+  remplirSelectIndemnisation(
+    'filtreStatutIndemnisation',
+    etatApplication.statutsIndemnisation.map(
+      function (statut) {
+        return {
+          valeur: statut,
+          libelle: statut
+        };
+      }
+    ),
+    'Tous les statuts'
+  );
+}
+
+function remplirSelectIndemnisation(
+  identifiant,
+  options,
+  libelleInitial
+) {
+  const select = document.getElementById(identifiant);
+
+  if (!select) {
+    return;
+  }
+
+  const valeurActuelle = select.value;
+
+  select.innerHTML = [
+    '<option value="">' +
+      echapperHtml(libelleInitial) +
+    '</option>'
+  ].concat(
+    options.map(function (option) {
+      return (
+        '<option value="' +
+          echapperHtml(option.valeur) +
+        '">' +
+          echapperHtml(option.libelle) +
+        '</option>'
+      );
+    })
+  ).join('');
+
+  if (
+    [...select.options].some(function (option) {
+      return option.value === valeurActuelle;
+    })
+  ) {
+    select.value = valeurActuelle;
+  }
+}
+
+function filtrerIndemnisations() {
+  const champDateDebut = document.getElementById(
+    'filtreDateDebutIndemnisation'
+  );
+  const champDateFin = document.getElementById(
+    'filtreDateFinIndemnisation'
+  );
+  const champFormateur = document.getElementById(
+    'filtreFormateurIndemnisation'
+  );
+  const champFormation = document.getElementById(
+    'filtreFormationIndemnisation'
+  );
+  const champStatut = document.getElementById(
+    'filtreStatutIndemnisation'
+  );
+  const champNonDemandees = document.getElementById(
+    'filtreNonDemandeesIndemnisation'
+  );
+
+  if (
+    !champDateDebut ||
+    !champDateFin ||
+    !champFormateur ||
+    !champFormation ||
+    !champStatut ||
+    !champNonDemandees
+  ) {
+    return;
+  }
+
+  const dateDebut = champDateDebut.value;
+  const dateFin = champDateFin.value;
+  const idFormateur = champFormateur.value;
+  const formation = champFormation.value;
+  const statut = champStatut.value;
+  const uniquementNonDemandees = champNonDemandees.checked;
+
+  champStatut.disabled = uniquementNonDemandees;
+
+  const prestationsFiltrees =
+    etatApplication.prestationsIndemnisation.filter(
+      function (prestation) {
+        return (
+          (!dateDebut || prestation.dateSession >= dateDebut) &&
+          (!dateFin || prestation.dateSession <= dateFin) &&
+          (!idFormateur ||
+            prestation.idFormateur === idFormateur) &&
+          (!formation || prestation.formation === formation) &&
+          (uniquementNonDemandees
+            ? prestation.statut === 'À demander'
+            : (!statut || prestation.statut === statut))
+        );
+      }
+    );
+
+  etatApplication.prestationsFiltreesIndemnisation =
+    prestationsFiltrees;
+
+  const idsVisibles = new Set(
+    prestationsFiltrees.map(function (prestation) {
+      return prestation.idPrestation;
+    })
+  );
+
+  Object.keys(
+    etatApplication.selectionPrestationsIndemnisation
+  ).forEach(function (idPrestation) {
+    if (!idsVisibles.has(idPrestation)) {
+      delete etatApplication
+        .selectionPrestationsIndemnisation[idPrestation];
+    }
+  });
+
+  afficherListeIndemnisations();
+  mettreAJourSyntheseIndemnisations();
+  mettreAJourSelectionIndemnisations();
+}
+
+function afficherListeIndemnisations() {
+  const corps = document.getElementById(
+    'corpsTableauIndemnisations'
+  );
+  const compteur = document.getElementById(
+    'compteurIndemnisations'
+  );
+
+  if (!corps || !compteur) {
+    return;
+  }
+
+  const prestations =
+    etatApplication.prestationsFiltreesIndemnisation;
+
+  compteur.textContent = prestations.length +
+    (prestations.length > 1
+      ? ' prestations affichées'
+      : ' prestation affichée');
+
+  if (!prestations.length) {
+    corps.innerHTML = `
+      <tr>
+        <td colspan="11" class="etat-vide">
+          Aucune prestation ne correspond aux filtres sélectionnés.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  corps.innerHTML = prestations.map(function (prestation) {
+    const selectionnee = Boolean(
+      etatApplication.selectionPrestationsIndemnisation[
+        prestation.idPrestation
+      ]
+    );
+
+    const avertissementDoublon = prestation.doublonPotentiel
+      ? '<span class="alerte-doublon-indemnisation" ' +
+        'title="Plusieurs lignes existent pour cette séance et ce formateur">⚠</span>'
+      : '';
+
+    return `
+      <tr class="${selectionnee ? 'ligne-selectionnee-indemnisation' : ''}">
+        <td class="colonne-selection-indemnisation">
+          <input
+            type="checkbox"
+            class="case-prestation-indemnisation"
+            data-id-prestation="${echapperHtml(prestation.idPrestation)}"
+            ${selectionnee ? 'checked' : ''}
+            onchange="changerSelectionPrestationIndemnisation(this)"
+            aria-label="Sélectionner la prestation de ${echapperHtml(prestation.formateur)}"
+          >
+        </td>
+        <td>${echapperHtml(afficherDateFrancaise(prestation.dateSession) || '—')}</td>
+        <td><strong>${echapperHtml(prestation.formation || '—')}</strong></td>
+        <td>
+          ${echapperHtml(prestation.formateur || '—')}
+          ${avertissementDoublon}
+        </td>
+        <td>${echapperHtml(prestation.heureDebut || '—')}</td>
+        <td>${echapperHtml(prestation.heureFin || '—')}</td>
+        <td>${echapperHtml(formaterHeuresFormation(prestation.dureeHeures))}</td>
+        <td>
+          <span class="badge-statut ${obtenirClasseStatutIndemnisation(prestation.statut)}">
+            ${echapperHtml(prestation.statut)}
+          </span>
+        </td>
+        <td>${echapperHtml(afficherDateFrancaise(prestation.dateDemande) || '—')}</td>
+        <td class="cellule-reference-indemnisation">
+          ${echapperHtml(prestation.referenceDemande || '—')}
+        </td>
+        <td class="cellule-remarque-indemnisation">
+          ${echapperHtml(prestation.remarqueAdministrative || '—')}
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function obtenirClasseStatutIndemnisation(statut) {
+  const classes = {
+    'À demander': 'badge-orange',
+    'Demande envoyée': 'badge-bleu',
+    'Indemnisée': 'badge-vert',
+    'À corriger': 'badge-rouge'
+  };
+
+  return classes[statut] || 'badge-gris';
+}
+
+function selectionnerToutesIndemnisations(champ) {
+  etatApplication.prestationsFiltreesIndemnisation.forEach(
+    function (prestation) {
+      if (champ.checked) {
+        etatApplication.selectionPrestationsIndemnisation[
+          prestation.idPrestation
+        ] = true;
+      } else {
+        delete etatApplication
+          .selectionPrestationsIndemnisation[
+            prestation.idPrestation
+          ];
+      }
+    }
+  );
+
+  afficherListeIndemnisations();
+  mettreAJourSelectionIndemnisations();
+}
+
+function changerSelectionPrestationIndemnisation(champ) {
+  const idPrestation = champ.dataset.idPrestation;
+
+  if (!idPrestation) {
+    return;
+  }
+
+  if (champ.checked) {
+    etatApplication.selectionPrestationsIndemnisation[
+      idPrestation
+    ] = true;
+  } else {
+    delete etatApplication
+      .selectionPrestationsIndemnisation[idPrestation];
+  }
+
+  const ligne = champ.closest('tr');
+
+  if (ligne) {
+    ligne.classList.toggle(
+      'ligne-selectionnee-indemnisation',
+      champ.checked
+    );
+  }
+
+  mettreAJourSelectionIndemnisations();
+}
+
+function obtenirPrestationsSelectionneesIndemnisation() {
+  const idsSelectionnes = new Set(
+    Object.keys(
+      etatApplication.selectionPrestationsIndemnisation
+    ).filter(function (idPrestation) {
+      return etatApplication
+        .selectionPrestationsIndemnisation[idPrestation];
+    })
+  );
+
+  return etatApplication.prestationsIndemnisation.filter(
+    function (prestation) {
+      return idsSelectionnes.has(prestation.idPrestation);
+    }
+  );
+}
+
+function mettreAJourSelectionIndemnisations() {
+  const prestationsSelectionnees =
+    obtenirPrestationsSelectionneesIndemnisation();
+
+  const idsSelectionnes = new Set(
+    prestationsSelectionnees.map(function (prestation) {
+      return prestation.idPrestation;
+    })
+  );
+
+  const caseGlobale = document.getElementById(
+    'selectionToutesIndemnisations'
+  );
+
+  if (caseGlobale) {
+    const nombreVisibles =
+      etatApplication.prestationsFiltreesIndemnisation.length;
+    const nombreVisiblesSelectionnees =
+      etatApplication.prestationsFiltreesIndemnisation.filter(
+        function (prestation) {
+          return idsSelectionnes.has(prestation.idPrestation);
+        }
+      ).length;
+
+    caseGlobale.checked = nombreVisibles > 0 &&
+      nombreVisiblesSelectionnees === nombreVisibles;
+    caseGlobale.indeterminate = nombreVisiblesSelectionnees > 0 &&
+      nombreVisiblesSelectionnees < nombreVisibles;
+  }
+
+  document
+    .querySelectorAll('.action-selection-indemnisation')
+    .forEach(function (bouton) {
+      bouton.disabled = !prestationsSelectionnees.length;
+    });
+
+  const heures = prestationsSelectionnees.reduce(
+    function (total, prestation) {
+      return total + Number(prestation.dureeHeures || 0);
+    },
+    0
+  );
+
+  const nombre = document.getElementById(
+    'nombreSelectionIndemnisation'
+  );
+  const heuresElement = document.getElementById(
+    'heuresSelectionIndemnisation'
+  );
+
+  if (nombre) {
+    nombre.textContent = prestationsSelectionnees.length;
+  }
+
+  if (heuresElement) {
+    heuresElement.textContent = formaterHeuresFormation(heures);
+  }
+
+  afficherRecapitulatifFormateursIndemnisation(
+    prestationsSelectionnees
+  );
+}
+
+function mettreAJourSyntheseIndemnisations() {
+  const prestations =
+    etatApplication.prestationsFiltreesIndemnisation;
+
+  const prestationsADemander = prestations.filter(
+    function (prestation) {
+      return prestation.statut === 'À demander';
+    }
+  );
+
+  const heures = prestations.reduce(
+    function (total, prestation) {
+      return total + Number(prestation.dureeHeures || 0);
+    },
+    0
+  );
+
+  const heuresADemander = prestationsADemander.reduce(
+    function (total, prestation) {
+      return total + Number(prestation.dureeHeures || 0);
+    },
+    0
+  );
+
+  const valeurs = {
+    nombrePrestationsIndemnisation: prestations.length,
+    heuresPrestationsIndemnisation:
+      formaterHeuresFormation(heures),
+    prestationsADemanderIndemnisation:
+      prestationsADemander.length,
+    heuresADemanderIndemnisation:
+      formaterHeuresFormation(heuresADemander)
+  };
+
+  Object.keys(valeurs).forEach(function (identifiant) {
+    const element = document.getElementById(identifiant);
+
+    if (element) {
+      element.textContent = valeurs[identifiant];
+    }
+  });
+}
+
+function grouperPrestationsParFormateurIndemnisation(
+  prestations
+) {
+  const groupes = {};
+
+  prestations.forEach(function (prestation) {
+    const cle = prestation.idFormateur ||
+      prestation.formateur || 'sans-formateur';
+
+    if (!groupes[cle]) {
+      groupes[cle] = {
+        idFormateur: prestation.idFormateur,
+        formateur: prestation.formateur ||
+          'Formateur non identifié',
+        prestations: []
+      };
+    }
+
+    groupes[cle].prestations.push(prestation);
+  });
+
+  return Object.keys(groupes)
+    .map(function (cle) {
+      const groupe = groupes[cle];
+      const idsSessions = new Set(
+        groupe.prestations.map(function (prestation) {
+          return prestation.idSession;
+        }).filter(Boolean)
+      );
+
+      groupe.nombreSeances = idsSessions.size ||
+        groupe.prestations.length;
+      groupe.totalHeures = groupe.prestations.reduce(
+        function (total, prestation) {
+          return total + Number(prestation.dureeHeures || 0);
+        },
+        0
+      );
+
+      groupe.prestations.sort(function (a, b) {
+        return String(b.dateSession).localeCompare(
+          String(a.dateSession)
+        );
+      });
+
+      return groupe;
+    })
+    .sort(function (a, b) {
+      return a.formateur.localeCompare(
+        b.formateur,
+        'fr',
+        { sensitivity: 'base' }
+      );
+    });
+}
+
+function afficherRecapitulatifFormateursIndemnisation(
+  prestations
+) {
+  const zone = document.getElementById(
+    'recapitulatifFormateursIndemnisation'
+  );
+
+  if (!zone) {
+    return;
+  }
+
+  if (!prestations.length) {
+    zone.innerHTML = `
+      <div class="etat-vide">
+        Sélectionne une ou plusieurs prestations pour afficher le récapitulatif.
+      </div>
+    `;
+    return;
+  }
+
+  zone.innerHTML = grouperPrestationsParFormateurIndemnisation(
+    prestations
+  ).map(function (groupe) {
+    const lignes = groupe.prestations.map(
+      function (prestation) {
+        return `
+          <tr>
+            <td>${echapperHtml(afficherDateFrancaise(prestation.dateSession) || '—')}</td>
+            <td>${echapperHtml(prestation.formation || '—')}</td>
+            <td>${echapperHtml(prestation.heureDebut || '—')}–${echapperHtml(prestation.heureFin || '—')}</td>
+            <td>${echapperHtml(formaterHeuresFormation(prestation.dureeHeures))}</td>
+            <td>
+              <span class="badge-statut ${obtenirClasseStatutIndemnisation(prestation.statut)}">
+                ${echapperHtml(prestation.statut)}
+              </span>
+            </td>
+          </tr>
+        `;
+      }
+    ).join('');
+
+    return `
+      <section class="recapitulatif-formateur-indemnisation">
+        <div class="entete-formateur-indemnisation">
+          <h3>${echapperHtml(groupe.formateur)}</h3>
+          <div>
+            <strong>${groupe.nombreSeances}</strong>
+            ${groupe.nombreSeances > 1 ? ' séances' : ' séance'}
+            · <strong>${echapperHtml(formaterHeuresFormation(groupe.totalHeures))}</strong>
+          </div>
+        </div>
+        <div class="tableau-responsive">
+          <table class="tableau tableau-recapitulatif-indemnisation">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Formation</th>
+                <th>Horaires</th>
+                <th>Durée</th>
+                <th>Statut</th>
+              </tr>
+            </thead>
+            <tbody>${lignes}</tbody>
+          </table>
+        </div>
+      </section>
+    `;
+  }).join('');
+}
+
+function ouvrirActionIndemnisation(statut) {
+  const prestations =
+    obtenirPrestationsSelectionneesIndemnisation();
+
+  if (!prestations.length) {
+    afficherToast(
+      'Sélectionne au moins une prestation.',
+      true
+    );
+    return;
+  }
+
+  const statutsAutorises = [
+    'À demander',
+    'Demande envoyée',
+    'Indemnisée',
+    'À corriger'
+  ];
+
+  if (!statutsAutorises.includes(statut)) {
+    afficherToast('Le statut demandé est invalide.', true);
+    return;
+  }
+
+  const contientIndemnisee = prestations.some(
+    function (prestation) {
+      return prestation.statut === 'Indemnisée';
+    }
+  );
+
+  document.getElementById(
+    'statutCibleIndemnisation'
+  ).value = statut;
+
+  document.getElementById(
+    'titreActionIndemnisation'
+  ).textContent = statut === 'À demander'
+    ? 'Revenir à « À demander »'
+    : 'Marquer comme « ' + statut + ' »';
+
+  document.getElementById(
+    'sousTitreActionIndemnisation'
+  ).textContent = prestations.length +
+    (prestations.length > 1
+      ? ' prestations sélectionnées.'
+      : ' prestation sélectionnée.');
+
+  document.getElementById(
+    'referenceActionIndemnisation'
+  ).value = '';
+
+  document.getElementById(
+    'remarqueActionIndemnisation'
+  ).value = '';
+
+  document.getElementById(
+    'confirmationIndemnisee'
+  ).checked = false;
+
+  document.getElementById(
+    'groupeReferenceIndemnisation'
+  ).classList.toggle(
+    'masque',
+    statut !== 'Demande envoyée'
+  );
+
+  document.getElementById(
+    'groupeConfirmationIndemnisee'
+  ).classList.toggle(
+    'masque',
+    !(contientIndemnisee && statut !== 'Indemnisée')
+  );
+
+  document.getElementById(
+    'modalActionIndemnisation'
+  ).classList.remove('masque');
+
+  document.body.classList.add('modal-ouverte');
+
+  window.setTimeout(function () {
+    const cible = statut === 'Demande envoyée'
+      ? document.getElementById(
+        'referenceActionIndemnisation'
+      )
+      : document.getElementById(
+        'remarqueActionIndemnisation'
+      );
+
+    if (cible) {
+      cible.focus();
+    }
+  }, 100);
+}
+
+function fermerActionIndemnisation() {
+  const modal = document.getElementById(
+    'modalActionIndemnisation'
+  );
+
+  if (modal) {
+    modal.classList.add('masque');
+  }
+
+  document.body.classList.remove('modal-ouverte');
+}
+
+function soumettreActionIndemnisation(evenement) {
+  evenement.preventDefault();
+
+  const prestations =
+    obtenirPrestationsSelectionneesIndemnisation();
+  const statut = document.getElementById(
+    'statutCibleIndemnisation'
+  ).value;
+  const confirmationVisible = !document.getElementById(
+    'groupeConfirmationIndemnisee'
+  ).classList.contains('masque');
+  const confirmation = document.getElementById(
+    'confirmationIndemnisee'
+  ).checked;
+
+  if (!prestations.length) {
+    fermerActionIndemnisation();
+    afficherToast(
+      'La sélection est vide. Aucune prestation modifiée.',
+      true
+    );
+    return;
+  }
+
+  if (confirmationVisible && !confirmation) {
+    afficherToast(
+      'Confirme explicitement la modification de la prestation déjà indemnisée.',
+      true
+    );
+    return;
+  }
+
+  const bouton = document.getElementById(
+    'boutonConfirmerActionIndemnisation'
+  );
+
+  bouton.disabled = true;
+  bouton.textContent = 'Mise à jour…';
+
+  google.script.run
+    .withSuccessHandler(function (resultat) {
+      bouton.disabled = false;
+      bouton.textContent = 'Confirmer';
+      fermerActionIndemnisation();
+
+      etatApplication.selectionPrestationsIndemnisation = {};
+
+      afficherToast(
+        resultat.message || 'Prestations mises à jour.',
+        false
+      );
+
+      rechargerIndemnisations();
+    })
+    .withFailureHandler(function (erreur) {
+      bouton.disabled = false;
+      bouton.textContent = 'Confirmer';
+
+      afficherToast(
+        extraireMessageErreur(erreur),
+        true
+      );
+    })
+    .changerStatutPrestationsIndemnisation(
+      {
+        idsPrestations: prestations.map(
+          function (prestation) {
+            return prestation.idPrestation;
+          }
+        ),
+        statut: statut,
+        reference: document.getElementById(
+          'referenceActionIndemnisation'
+        ).value,
+        remarque: document.getElementById(
+          'remarqueActionIndemnisation'
+        ).value,
+        confirmationIndemnisee: confirmation,
+        idOperation: creerIdentifiantOperationIndemnisation()
+      },
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+function creerIdentifiantOperationIndemnisation() {
+  if (
+    window.crypto &&
+    typeof window.crypto.randomUUID === 'function'
+  ) {
+    return window.crypto.randomUUID();
+  }
+
+  return 'indem-' + Date.now() + '-' +
+    Math.random().toString(36).slice(2, 12);
+}
+
+function rechargerIndemnisations() {
+  afficherLoader();
+
+  google.script.run
+    .withSuccessHandler(function (donnees) {
+      appliquerDonneesIndemnisations(donnees);
+      masquerLoader();
+    })
+    .withFailureHandler(gererErreurServeur)
+    .getDonneesIndemnisations(
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+function reinitialiserFiltresIndemnisations() {
+  [
+    'filtreDateDebutIndemnisation',
+    'filtreDateFinIndemnisation',
+    'filtreFormateurIndemnisation',
+    'filtreFormationIndemnisation',
+    'filtreStatutIndemnisation'
+  ].forEach(function (identifiant) {
+    const element = document.getElementById(identifiant);
+
+    if (element) {
+      element.value = '';
+    }
+  });
+
+  const nonDemandees = document.getElementById(
+    'filtreNonDemandeesIndemnisation'
+  );
+
+  if (nonDemandees) {
+    nonDemandees.checked = false;
+  }
+
+  etatApplication.selectionPrestationsIndemnisation = {};
+  filtrerIndemnisations();
+}
+
+function ouvrirEtatImprimableIndemnisations() {
+  const selection =
+    obtenirPrestationsSelectionneesIndemnisation();
+
+  const prestations = selection.length
+    ? selection
+    : etatApplication.prestationsFiltreesIndemnisation;
+
+  if (!prestations.length) {
+    afficherToast(
+      'Aucune prestation à inclure dans l’état.',
+      true
+    );
+    return;
+  }
+
+  fermerEtatImprimableIndemnisations();
+
+  const dateDebut = document.getElementById(
+    'filtreDateDebutIndemnisation'
+  ).value;
+  const dateFin = document.getElementById(
+    'filtreDateFinIndemnisation'
+  ).value;
+
+  let periode = 'Toutes périodes';
+
+  if (dateDebut || dateFin) {
+    periode = 'Période : ' +
+      (dateDebut
+        ? 'du ' + afficherDateFrancaise(dateDebut)
+        : 'jusqu’au') +
+      (dateFin
+        ? ' au ' + afficherDateFrancaise(dateFin)
+        : ' à aujourd’hui');
+  }
+
+  const groupes =
+    grouperPrestationsParFormateurIndemnisation(
+      prestations
+    );
+
+  const contenuGroupes = groupes.map(function (groupe) {
+    const lignes = groupe.prestations.map(
+      function (prestation) {
+        return `
+          <tr>
+            <td>${echapperHtml(afficherDateFrancaise(prestation.dateSession) || '—')}</td>
+            <td>${echapperHtml(prestation.formation || '—')}</td>
+            <td>${echapperHtml(prestation.heureDebut || '—')}–${echapperHtml(prestation.heureFin || '—')}</td>
+            <td>${echapperHtml(formaterHeuresFormation(prestation.dureeHeures))}</td>
+            <td>${echapperHtml(prestation.statut || '—')}</td>
+            <td>${echapperHtml(afficherDateFrancaise(prestation.dateDemande) || '—')}</td>
+            <td>${echapperHtml(prestation.referenceDemande || '—')}</td>
+          </tr>
+        `;
+      }
+    ).join('');
+
+    return `
+      <section class="groupe-etat-indemnisation">
+        <div class="entete-groupe-etat-indemnisation">
+          <h2>${echapperHtml(groupe.formateur)}</h2>
+          <div>
+            ${groupe.nombreSeances}
+            ${groupe.nombreSeances > 1 ? 'séances' : 'séance'}
+            · ${echapperHtml(formaterHeuresFormation(groupe.totalHeures))}
+          </div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Formation</th>
+              <th>Horaires</th>
+              <th>Durée</th>
+              <th>Statut</th>
+              <th>Date demande</th>
+              <th>Référence</th>
+            </tr>
+          </thead>
+          <tbody>${lignes}</tbody>
+        </table>
+      </section>
+    `;
+  }).join('');
+
+  const etat = document.createElement('div');
+
+  etat.id = 'etatImprimableIndemnisations';
+  etat.className = 'etat-impression-indemnisation';
+  etat.innerHTML = `
+    <div class="barre-etat-impression">
+      <div>
+        <strong>Aperçu avant impression</strong>
+        <span>${selection.length ? 'Sélection actuelle' : 'Résultats filtrés'}</span>
+      </div>
+      <div class="actions-etat-impression">
+        <button
+          type="button"
+          class="bouton-secondaire"
+          onclick="fermerEtatImprimableIndemnisations()"
+        >Fermer</button>
+        <button
+          type="button"
+          class="bouton-principal"
+          onclick="window.print()"
+        >Imprimer / Enregistrer en PDF</button>
+      </div>
+    </div>
+    <article class="document-etat-indemnisation">
+      <header class="entete-document-indemnisation">
+        <div>
+          <div class="marque-etat-indemnisation">PrepFormation</div>
+          <h1>État d’indemnisation des formateurs</h1>
+          <p>${echapperHtml(periode)}</p>
+        </div>
+        <div class="date-generation-indemnisation">
+          Édité le ${echapperHtml(new Date().toLocaleDateString('fr-FR'))}
+        </div>
+      </header>
+      ${contenuGroupes}
+      <footer>
+        ${prestations.length} prestation${prestations.length > 1 ? 's' : ''}
+        · ${echapperHtml(formaterHeuresFormation(
+          prestations.reduce(function (total, prestation) {
+            return total + Number(prestation.dureeHeures || 0);
+          }, 0)
+        ))}
+      </footer>
+    </article>
+  `;
+
+  document.body.appendChild(etat);
+  document.body.classList.add('etat-impression-ouvert');
+}
+
+function fermerEtatImprimableIndemnisations() {
+  const etat = document.getElementById(
+    'etatImprimableIndemnisations'
+  );
+
+  if (etat) {
+    etat.remove();
+  }
+
+  document.body.classList.remove('etat-impression-ouvert');
+}
+
+/* =====================================================
+   ADMINISTRATION
+===================================================== */
+
+function initialiserPageAdministration() {
+  if (!estAdministrateurApplication()) {
+    afficherToast('Accès réservé à l’administrateur.', true);
+    return;
+  }
+
+  afficherLoader();
+
+  google.script.run
+    .withSuccessHandler(function (donnees) {
+      etatApplication.formationsAdministration =
+        Array.isArray(donnees.formations)
+          ? donnees.formations
+          : [];
+      etatApplication.diagnosticAdministration =
+        donnees.diagnostic || null;
+      etatApplication.sauvegardesAdministration =
+        donnees.sauvegardes || null;
+      etatApplication.restaurationAdministration =
+        donnees.restauration || null;
+
+      afficherDiagnosticAdministration(donnees.session || {});
+      afficherDiagnosticBaseAdministration(
+        etatApplication.diagnosticAdministration
+      );
+      afficherSauvegardesAdministration(
+        etatApplication.sauvegardesAdministration
+      );
+      afficherInventaireSauvegardesAdministration(
+        (etatApplication.sauvegardesAdministration || {})
+          .inventaire
+      );
+      afficherEtatRestaurationAdministration(
+        etatApplication.restaurationAdministration
+      );
+      afficherFormationsAdministration();
+      masquerLoader();
+    })
+    .withFailureHandler(gererErreurServeur)
+    .getDonneesAdministration(
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+function afficherDiagnosticAdministration(session) {
+  const zone = document.getElementById(
+    'diagnosticIdentificationAdministration'
+  );
+
+  if (!zone) {
+    return;
+  }
+
+  zone.innerHTML = `
+    <strong>Administration déverrouillée</strong>
+    <span>
+      Session ${echapperHtml(
+        session.identifiantSessionAdministration || 'active'
+      )} · expiration après 30 minutes d’inactivité
+    </span>
+  `;
+}
+
+function afficherDiagnosticBaseAdministration(rapport) {
+  rapport = rapport || {};
+  const resume = rapport.resume || {};
+  const migrations = Array.isArray(rapport.migrations)
+    ? rapport.migrations
+    : [];
+  const feuilles = Array.isArray(rapport.feuilles)
+    ? rapport.feuilles
+    : [];
+  const erreurs = Array.isArray(rapport.erreurs)
+    ? rapport.erreurs
+    : [];
+  const valeurs = {
+    versionSchemaAdministration:
+      String(rapport.versionSchema || 0) +
+      ' / ' + String(rapport.versionCible || 0),
+    nombreMigrationsAdministration:
+      migrations.filter(function (migration) {
+        return migration.executee;
+      }).length + ' / ' + migrations.length,
+    integriteFeuillesAdministration:
+      Number(resume.feuillesConformes || 0) +
+      ' / ' + Number(resume.nombreFeuilles || feuilles.length),
+    nombreErreursAdministration:
+      String(Number(resume.totalErreurs || erreurs.length))
+  };
+
+  Object.keys(valeurs).forEach(function (identifiant) {
+    const element = document.getElementById(identifiant);
+
+    if (element) {
+      element.textContent = valeurs[identifiant];
+    }
+  });
+
+  const listeMigrations = document.getElementById(
+    'listeMigrationsAdministration'
+  );
+
+  if (listeMigrations) {
+    listeMigrations.innerHTML = migrations.length
+      ? migrations.map(function (migration) {
+        return `
+          <div class="ligne-diagnostic-administration ${migration.executee ? 'diagnostic-ok' : 'diagnostic-attente'}">
+            <span>${migration.executee ? '✔' : '○'}</span>
+            <span>
+              <strong>Migration ${Number(migration.version) || 0}</strong>
+              <small>${echapperHtml(migration.nom || '')}</small>
+            </span>
+          </div>
+        `;
+      }).join('')
+      : '<div class="etat-vide">Aucune migration déclarée.</div>';
+  }
+
+  const listeFeuilles = document.getElementById(
+    'listeFeuillesAdministration'
+  );
+
+  if (listeFeuilles) {
+    listeFeuilles.innerHTML = feuilles.map(function (feuille) {
+      return `
+        <div class="ligne-diagnostic-administration ${feuille.conforme ? 'diagnostic-ok' : 'diagnostic-erreur'}">
+          <span>${feuille.conforme ? '✔' : '!'}</span>
+          <span>
+            <strong>${echapperHtml(feuille.nom || '')}</strong>
+            <small>
+              ${feuille.conforme
+                ? Number(feuille.nombreLignes || 0) + ' ligne(s) de données'
+                : 'Colonnes manquantes : ' + echapperHtml(
+                  (feuille.colonnesManquantes || []).join(', ')
+                )}
+            </small>
+          </span>
+        </div>
+      `;
+    }).join('');
+  }
+
+  const listeErreurs = document.getElementById(
+    'listeErreursAdministration'
+  );
+
+  if (listeErreurs) {
+    if (!erreurs.length) {
+      listeErreurs.innerHTML = `
+        <div class="etat-integrite-valide-administration">
+          ✔ Aucune erreur d’intégrité détectée.
+        </div>
+      `;
+    } else {
+      listeErreurs.innerHTML = `
+        <div class="liste-erreurs-integrite-administration">
+          ${erreurs.map(function (erreur) {
+            return `
+              <div>
+                <strong>${echapperHtml(erreur.feuille || erreur.type || 'Erreur')}</strong>
+                <span>${echapperHtml(erreur.message || '')}</span>
+              </div>
+            `;
+          }).join('')}
+        </div>
+        ${rapport.limiteErreursAtteinte
+          ? '<p class="avertissement-diagnostic-administration">Le rapport est limité aux 500 premières erreurs.</p>'
+          : ''}
+      `;
+    }
+  }
+}
+
+function lancerDiagnosticAdministration() {
+  if (!estAdministrateurApplication()) {
+    afficherToast('Accès réservé à l’administrateur.', true);
+    return;
+  }
+
+  afficherLoader();
+
+  google.script.run
+    .withSuccessHandler(function (rapport) {
+      etatApplication.diagnosticAdministration = rapport;
+      afficherDiagnosticBaseAdministration(rapport);
+      masquerLoader();
+      afficherToast('Diagnostic terminé.', false);
+    })
+    .withFailureHandler(gererErreurServeur)
+    .verifierIntegriteBase(
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+function executerMigrationsAdministration() {
+  if (!estAdministrateurApplication()) {
+    afficherToast('Accès réservé à l’administrateur.', true);
+    return;
+  }
+
+  afficherLoader();
+
+  google.script.run
+    .withSuccessHandler(function (resultat) {
+      afficherToast(resultat.message, false);
+      lancerDiagnosticAdministration();
+    })
+    .withFailureHandler(gererErreurServeur)
+    .executerMigrations(
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+
+function mettreAJourCompteurCommentaireSauvegarde() {
+  const champ = document.getElementById(
+    'commentaireSauvegardeAdministration'
+  );
+  const compteur = document.getElementById(
+    'compteurCommentaireSauvegardeAdministration'
+  );
+
+  if (champ && compteur) {
+    compteur.textContent = champ.value.length + ' / 500';
+  }
+}
+
+
+function afficherSauvegardesAdministration(etat) {
+  const zone = document.getElementById(
+    'resultatDerniereSauvegardeAdministration'
+  );
+
+  if (!zone) {
+    return;
+  }
+
+  etat = etat || {};
+
+  if (etat.erreur) {
+    zone.innerHTML = `
+      <div class="erreur-sauvegarde-administration">
+        <strong>Stockage Drive indisponible</strong>
+        <span>${echapperHtml(etat.erreur)}</span>
+      </div>
+    `;
+    return;
+  }
+
+  const sauvegarde = etat.derniereSauvegarde;
+
+  if (!sauvegarde) {
+    zone.innerHTML = `
+      <div class="etat-vide etat-vide-sauvegarde">
+        Aucune sauvegarde manuelle n’a encore été créée.
+      </div>
+    `;
+    return;
+  }
+
+  const counts = sauvegarde.counts || {};
+  const conforme = sauvegarde.integrityStatus === 'CONFORME';
+  const verificationOk = Boolean(
+    sauvegarde.verificationIntegrite
+  );
+
+  zone.innerHTML = `
+    <div class="entete-resultat-sauvegarde">
+      <div>
+        <span class="sur-titre-sauvegarde">Dernière sauvegarde</span>
+        <h3>${echapperHtml(sauvegarde.fileName || 'Sauvegarde JSON')}</h3>
+        <p>
+          ${echapperHtml(
+            formaterDateSauvegardeAdministration_(
+              sauvegarde.createdAt
+            )
+          )}
+          · ${echapperHtml(
+            formaterTailleSauvegardeAdministration_(
+              sauvegarde.fileSizeBytes
+            )
+          )}
+          · Schéma ${echapperHtml(sauvegarde.schemaVersion)}
+          · Application ${echapperHtml(sauvegarde.applicationVersion)}
+        </p>
+      </div>
+
+      <div class="badges-resultat-sauvegarde">
+        <span class="badge-sauvegarde badge-sauvegarde-manuelle">
+          ${echapperHtml(sauvegarde.type || 'MANUELLE')}
+        </span>
+        <span class="badge-sauvegarde ${conforme ? 'badge-sauvegarde-conforme' : 'badge-sauvegarde-anomalies'}">
+          ${conforme ? 'Conforme' : 'Avec anomalies'}
+        </span>
+      </div>
+    </div>
+
+    <div class="grille-compteurs-sauvegarde">
+      ${construireCompteurSauvegardeAdministration_(
+        'Stagiaires', counts.stagiaires
+      )}
+      ${construireCompteurSauvegardeAdministration_(
+        'Formateurs', counts.formateurs
+      )}
+      ${construireCompteurSauvegardeAdministration_(
+        'Séances', counts.sessions
+      )}
+      ${construireCompteurSauvegardeAdministration_(
+        'Présences', counts.presences
+      )}
+      ${construireCompteurSauvegardeAdministration_(
+        'Prestations', counts.prestations
+      )}
+      ${construireCompteurSauvegardeAdministration_(
+        'Items', counts.items
+      )}
+      ${construireCompteurSauvegardeAdministration_(
+        'Évaluations', counts.evaluations
+      )}
+    </div>
+
+    <div class="pied-resultat-sauvegarde">
+      <div class="verification-resultat-sauvegarde ${verificationOk ? 'verification-sauvegarde-ok' : 'verification-sauvegarde-erreur'}">
+        <strong>${verificationOk ? '✓ Intégrité vérifiée' : '! Vérification incomplète'}</strong>
+        <span>
+          ${verificationOk
+            ? 'Fichier relu depuis Drive, empreintes et signature HMAC validées.'
+            : 'Le fichier ne peut pas être téléchargé tant que sa vérification n’est pas valide.'}
+        </span>
+      </div>
+
+      <button
+        type="button"
+        id="boutonTelechargerDerniereSauvegarde"
+        class="bouton-secondaire"
+        onclick="telechargerDerniereSauvegardeAdministration()"
+        ${verificationOk ? '' : 'disabled'}
+      >Télécharger la dernière sauvegarde</button>
+    </div>
+
+    ${sauvegarde.warningLargeFile
+      ? '<div class="avertissement-taille-sauvegarde">La sauvegarde dépasse 5 Mo. Le téléchargement peut prendre quelques instants.</div>'
+      : ''}
+    ${!conforme
+      ? '<div class="avertissement-anomalies-sauvegarde">La sauvegarde a été créée et vérifiée, mais la base contenait des anomalies au moment de l’export.</div>'
+      : ''}
+  `;
+}
+
+
+function construireCompteurSauvegardeAdministration_(libelle, valeur) {
+  return `
+    <div>
+      <strong>${Number(valeur || 0).toLocaleString('fr-FR')}</strong>
+      <span>${echapperHtml(libelle)}</span>
+    </div>
+  `;
+}
+
+
+function creerSauvegardeAdministration() {
+  if (!estAdministrateurApplication()) {
+    afficherToast('Accès réservé à l’administrateur.', true);
+    return;
+  }
+
+  const champ = document.getElementById(
+    'commentaireSauvegardeAdministration'
+  );
+  const bouton = document.getElementById(
+    'boutonCreerSauvegardeAdministration'
+  );
+  const commentaire = champ ? champ.value.trim() : '';
+
+  if (commentaire.length > 500) {
+    afficherToast(
+      'Le commentaire est limité à 500 caractères.',
+      true
+    );
+    return;
+  }
+
+  if (bouton) {
+    bouton.disabled = true;
+    bouton.textContent = 'Sauvegarde en cours…';
+  }
+
+  definirEtatProgressionSauvegardeAdministration_(
+    'Lecture des feuilles, signature et vérification du fichier Drive…',
+    'en-cours'
+  );
+
+  google.script.run
+    .withSuccessHandler(function (resultat) {
+      if (bouton) {
+        bouton.disabled = false;
+        bouton.textContent = 'Créer une sauvegarde';
+      }
+
+      if (champ) {
+        champ.value = '';
+        mettreAJourCompteurCommentaireSauvegarde();
+      }
+
+      etatApplication.sauvegardesAdministration = {
+        disponible: true,
+        derniereSauvegarde: resultat,
+        erreur: ''
+      };
+
+      afficherSauvegardesAdministration(
+        etatApplication.sauvegardesAdministration
+      );
+      definirEtatProgressionSauvegardeAdministration_(
+        resultat.message,
+        resultat.integrityStatus === 'CONFORME'
+          ? 'succes'
+          : 'avertissement'
+      );
+      afficherToast(resultat.message, false);
+      actualiserInventaireSauvegardesAdministration(false);
+    })
+    .withFailureHandler(function (erreur) {
+      if (bouton) {
+        bouton.disabled = false;
+        bouton.textContent = 'Créer une sauvegarde';
+      }
+
+      const message = extraireMessageErreur(erreur);
+      definirEtatProgressionSauvegardeAdministration_(
+        message,
+        'erreur'
+      );
+      afficherToast(message, true);
+    })
+    .creerSauvegardeManuelle(
+      commentaire,
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+
+function telechargerDerniereSauvegardeAdministration() {
+  if (!estAdministrateurApplication()) {
+    afficherToast('Accès réservé à l’administrateur.', true);
+    return;
+  }
+
+  const etat = etatApplication.sauvegardesAdministration || {};
+  const sauvegarde = etat.derniereSauvegarde;
+  const bouton = document.getElementById(
+    'boutonTelechargerDerniereSauvegarde'
+  );
+
+  if (!sauvegarde || !sauvegarde.backupId) {
+    afficherToast('Aucune sauvegarde à télécharger.', true);
+    return;
+  }
+
+  if (bouton) {
+    bouton.disabled = true;
+    bouton.textContent = 'Vérification…';
+  }
+
+  definirEtatProgressionSauvegardeAdministration_(
+    'Vérification du fichier et création du jeton temporaire…',
+    'en-cours'
+  );
+
+  google.script.run
+    .withSuccessHandler(function (autorisation) {
+      definirEtatProgressionSauvegardeAdministration_(
+        'Téléchargement sécurisé du JSON original…',
+        'en-cours'
+      );
+
+      google.script.run
+        .withSuccessHandler(function (fichier) {
+          try {
+            declencherTelechargementSauvegarde_(fichier);
+            definirEtatProgressionSauvegardeAdministration_(
+              'Téléchargement préparé. Le jeton à usage unique a été invalidé.',
+              'succes'
+            );
+            afficherToast('Téléchargement prêt.', false);
+          } catch (erreur) {
+            const message = extraireMessageErreur(erreur);
+            definirEtatProgressionSauvegardeAdministration_(
+              message,
+              'erreur'
+            );
+            afficherToast(message, true);
+          } finally {
+            if (bouton) {
+              bouton.disabled = false;
+              bouton.textContent =
+                'Télécharger la dernière sauvegarde';
+            }
+          }
+        })
+        .withFailureHandler(function (erreur) {
+          if (bouton) {
+            bouton.disabled = false;
+            bouton.textContent =
+              'Télécharger la dernière sauvegarde';
+          }
+
+          const message = extraireMessageErreur(erreur);
+          definirEtatProgressionSauvegardeAdministration_(
+            message,
+            'erreur'
+          );
+          afficherToast(message, true);
+        })
+        .telechargerSauvegarde(
+          autorisation.token,
+          obtenirJetonAdministrateurApplication()
+        );
+    })
+    .withFailureHandler(function (erreur) {
+      if (bouton) {
+        bouton.disabled = false;
+        bouton.textContent =
+          'Télécharger la dernière sauvegarde';
+      }
+
+      const message = extraireMessageErreur(erreur);
+      definirEtatProgressionSauvegardeAdministration_(
+        message,
+        'erreur'
+      );
+      afficherToast(message, true);
+    })
+    .preparerTelechargementSauvegarde(
+      sauvegarde.backupId,
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+
+function declencherTelechargementSauvegarde_(fichier) {
+  const binaire = window.atob(fichier.contentBase64 || '');
+  const octets = new Uint8Array(binaire.length);
+
+  for (let i = 0; i < binaire.length; i++) {
+    octets[i] = binaire.charCodeAt(i);
+  }
+
+  const blob = new Blob(
+    [octets],
+    { type: fichier.mimeType || 'application/json' }
+  );
+  const url = URL.createObjectURL(blob);
+  const lien = document.createElement('a');
+
+  lien.href = url;
+  lien.download = fichier.fileName || 'PrepFormation.json';
+  lien.style.display = 'none';
+  document.body.appendChild(lien);
+  lien.click();
+  lien.remove();
+  window.setTimeout(function () {
+    URL.revokeObjectURL(url);
+  }, 1000);
+}
+
+
+function definirEtatProgressionSauvegardeAdministration_(
+  message,
+  statut
+) {
+  const zone = document.getElementById(
+    'etatProgressionSauvegardeAdministration'
+  );
+
+  if (!zone) {
+    return;
+  }
+
+  zone.textContent = message;
+  zone.dataset.statut = statut || '';
+}
+
+
+function formaterTailleSauvegardeAdministration_(octets) {
+  const taille = Math.max(0, Number(octets) || 0);
+
+  if (taille < 1024) {
+    return taille + ' octet' + (taille > 1 ? 's' : '');
+  }
+
+  if (taille < 1024 * 1024) {
+    return (taille / 1024).toFixed(1).replace('.', ',') + ' Ko';
+  }
+
+  return (taille / (1024 * 1024))
+    .toFixed(2)
+    .replace('.', ',') + ' Mo';
+}
+
+
+function formaterDateSauvegardeAdministration_(valeur) {
+  const date = new Date(valeur);
+
+  if (Number.isNaN(date.getTime())) {
+    return String(valeur || 'Date inconnue');
+  }
+
+  return date.toLocaleString('fr-FR', {
+    dateStyle: 'short',
+    timeStyle: 'short'
+  });
+}
+
+
+function afficherInventaireSauvegardesAdministration(inventaire) {
+  const zone = document.getElementById(
+    'listeSauvegardesRestaurabiliteAdministration'
+  );
+
+  if (!zone) {
+    return;
+  }
+
+  inventaire = inventaire || {};
+
+  if (inventaire.erreur) {
+    zone.innerHTML = `
+      <div class="erreur-sauvegarde-administration">
+        <strong>Inventaire indisponible</strong>
+        <span>${echapperHtml(inventaire.erreur)}</span>
+      </div>
+    `;
+    return;
+  }
+
+  const sauvegardes = Array.isArray(inventaire.sauvegardes)
+    ? inventaire.sauvegardes
+    : [];
+
+  if (!sauvegardes.length) {
+    zone.innerHTML = `
+      <div class="etat-vide etat-vide-sauvegarde">
+        Aucune sauvegarde JSON valide pour cette installation.
+      </div>
+    `;
+    return;
+  }
+
+  zone.innerHTML = `
+    ${Number(inventaire.fichiersIgnores || 0) > 0
+      ? `<div class="avertissement-inventaire-sauvegardes">
+          ${Number(inventaire.fichiersIgnores)} fichier(s) JSON invalide(s), incomplet(s) ou étrangers à l’installation ont été ignorés.
+        </div>`
+      : ''}
+    ${sauvegardes.map(function (sauvegarde) {
+      const counts = sauvegarde.counts || {};
+      const statut = sauvegarde.rapportObsolete
+        ? 'OBSOLETE'
+        : (sauvegarde.statutRestaurabilite || 'NON_TESTEE');
+      const id = echapperHtml(sauvegarde.backupId || '');
+
+      return `
+        <article class="carte-inventaire-sauvegarde">
+          <div class="entete-carte-inventaire-sauvegarde">
+            <div>
+              <span class="sur-titre-sauvegarde">
+                ${echapperHtml(sauvegarde.type || 'MANUELLE')}
+              </span>
+              <h4>${echapperHtml(
+                formaterDateSauvegardeAdministration_(
+                  sauvegarde.createdAt
+                )
+              )}</h4>
+              <p>${echapperHtml(
+                sauvegarde.comment || 'Sans commentaire'
+              )}</p>
+            </div>
+            <div class="badges-resultat-sauvegarde">
+              <span class="badge-sauvegarde ${sauvegarde.integrityStatus === 'CONFORME' ? 'badge-sauvegarde-conforme' : 'badge-sauvegarde-anomalies'}">
+                ${sauvegarde.integrityStatus === 'CONFORME'
+                  ? 'Conforme'
+                  : 'Avec anomalies'}
+              </span>
+              ${construireBadgeRestaurabiliteAdministration_(statut)}
+            </div>
+          </div>
+
+          <div class="metadonnees-inventaire-sauvegarde">
+            <span>App <strong>${echapperHtml(sauvegarde.applicationVersion)}</strong></span>
+            <span>Schéma <strong>${echapperHtml(sauvegarde.schemaVersion)}</strong></span>
+            <span><strong>${Number(sauvegarde.nombreFeuilles || 0)}</strong> feuilles</span>
+            <span><strong>${Number(counts.totalRows || 0).toLocaleString('fr-FR')}</strong> lignes</span>
+            <span><strong>${Number(counts.totalCells || 0).toLocaleString('fr-FR')}</strong> cellules</span>
+            <span><strong>${echapperHtml(
+              formaterTailleSauvegardeAdministration_(
+                sauvegarde.fileSizeBytes
+              )
+            )}</strong></span>
+          </div>
+
+          <div class="compteurs-inventaire-sauvegarde">
+            ${construireCompteurSauvegardeAdministration_('Stagiaires', counts.stagiaires)}
+            ${construireCompteurSauvegardeAdministration_('Formateurs', counts.formateurs)}
+            ${construireCompteurSauvegardeAdministration_('Séances', counts.sessions)}
+            ${construireCompteurSauvegardeAdministration_('Évaluations', counts.evaluations)}
+          </div>
+
+          <div class="pied-carte-inventaire-sauvegarde">
+            <span>
+              ${sauvegarde.derniereDateTest
+                ? 'Dernier test : ' + echapperHtml(
+                  formaterDateSauvegardeAdministration_(
+                    sauvegarde.derniereDateTest
+                  )
+                )
+                : 'Aucun test de restaurabilité'}
+            </span>
+            <div class="actions-carte-inventaire-sauvegarde">
+              <button type="button" class="bouton-secondaire" onclick="consulterSauvegardeRestaurabiliteAdministration('${id}')">Consulter</button>
+              <button type="button" class="bouton-secondaire" onclick="telechargerSauvegardeInventaireAdministration('${id}', this)">Télécharger</button>
+              <button type="button" class="bouton-principal" onclick="testerSauvegardeRestaurabiliteAdministration('${id}', this)">Tester la restauration</button>
+              <button
+                type="button"
+                class="bouton-danger"
+                data-restauration-action="true"
+                onclick="preparerRestaurationAdministration('${id}', this)"
+                ${sauvegarde.restaurationAutorisee ? '' : 'disabled'}
+                title="${sauvegarde.restaurationAutorisee ? 'Prévisualiser puis restaurer' : 'Un test concluant et actuel est obligatoire'}"
+              >Préparer la restauration</button>
+            </div>
+          </div>
+        </article>
+      `;
+    }).join('')}
+  `;
+}
+
+
+function construireBadgeRestaurabiliteAdministration_(statut) {
+  const libelles = {
+    RESTAURABLE: 'Restaurable',
+    RESTAURABLE_AVEC_MIGRATIONS: 'Restaurable avec migrations',
+    NON_RESTAURABLE: 'Non restaurable',
+    AVEC_AVERTISSEMENTS: 'Avec avertissements',
+    OBSOLETE: 'Test obsolète',
+    NON_TESTEE: 'Non testée'
+  };
+
+  return `
+    <span class="badge-restaurabilite badge-restaurabilite-${echapperHtml(
+      String(statut || 'NON_TESTEE').toLowerCase().replace(/_/g, '-')
+    )}">
+      ${echapperHtml(libelles[statut] || statut || 'Non testée')}
+    </span>
+  `;
+}
+
+
+function actualiserInventaireSauvegardesAdministration(
+  afficherNotification
+) {
+  if (!estAdministrateurApplication()) {
+    afficherToast('Accès réservé à l’administrateur.', true);
+    return;
+  }
+
+  const zone = document.getElementById(
+    'listeSauvegardesRestaurabiliteAdministration'
+  );
+
+  if (zone) {
+    zone.innerHTML = '<div class="etat-vide">Vérification des fichiers Drive…</div>';
+  }
+
+  google.script.run
+    .withSuccessHandler(function (inventaire) {
+      etatApplication.sauvegardesAdministration =
+        etatApplication.sauvegardesAdministration || {};
+      etatApplication.sauvegardesAdministration.inventaire =
+        inventaire;
+      afficherInventaireSauvegardesAdministration(inventaire);
+
+      if (afficherNotification !== false) {
+        afficherToast('Inventaire actualisé.', false);
+      }
+    })
+    .withFailureHandler(function (erreur) {
+      const message = extraireMessageErreur(erreur);
+
+      afficherInventaireSauvegardesAdministration({
+        sauvegardes: [],
+        erreur: message
+      });
+      afficherToast(message, true);
+    })
+    .listerSauvegardesRestaurabilite(
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+
+function consulterSauvegardeRestaurabiliteAdministration(backupId) {
+  if (!estAdministrateurApplication()) {
+    afficherToast('Accès réservé à l’administrateur.', true);
+    return;
+  }
+
+  ouvrirModalRestaurabiliteSauvegarde_(
+    'Consultation de la sauvegarde',
+    'Vérification du JSON signé en cours…'
+  );
+
+  google.script.run
+    .withSuccessHandler(function (consultation) {
+      etatApplication.backupIdRestaurabiliteActif = backupId;
+      etatApplication.consultationRestaurabiliteActive = consultation;
+      afficherConsultationSauvegardeRestaurabilite_(consultation);
+    })
+    .withFailureHandler(function (erreur) {
+      const message = extraireMessageErreur(erreur);
+
+      afficherErreurModalRestaurabilite_(message);
+      afficherToast(message, true);
+    })
+    .consulterSauvegardeRestaurabilite(
+      backupId,
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+
+function testerSauvegardeRestaurabiliteAdministration(
+  backupId,
+  bouton
+) {
+  if (!estAdministrateurApplication()) {
+    afficherToast('Accès réservé à l’administrateur.', true);
+    return;
+  }
+
+  if (bouton) {
+    bouton.disabled = true;
+    bouton.textContent = 'Test en cours…';
+  }
+
+  ouvrirModalRestaurabiliteSauvegarde_(
+    'Test de restaurabilité',
+    'Validation, migrations en mémoire et comparaison avec la base actuelle…'
+  );
+  definirEtatProgressionSauvegardeAdministration_(
+    'Test de restaurabilité en lecture seule…',
+    'en-cours'
+  );
+
+  google.script.run
+    .withSuccessHandler(function (rapport) {
+      if (bouton) {
+        bouton.disabled = false;
+        bouton.textContent = 'Tester la restauration';
+      }
+
+      etatApplication.backupIdRestaurabiliteActif = backupId;
+      afficherRapportRestaurabiliteSauvegarde_(rapport);
+      definirEtatProgressionSauvegardeAdministration_(
+        rapport.statut === 'NON_RESTAURABLE'
+          ? 'Test terminé : sauvegarde non restaurable.'
+          : 'Test de restaurabilité terminé.',
+        rapport.statut === 'NON_RESTAURABLE'
+          ? 'erreur'
+          : (rapport.statut === 'AVEC_AVERTISSEMENTS'
+            ? 'avertissement'
+            : 'succes')
+      );
+      actualiserInventaireSauvegardesAdministration(false);
+    })
+    .withFailureHandler(function (erreur) {
+      if (bouton) {
+        bouton.disabled = false;
+        bouton.textContent = 'Tester la restauration';
+      }
+
+      const message = extraireMessageErreur(erreur);
+
+      afficherErreurModalRestaurabilite_(message);
+      definirEtatProgressionSauvegardeAdministration_(
+        message,
+        'erreur'
+      );
+      afficherToast(message, true);
+    })
+    .testerRestaurabiliteSauvegarde(
+      backupId,
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+
+function telechargerSauvegardeInventaireAdministration(
+  backupId,
+  bouton
+) {
+  if (!estAdministrateurApplication()) {
+    afficherToast('Accès réservé à l’administrateur.', true);
+    return;
+  }
+
+  if (bouton) {
+    bouton.disabled = true;
+    bouton.textContent = 'Vérification…';
+  }
+
+  google.script.run
+    .withSuccessHandler(function (autorisation) {
+      google.script.run
+        .withSuccessHandler(function (fichier) {
+          declencherTelechargementSauvegarde_(fichier);
+
+          if (bouton) {
+            bouton.disabled = false;
+            bouton.textContent = 'Télécharger';
+          }
+
+          afficherToast('Téléchargement prêt.', false);
+        })
+        .withFailureHandler(function (erreur) {
+          if (bouton) {
+            bouton.disabled = false;
+            bouton.textContent = 'Télécharger';
+          }
+
+          afficherToast(extraireMessageErreur(erreur), true);
+        })
+        .telechargerSauvegarde(
+          autorisation.token,
+          obtenirJetonAdministrateurApplication()
+        );
+    })
+    .withFailureHandler(function (erreur) {
+      if (bouton) {
+        bouton.disabled = false;
+        bouton.textContent = 'Télécharger';
+      }
+
+      afficherToast(extraireMessageErreur(erreur), true);
+    })
+    .preparerTelechargementSauvegarde(
+      backupId,
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+
+function ouvrirModalRestaurabiliteSauvegarde_(titre, message) {
+  const modal = document.getElementById(
+    'modalRestaurabiliteSauvegardeAdministration'
+  );
+  const titreElement = document.getElementById(
+    'titreModalRestaurabiliteSauvegarde'
+  );
+  const contenu = document.getElementById(
+    'contenuModalRestaurabiliteSauvegarde'
+  );
+
+  if (titreElement) {
+    titreElement.textContent = titre;
+  }
+
+  if (contenu) {
+    contenu.innerHTML = `<div class="etat-vide">${echapperHtml(message)}</div>`;
+  }
+
+  if (modal) {
+    modal.classList.remove('masque');
+  }
+}
+
+
+function fermerModalRestaurabiliteSauvegarde() {
+  const modal = document.getElementById(
+    'modalRestaurabiliteSauvegardeAdministration'
+  );
+
+  if (modal) {
+    modal.classList.add('masque');
+  }
+}
+
+
+function afficherErreurModalRestaurabilite_(message) {
+  const contenu = document.getElementById(
+    'contenuModalRestaurabiliteSauvegarde'
+  );
+
+  if (contenu) {
+    contenu.innerHTML = `
+      <div class="erreur-sauvegarde-administration">
+        <strong>Analyse impossible</strong>
+        <span>${echapperHtml(message)}</span>
+      </div>
+    `;
+  }
+}
+
+
+function afficherConsultationSauvegardeRestaurabilite_(consultation) {
+  const contenu = document.getElementById(
+    'contenuModalRestaurabiliteSauvegarde'
+  );
+
+  if (!contenu) {
+    return;
+  }
+
+  const metadata = consultation.metadata || {};
+  const counts = metadata.counts || {};
+  const manifest = Array.isArray(consultation.manifest)
+    ? consultation.manifest
+    : [];
+  const anomalies = Array.isArray(consultation.anomalies)
+    ? consultation.anomalies
+    : [];
+  const integrity = consultation.integrity || {};
+
+  contenu.innerHTML = `
+    <section class="section-rapport-restaurabilite">
+      <div class="entete-rapport-restaurabilite">
+        <div>
+          <span class="sur-titre-sauvegarde">Sauvegarde vérifiée</span>
+          <h3>${echapperHtml(
+            formaterDateSauvegardeAdministration_(metadata.createdAt)
+          )}</h3>
+          <p>${echapperHtml(metadata.comment || 'Sans commentaire')}</p>
+        </div>
+        <div class="badges-resultat-sauvegarde">
+          <span class="badge-sauvegarde badge-sauvegarde-manuelle">${echapperHtml(metadata.type)}</span>
+          <span class="badge-sauvegarde ${metadata.integrityStatus === 'CONFORME' ? 'badge-sauvegarde-conforme' : 'badge-sauvegarde-anomalies'}">${metadata.integrityStatus === 'CONFORME' ? 'Conforme' : 'Avec anomalies'}</span>
+        </div>
+      </div>
+
+      <div class="grille-metadonnees-restaurabilite">
+        <div><span>Format</span><strong>${echapperHtml(consultation.format)} v${echapperHtml(consultation.formatVersion)}</strong></div>
+        <div><span>Backup ID</span><strong>${echapperHtml(consultation.backupId)}</strong></div>
+        <div><span>Application</span><strong>${echapperHtml(metadata.applicationVersion)}</strong></div>
+        <div><span>Schéma</span><strong>${echapperHtml(metadata.schemaVersion)}</strong></div>
+        <div><span>Fuseau</span><strong>${echapperHtml(metadata.timezone)}</strong></div>
+        <div><span>Taille</span><strong>${echapperHtml(formaterTailleSauvegardeAdministration_(metadata.fileSizeBytes))}</strong></div>
+        <div><span>Installation</span><strong>${metadata.installationCorrespondante ? 'Correspondante' : 'Non vérifiée'}</strong></div>
+        <div><span>Session d’audit</span><strong>${echapperHtml(metadata.adminSessionAuditId || 'Non renseignée')}</strong></div>
+        <div><span>Stagiaires</span><strong>${Number(counts.stagiaires || 0)}</strong></div>
+        <div><span>Formateurs</span><strong>${Number(counts.formateurs || 0)}</strong></div>
+        <div><span>Séances</span><strong>${Number(counts.sessions || 0)}</strong></div>
+        <div><span>Présences</span><strong>${Number(counts.presences || 0)}</strong></div>
+        <div><span>Prestations</span><strong>${Number(counts.prestations || 0)}</strong></div>
+        <div><span>Items</span><strong>${Number(counts.items || 0)}</strong></div>
+        <div><span>Évaluations</span><strong>${Number(counts.evaluations || 0)}</strong></div>
+        <div><span>Lignes</span><strong>${Number(counts.totalRows || 0).toLocaleString('fr-FR')}</strong></div>
+        <div><span>Cellules</span><strong>${Number(counts.totalCells || 0).toLocaleString('fr-FR')}</strong></div>
+      </div>
+    </section>
+
+    <section class="section-rapport-restaurabilite">
+      <h3>Manifeste des feuilles</h3>
+      <div class="tableau-responsive">
+        <table class="tableau tableau-manifeste-restaurabilite">
+          <thead><tr><th>Feuille</th><th>Lignes</th><th>Colonnes</th><th>Cellules</th><th>Identifiées</th><th>Empreinte</th></tr></thead>
+          <tbody>
+            ${manifest.map(function (feuille) {
+              return `<tr>
+                <td>
+                  <strong>${echapperHtml(feuille.name)}</strong>
+                  <small>${echapperHtml(feuille.idColumn || 'Sans identifiant métier')}</small>
+                  <details><summary>En-têtes</summary><small>${echapperHtml((feuille.headers || []).join(', '))}</small></details>
+                </td>
+                <td>${Number(feuille.rowCount || 0)}</td>
+                <td>${Number(feuille.columnCount || 0)}</td>
+                <td>${Number(feuille.cellCount || 0).toLocaleString('fr-FR')}</td>
+                <td>${Number(feuille.identifiedRowCount || 0)}</td>
+                <td><code>${echapperHtml(feuille.hash || '')}</code></td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section-rapport-restaurabilite">
+      <h3>Intégrité cryptographique</h3>
+      <div class="liste-validations-restaurabilite">
+        <div class="validation-ok">✓ Empreintes ${echapperHtml(integrity.hashAlgorithm)}</div>
+        <div class="validation-ok">✓ Signature ${echapperHtml(integrity.signatureAlgorithm)} validée</div>
+        <div class="validation-ok">✓ Canonicalisation version ${echapperHtml(integrity.canonicalizationVersion)}</div>
+        <div><strong>Empreinte globale</strong><code>${echapperHtml(integrity.globalHash || '')}</code></div>
+        <div><strong>Empreinte exacte du fichier</strong><code>${echapperHtml(consultation.empreinteFichier || '')}</code></div>
+      </div>
+    </section>
+
+    <section class="section-rapport-restaurabilite">
+      <h3>Anomalies enregistrées (${anomalies.length})</h3>
+      ${anomalies.length
+        ? `<div class="liste-alertes-restaurabilite">${anomalies.map(function (anomalie) {
+            return `<div><strong>${echapperHtml(anomalie.type || anomalie.feuille || 'Anomalie')}</strong><span>${echapperHtml(anomalie.message || JSON.stringify(anomalie))}</span></div>`;
+          }).join('')}</div>`
+        : '<div class="etat-integrite-valide-administration">✓ Aucune anomalie enregistrée.</div>'}
+    </section>
+
+    ${consultation.dernierRapport
+      ? construireHtmlRapportRestaurabilite_(consultation.dernierRapport)
+      : '<section class="section-rapport-restaurabilite"><h3>Restaurabilité</h3><div class="etat-vide">Cette sauvegarde n’a pas encore été testée.</div></section>'}
+  `;
+
+  mettreAJourBoutonRestaurationConsultation_(
+    consultation.dernierRapport
+  );
+}
+
+
+function afficherRapportRestaurabiliteSauvegarde_(rapport) {
+  const contenu = document.getElementById(
+    'contenuModalRestaurabiliteSauvegarde'
+  );
+  const titre = document.getElementById(
+    'titreModalRestaurabiliteSauvegarde'
+  );
+
+  if (titre) {
+    titre.textContent = 'Rapport de restaurabilité';
+  }
+
+  if (contenu) {
+    contenu.innerHTML = construireHtmlRapportRestaurabilite_(rapport);
+  }
+
+  mettreAJourBoutonRestaurationConsultation_(rapport);
+}
+
+
+function construireHtmlRapportRestaurabilite_(rapport) {
+  rapport = rapport || {};
+  const migrations = Array.isArray(rapport.migrationsNecessaires)
+    ? rapport.migrationsNecessaires
+    : [];
+  const erreurs = Array.isArray(rapport.erreursBloquantes)
+    ? rapport.erreursBloquantes
+    : [];
+  const avertissements = Array.isArray(rapport.avertissements)
+    ? rapport.avertissements
+    : [];
+  const differences = rapport.differencesBaseActuelle || {};
+  const feuilles = Array.isArray(differences.feuilles)
+    ? differences.feuilles
+    : [];
+  const estimation = rapport.estimation || {};
+  const diagnostic = rapport.diagnosticApresMigration || {};
+  const validation = rapport.validation || {};
+
+  return `
+    <section class="section-rapport-restaurabilite">
+      <div class="entete-rapport-restaurabilite">
+        <div>
+          <span class="sur-titre-sauvegarde">Test du ${echapperHtml(formaterDateSauvegardeAdministration_(rapport.testedAt))}</span>
+          <h3>${echapperHtml(rapport.statut || 'État inconnu')}</h3>
+          <p>Schéma sauvegardé ${echapperHtml(rapport.schemaVersionSauvegarde)} · schéma courant ${echapperHtml(rapport.schemaVersionCourante)} · cible ${echapperHtml(rapport.schemaVersionCible)}</p>
+        </div>
+        ${construireBadgeRestaurabiliteAdministration_(rapport.statut)}
+      </div>
+      ${rapport.obsolete
+        ? '<div class="avertissement-inventaire-sauvegardes">Ce rapport est obsolète : le fichier, l’application ou le schéma courant a changé.</div>'
+        : ''}
+      <div class="grille-metadonnees-restaurabilite">
+        <div><span>Durée réelle</span><strong>${Number(rapport.dureeReelleMs || 0)} ms</strong></div>
+        <div><span>Durée estimée</span><strong>${Number(estimation.dureeEstimeeSecondes || 0)} s</strong></div>
+        <div><span>Mémoire estimée</span><strong>${echapperHtml(formaterTailleSauvegardeAdministration_(estimation.memoireEstimeeOctets))}</strong></div>
+        <div><span>Rapport Drive</span><strong>${rapport.rapportSecondaireEnregistre === false ? 'Non enregistré' : 'Enregistré'}</strong></div>
+      </div>
+    </section>
+
+    <section class="section-rapport-restaurabilite">
+      <h3>Contrôles de validation</h3>
+      <div class="grille-validations-restaurabilite">
+        ${Object.keys(validation).map(function (cle) {
+          return `<div class="${validation[cle] ? 'validation-ok' : 'validation-erreur'}"><strong>${validation[cle] ? '✓' : '!'}</strong><span>${echapperHtml(cle)}</span></div>`;
+        }).join('')}
+      </div>
+    </section>
+
+    <section class="section-rapport-restaurabilite grille-alertes-rapport-restaurabilite">
+      <div>
+        <h3>Erreurs bloquantes (${erreurs.length})</h3>
+        ${construireListeAlertesRestaurabilite_(erreurs, true)}
+      </div>
+      <div>
+        <h3>Avertissements (${avertissements.length})</h3>
+        ${construireListeAlertesRestaurabilite_(avertissements, false)}
+      </div>
+    </section>
+
+    <section class="section-rapport-restaurabilite">
+      <h3>Migrations simulées (${migrations.length})</h3>
+      ${migrations.length
+        ? `<div class="liste-migrations-restaurabilite">${migrations.map(function (migration) {
+            return `<div><strong>${Number(migration.versionSource)} → ${Number(migration.versionCible)}</strong><span>${echapperHtml(migration.nom)}</span></div>`;
+          }).join('')}</div>`
+        : '<div class="etat-vide">Aucune migration nécessaire.</div>'}
+    </section>
+
+    <section class="section-rapport-restaurabilite">
+      <h3>Diagnostic du modèle simulé</h3>
+      <div class="grille-metadonnees-restaurabilite">
+        <div><span>Feuilles conformes</span><strong>${Number((diagnostic.resume || {}).feuillesConformes || 0)} / ${Number((diagnostic.resume || {}).nombreFeuilles || 0)}</strong></div>
+        <div><span>Identifiants manquants</span><strong>${Number((diagnostic.resume || {}).identifiantsManquants || 0)}</strong></div>
+        <div><span>Doublons</span><strong>${Number((diagnostic.resume || {}).doublonsIdentifiants || 0)}</strong></div>
+        <div><span>Références incohérentes</span><strong>${Number((diagnostic.resume || {}).referencesIncoherentes || 0)}</strong></div>
+      </div>
+    </section>
+
+    <section class="section-rapport-restaurabilite">
+      <h3>Différences avec la base actuelle</h3>
+      ${(differences.feuillesSupplementairesBaseActuelle || []).length
+        ? `<div class="avertissement-inventaire-sauvegardes">Feuilles supplémentaires dans la base actuelle : ${echapperHtml((differences.feuillesSupplementairesBaseActuelle || []).join(', '))}</div>`
+        : ''}
+      ${feuilles.length
+        ? `<div class="tableau-responsive"><table class="tableau tableau-differences-restaurabilite">
+            <thead><tr><th>Feuille</th><th>Présence</th><th>Lignes sauvegarde</th><th>Lignes actuelles</th><th>Seulement sauvegarde</th><th>Seulement actuelle</th><th>Colonnes</th></tr></thead>
+            <tbody>${feuilles.map(function (feuille) {
+              return `<tr>
+                <td><strong>${echapperHtml(feuille.feuille)}</strong></td>
+                <td>${feuille.presenteSauvegarde && feuille.presenteActuelle ? 'Des deux côtés' : (feuille.presenteSauvegarde ? 'Absente actuellement' : 'Absente de la sauvegarde')}</td>
+                <td>${Number(feuille.lignesSauvegarde || 0)}</td>
+                <td>${Number(feuille.lignesActuelles || 0)}</td>
+                <td>${construireDetailIdentifiantsRestaurabilite_(feuille.seulementSauvegarde)}</td>
+                <td>${construireDetailIdentifiantsRestaurabilite_(feuille.seulementActuelle)}</td>
+                <td>${construireDetailColonnesRestaurabilite_(feuille)}</td>
+              </tr>`;
+            }).join('')}</tbody>
+          </table></div>`
+        : '<div class="etat-vide">Comparaison indisponible.</div>'}
+    </section>
+
+    <div class="confirmation-lecture-seule-restaurabilite">
+      ✓ Simulation en mémoire : aucune restauration réelle et aucun JSON signé modifié.
+    </div>
+  `;
+}
+
+
+function construireListeAlertesRestaurabilite_(elements, erreur) {
+  if (!elements.length) {
+    return `<div class="${erreur ? 'etat-vide' : 'etat-integrite-valide-administration'}">${erreur ? 'Aucune erreur bloquante.' : '✓ Aucun avertissement.'}</div>`;
+  }
+
+  return `<div class="liste-alertes-restaurabilite ${erreur ? 'liste-alertes-restaurabilite-erreurs' : ''}">${elements.map(function (element) {
+    return `<div><strong>${echapperHtml(element.code || 'Information')}</strong><span>${echapperHtml(element.message || '')}</span></div>`;
+  }).join('')}</div>`;
+}
+
+
+function construireDetailIdentifiantsRestaurabilite_(detail) {
+  detail = detail || {};
+  const exemples = Array.isArray(detail.exemples)
+    ? detail.exemples
+    : [];
+
+  if (!Number(detail.total || 0)) {
+    return '0';
+  }
+
+  return `
+    <details>
+      <summary>${Number(detail.total)} identifiant(s)</summary>
+      <small>${echapperHtml(exemples.join(', '))}${Number(detail.total) > exemples.length ? '…' : ''}</small>
+    </details>
+  `;
+}
+
+
+function construireDetailColonnesRestaurabilite_(feuille) {
+  if (feuille.entetesIdentiques) {
+    return 'Identiques';
+  }
+
+  const absentes = feuille.colonnesAbsentesActuelles || [];
+  const supplementaires =
+    feuille.colonnesSupplementairesActuelles || [];
+
+  return `
+    <details>
+      <summary>Différentes</summary>
+      <small>
+        Absentes actuellement : ${echapperHtml(absentes.join(', ') || 'aucune')}<br>
+        Supplémentaires actuellement : ${echapperHtml(supplementaires.join(', ') || 'aucune')}
+      </small>
+    </details>
+  `;
+}
+
+
+function mettreAJourBoutonRestaurationConsultation_(rapport) {
+  const bouton = document.getElementById(
+    'boutonRestaurerDepuisConsultation'
+  );
+
+  if (!bouton) {
+    return;
+  }
+
+  const autorise = Boolean(
+    rapport &&
+    rapport.obsolete !== true &&
+    [
+      'RESTAURABLE',
+      'RESTAURABLE_AVEC_MIGRATIONS'
+    ].includes(rapport.statut)
+  );
+
+  bouton.disabled = !autorise;
+  bouton.title = autorise
+    ? 'Prévisualiser puis confirmer la restauration'
+    : 'Un test concluant et actuel est obligatoire';
+}
+
+
+function preparerRestaurationDepuisConsultationAdministration() {
+  const backupId = etatApplication.backupIdRestaurabiliteActif;
+
+  if (!backupId) {
+    afficherToast('Aucune sauvegarde sélectionnée.', true);
+    return;
+  }
+
+  fermerModalRestaurabiliteSauvegarde();
+  preparerRestaurationAdministration(backupId, null);
+}
+
+
+function preparerRestaurationAdministration(backupId, bouton) {
+  if (!estAdministrateurApplication()) {
+    afficherToast('Accès réservé à l’administrateur.', true);
+    return;
+  }
+
+  if (bouton) {
+    bouton.disabled = true;
+    bouton.textContent = 'Préparation…';
+  }
+
+  ouvrirModalPreparationRestaurationAdministration_();
+
+  google.script.run
+    .withSuccessHandler(function (previsualisation) {
+      if (bouton) {
+        bouton.disabled = false;
+        bouton.textContent = 'Préparer la restauration';
+      }
+
+      etatApplication.previewRestaurationActive = previsualisation;
+      afficherPrevisualisationRestaurationAdministration_(
+        previsualisation
+      );
+    })
+    .withFailureHandler(function (erreur) {
+      if (bouton) {
+        bouton.disabled = false;
+        bouton.textContent = 'Préparer la restauration';
+      }
+
+      const message = extraireMessageErreur(erreur);
+      afficherErreurPreparationRestaurationAdministration_(message);
+      afficherToast(message, true);
+    })
+    .preparerRestaurationSauvegarde(
+      backupId,
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+
+function ouvrirModalPreparationRestaurationAdministration_() {
+  const modal = document.getElementById(
+    'modalPreparationRestaurationAdministration'
+  );
+  const contenu = document.getElementById(
+    'contenuPreparationRestaurationAdministration'
+  );
+  const confirmation = document.getElementById(
+    'confirmationRestaurationAdministration'
+  );
+  const bouton = document.getElementById(
+    'boutonConfirmerRestaurationAdministration'
+  );
+
+  if (contenu) {
+    contenu.innerHTML = `
+      <div class="etat-vide">
+        Validation du rapport, du JSON signé et de son empreinte…
+      </div>
+    `;
+  }
+
+  confirmation?.classList.add('masque');
+
+  if (bouton) {
+    bouton.disabled = true;
+    bouton.textContent = 'Confirmer et restaurer';
+  }
+
+  if (modal) {
+    modal.classList.remove('masque');
+  }
+}
+
+
+function fermerModalPreparationRestaurationAdministration() {
+  const etat = etatApplication.restaurationAdministration || {};
+
+  if (etat.operationActive) {
+    afficherToast(
+      'La fenêtre reste disponible pendant la restauration.',
+      true
+    );
+    return;
+  }
+
+  document.getElementById(
+    'modalPreparationRestaurationAdministration'
+  )?.classList.add('masque');
+  etatApplication.previewRestaurationActive = null;
+  const motDePasse = document.getElementById(
+    'motDePasseConfirmationRestauration'
+  );
+
+  if (motDePasse) {
+    motDePasse.value = '';
+  }
+}
+
+
+function afficherPrevisualisationRestaurationAdministration_(preview) {
+  const contenu = document.getElementById(
+    'contenuPreparationRestaurationAdministration'
+  );
+  const confirmation = document.getElementById(
+    'confirmationRestaurationAdministration'
+  );
+  const bouton = document.getElementById(
+    'boutonConfirmerRestaurationAdministration'
+  );
+
+  if (!contenu) {
+    return;
+  }
+
+  const metadata = preview.metadata || {};
+  const counts = metadata.counts || {};
+  const migrations = Array.isArray(preview.migrations)
+    ? preview.migrations
+    : [];
+  const anomalies = Array.isArray(preview.anomalies)
+    ? preview.anomalies
+    : [];
+  const avertissements = Array.isArray(preview.avertissements)
+    ? preview.avertissements
+    : [];
+  const differences = Array.isArray(preview.differences)
+    ? preview.differences
+    : [];
+
+  contenu.innerHTML = `
+    <div class="avertissement-remplacement-restauration">
+      <strong>Remplacement intégral des données</strong>
+      <span>${echapperHtml(preview.avertissementRemplacementIntegral)}</span>
+    </div>
+
+    <div class="grille-metadonnees-restaurabilite">
+      <div><span>Sauvegarde</span><strong>${echapperHtml(preview.backupId)}</strong></div>
+      <div><span>Créée le</span><strong>${echapperHtml(formaterDateSauvegardeAdministration_(metadata.createdAt))}</strong></div>
+      <div><span>Type</span><strong>${echapperHtml(metadata.type)}</strong></div>
+      <div><span>Application</span><strong>${echapperHtml(metadata.applicationVersion)}</strong></div>
+      <div><span>Schéma</span><strong>${echapperHtml(metadata.schemaVersion)}</strong></div>
+      <div><span>Taille</span><strong>${echapperHtml(formaterTailleSauvegardeAdministration_(metadata.fileSizeBytes))}</strong></div>
+      <div><span>Lignes</span><strong>${Number(counts.totalRows || 0).toLocaleString('fr-FR')}</strong></div>
+      <div><span>Cellules</span><strong>${Number(counts.totalCells || 0).toLocaleString('fr-FR')}</strong></div>
+      <div><span>Plan valable jusqu’à</span><strong>${echapperHtml(formaterDateSauvegardeAdministration_(preview.expiresAt))}</strong></div>
+    </div>
+
+    <section class="section-previsualisation-restauration">
+      <h3>Migrations réelles prévues</h3>
+      ${migrations.length
+        ? `<div class="liste-migrations-restaurabilite">${migrations.map(function (migration) {
+            return `<div><strong>${Number(migration.versionSource)} → ${Number(migration.versionCible)}</strong><span>${echapperHtml(migration.nom)}</span></div>`;
+          }).join('')}</div>`
+        : '<div class="etat-integrite-valide-administration">✓ Aucune migration nécessaire.</div>'}
+    </section>
+
+    <section class="section-previsualisation-restauration">
+      <h3>13 feuilles remplacées</h3>
+      <div class="liste-feuilles-remplacees-restauration">
+        ${(preview.feuillesRemplacees || []).map(function (feuille) {
+          return `<span>${echapperHtml(feuille)}</span>`;
+        }).join('')}
+      </div>
+    </section>
+
+    <section class="section-previsualisation-restauration">
+      <h3>Différences avec la base actuelle</h3>
+      <div class="tableau-responsive">
+        <table class="tableau tableau-differences-restauration">
+          <thead><tr><th>Feuille</th><th>Actuel</th><th>Sauvegarde</th><th>Ajoutées</th><th>Supprimées</th><th>Communes</th><th>En-têtes</th></tr></thead>
+          <tbody>${differences.map(function (feuille) {
+            return `<tr>
+              <td><strong>${echapperHtml(feuille.feuille)}</strong></td>
+              <td>${Number(feuille.lignesActuelles)}</td>
+              <td>${Number(feuille.lignesSauvegarde)}</td>
+              <td>${Number(feuille.seulementSauvegarde)}</td>
+              <td>${Number(feuille.seulementActuelle)}</td>
+              <td>${Number(feuille.identifiantsCommuns)}</td>
+              <td>${feuille.entetesIdentiques ? 'Identiques' : 'Différents'}</td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table>
+      </div>
+    </section>
+
+    ${(anomalies.length || avertissements.length)
+      ? `<section class="section-previsualisation-restauration">
+          <h3>Anomalies et avertissements</h3>
+          <div class="liste-alertes-restaurabilite">
+            ${anomalies.concat(avertissements).map(function (element) {
+              return `<div><strong>${echapperHtml(element.type || element.code || 'Avertissement')}</strong><span>${echapperHtml(element.message || '')}</span></div>`;
+            }).join('')}
+          </div>
+        </section>`
+      : ''}
+  `;
+
+  confirmation?.classList.remove('masque');
+
+  if (bouton) {
+    bouton.disabled = false;
+  }
+}
+
+
+function afficherErreurPreparationRestaurationAdministration_(message) {
+  const contenu = document.getElementById(
+    'contenuPreparationRestaurationAdministration'
+  );
+
+  if (contenu) {
+    contenu.innerHTML = `
+      <div class="erreur-sauvegarde-administration">
+        <strong>Restauration impossible</strong>
+        <span>${echapperHtml(message)}</span>
+      </div>
+    `;
+  }
+}
+
+
+function confirmerEtExecuterRestaurationAdministration() {
+  const preview = etatApplication.previewRestaurationActive;
+  const texte = document.getElementById(
+    'texteConfirmationRestauration'
+  );
+  const caseSecurite = document.getElementById(
+    'confirmerSauvegardeSecuriteRestauration'
+  );
+  const champMotDePasse = document.getElementById(
+    'motDePasseConfirmationRestauration'
+  );
+  const bouton = document.getElementById(
+    'boutonConfirmerRestaurationAdministration'
+  );
+
+  if (!preview || !preview.previewId) {
+    afficherToast('Le plan de restauration n’est plus disponible.', true);
+    return;
+  }
+
+  if (String(texte?.value || '').trim() !== 'RESTAURER') {
+    afficherToast('Saisis exactement le mot RESTAURER.', true);
+    return;
+  }
+
+  if (!caseSecurite?.checked) {
+    afficherToast(
+      'Confirme la sauvegarde automatique de sécurité.',
+      true
+    );
+    return;
+  }
+
+  const motDePasse = String(champMotDePasse?.value || '');
+
+  if (!motDePasse) {
+    afficherToast('Saisis le mot de passe administrateur.', true);
+    return;
+  }
+
+  if (bouton) {
+    bouton.disabled = true;
+    bouton.textContent = 'Confirmation…';
+  }
+
+  if (champMotDePasse) {
+    champMotDePasse.value = '';
+  }
+
+  google.script.run
+    .withSuccessHandler(function (confirmation) {
+      demarrerExecutionRestaurationAdministration_(
+        confirmation.confirmationId
+      );
+    })
+    .withFailureHandler(function (erreur) {
+      if (bouton) {
+        bouton.disabled = false;
+        bouton.textContent = 'Confirmer et restaurer';
+      }
+
+      afficherToast(extraireMessageErreur(erreur), true);
+    })
+    .confirmerRestaurationSauvegarde(
+      preview.previewId,
+      'RESTAURER',
+      true,
+      motDePasse,
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+
+function demarrerExecutionRestaurationAdministration_(confirmationId) {
+  const bouton = document.getElementById(
+    'boutonConfirmerRestaurationAdministration'
+  );
+
+  if (bouton) {
+    bouton.textContent = 'Restauration en cours…';
+  }
+
+  afficherProgressionRestaurationDansModal_({
+    etape: 'SAUVEGARDE_SECURITE',
+    statut: 'EN_COURS',
+    progression: 5
+  });
+  basculerInterfacePendantRestauration_(true);
+  demarrerSuiviRestaurationAdministration_();
+
+  google.script.run
+    .withSuccessHandler(function (resultat) {
+      arreterSuiviRestaurationAdministration_();
+
+      if (resultat.recuperationRequise) {
+        afficherToast(resultat.message, true);
+        actualiserEtatRestaurationAdministration_();
+        return;
+      }
+
+      etatApplication.restaurationAdministration = {
+        operationActive: null,
+        derniereOperation: {
+          backupId: resultat.backupId,
+          backupIdSecurite: resultat.backupIdSecurite,
+          statut: 'TERMINEE',
+          etape: 'TERMINEE',
+          progression: 100,
+          versionSchemaFinale: resultat.versionSchema,
+          dureeMs: resultat.dureeMs
+        },
+        ecrituresBloquees: false
+      };
+      afficherResultatRestaurationAdministration_(resultat);
+      afficherEtatRestaurationAdministration(
+        etatApplication.restaurationAdministration
+      );
+      basculerInterfacePendantRestauration_(false);
+      afficherToast(resultat.message, false);
+      actualiserInventaireSauvegardesAdministration(false);
+    })
+    .withFailureHandler(function (erreur) {
+      arreterSuiviRestaurationAdministration_();
+      basculerInterfacePendantRestauration_(false);
+      const message = extraireMessageErreur(erreur);
+      afficherErreurPreparationRestaurationAdministration_(message);
+      afficherToast(message, true);
+      actualiserEtatRestaurationAdministration_();
+    })
+    .executerRestaurationConfirmee(
+      confirmationId,
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+
+function demarrerSuiviRestaurationAdministration_() {
+  arreterSuiviRestaurationAdministration_();
+  etatApplication.minuterieProgressionRestauration =
+    window.setInterval(function () {
+      actualiserEtatRestaurationAdministration_(true);
+    }, 2500);
+}
+
+
+function arreterSuiviRestaurationAdministration_() {
+  if (etatApplication.minuterieProgressionRestauration) {
+    window.clearInterval(
+      etatApplication.minuterieProgressionRestauration
+    );
+    etatApplication.minuterieProgressionRestauration = null;
+  }
+}
+
+
+function actualiserEtatRestaurationAdministration_(silencieux) {
+  google.script.run
+    .withSuccessHandler(function (etat) {
+      etatApplication.restaurationAdministration = etat;
+      afficherEtatRestaurationAdministration(etat);
+
+      if (etat.operationActive) {
+        afficherProgressionRestaurationDansModal_(
+          etat.operationActive
+        );
+      }
+    })
+    .withFailureHandler(function (erreur) {
+      if (!silencieux) {
+        afficherToast(extraireMessageErreur(erreur), true);
+      }
+    })
+    .getEtatRestaurationAdministration(
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+
+function afficherEtatRestaurationAdministration(etat) {
+  const zone = document.getElementById(
+    'etatRestaurationAdministration'
+  );
+
+  if (!zone) {
+    return;
+  }
+
+  etat = etat || {};
+  const active = etat.operationActive;
+
+  if (active) {
+    const interrompue = Boolean(etat.restaurationInterrompue);
+
+    zone.innerHTML = `
+      <div class="carte-etat-restauration ${interrompue ? 'restauration-interrompue' : ''}">
+        <div>
+          <strong>${interrompue ? 'Restauration interrompue' : 'Restauration en cours'}</strong>
+          <span>
+            Étape ${echapperHtml(libelleEtapeRestauration_(active.etape))}
+            · ${Number(active.progression || 0)} %
+          </span>
+          <small>Sauvegarde cible ${echapperHtml(active.backupId || '')}</small>
+        </div>
+        <div class="barre-progression-restauration"><span style="width:${Math.max(0, Math.min(100, Number(active.progression || 0)))}%"></span></div>
+        ${etat.repriseRollbackDisponible
+          ? `<button type="button" class="bouton-danger" data-autorise-pendant-restauration="true" onclick="reprendreRollbackRestaurationAdministration()">Reprendre le rollback</button>`
+          : ''}
+        ${etat.repriseFinalisationDisponible
+          ? `<button type="button" class="bouton-principal" data-autorise-pendant-restauration="true" onclick="reprendreFinalisationRestaurationAdministration()">Reprendre la finalisation</button>`
+          : ''}
+        ${(etat.feuillesTechniquesDetectees || []).length
+          ? `<div class="liste-feuilles-techniques-restauration"><strong>Feuilles techniques détectées</strong><span>${(etat.feuillesTechniquesDetectees || []).map(echapperHtml).join(', ')}</span></div>`
+          : ''}
+      </div>
+    `;
+    basculerInterfacePendantRestauration_(true);
+    return;
+  }
+
+  basculerInterfacePendantRestauration_(false);
+  const derniere = etat.derniereOperation;
+
+  zone.innerHTML = derniere
+    ? `<div class="derniere-restauration-administration">
+        <strong>Dernière opération : ${echapperHtml(derniere.statut || '')}</strong>
+        <span>${echapperHtml(derniere.backupId || '')}${derniere.dureeMs ? ' · ' + echapperHtml(formaterDureeRestauration_(derniere.dureeMs)) : ''}</span>
+      </div>`
+    : '';
+}
+
+
+function basculerInterfacePendantRestauration_(bloquer) {
+  document.querySelectorAll('.page-administration button').forEach(
+    function (bouton) {
+      if (bouton.dataset.autorisePendantRestauration === 'true') {
+        return;
+      }
+
+      if (bloquer) {
+        if (!Object.prototype.hasOwnProperty.call(
+          bouton.dataset,
+          'etaitDesactiveRestauration'
+        )) {
+          bouton.dataset.etaitDesactiveRestauration = bouton.disabled
+            ? 'true'
+            : 'false';
+        }
+        bouton.disabled = true;
+      } else if (
+        bouton.dataset.etaitDesactiveRestauration === 'false'
+      ) {
+        bouton.disabled = false;
+        delete bouton.dataset.etaitDesactiveRestauration;
+      }
+    }
+  );
+}
+
+
+function afficherProgressionRestaurationDansModal_(operation) {
+  const contenu = document.getElementById(
+    'contenuPreparationRestaurationAdministration'
+  );
+  const confirmation = document.getElementById(
+    'confirmationRestaurationAdministration'
+  );
+
+  if (!contenu) {
+    return;
+  }
+
+  const etapes = [
+    ['SAUVEGARDE_SECURITE', 'Sauvegarde de sécurité'],
+    ['STAGING', 'Écriture du staging'],
+    ['VALIDATION_STAGING', 'Validation du staging'],
+    ['BASCULEMENT', 'Basculement'],
+    ['MIGRATIONS', 'Migrations'],
+    ['DIAGNOSTIC', 'Diagnostic final'],
+    ['FINALISATION', 'Finalisation']
+  ];
+  const position = etapes.findIndex(function (etape) {
+    return etape[0] === operation.etape;
+  });
+
+  confirmation?.classList.add('masque');
+  contenu.innerHTML = `
+    <div class="progression-detaillee-restauration">
+      <h3>Restauration sécurisée en cours</h3>
+      <div class="barre-progression-restauration"><span style="width:${Math.max(0, Math.min(100, Number(operation.progression || 0)))}%"></span></div>
+      <div class="liste-etapes-restauration">
+        ${etapes.map(function (etape, index) {
+          const classe = index < position
+            ? 'etape-terminee'
+            : (index === position ? 'etape-active' : 'etape-attente');
+          return `<div class="${classe}"><span>${index < position ? '✓' : (index === position ? '●' : '○')}</span><strong>${echapperHtml(etape[1])}</strong></div>`;
+        }).join('')}
+      </div>
+      <p>Les consultations restent possibles. Toutes les écritures métier sont bloquées côté serveur.</p>
+    </div>
+  `;
+}
+
+
+function afficherResultatRestaurationAdministration_(resultat) {
+  const contenu = document.getElementById(
+    'contenuPreparationRestaurationAdministration'
+  );
+  const confirmation = document.getElementById(
+    'confirmationRestaurationAdministration'
+  );
+  const bouton = document.getElementById(
+    'boutonConfirmerRestaurationAdministration'
+  );
+
+  confirmation?.classList.add('masque');
+
+  if (bouton) {
+    bouton.disabled = true;
+    bouton.textContent = 'Restauration terminée';
+  }
+
+  if (contenu) {
+    contenu.innerHTML = `
+      <div class="resultat-restauration-reussie">
+        <strong>✓ Restauration terminée avec succès</strong>
+        <span>Sauvegarde restaurée : ${echapperHtml(resultat.backupId)}</span>
+        <span>Sauvegarde de sécurité : ${echapperHtml(resultat.backupIdSecurite)}</span>
+        <span>Schéma : ${Number(resultat.versionSchema)} · Durée : ${echapperHtml(formaterDureeRestauration_(resultat.dureeMs))}</span>
+      </div>
+    `;
+  }
+}
+
+
+function reprendreRollbackRestaurationAdministration() {
+  if (!window.confirm(
+    'Reprendre le rollback automatique et rétablir les données initiales ?'
+  )) {
+    return;
+  }
+
+  google.script.run
+    .withSuccessHandler(function (resultat) {
+      afficherToast(resultat.message, !resultat.succes);
+      actualiserEtatRestaurationAdministration_();
+    })
+    .withFailureHandler(function (erreur) {
+      afficherToast(extraireMessageErreur(erreur), true);
+    })
+    .reprendreRollbackRestauration(
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+
+function reprendreFinalisationRestaurationAdministration() {
+  if (!window.confirm(
+    'Reprendre la vérification et le nettoyage final de la restauration ?'
+  )) {
+    return;
+  }
+
+  google.script.run
+    .withSuccessHandler(function (resultat) {
+      afficherToast(resultat.message, !resultat.succes);
+      actualiserEtatRestaurationAdministration_();
+    })
+    .withFailureHandler(function (erreur) {
+      afficherToast(extraireMessageErreur(erreur), true);
+    })
+    .reprendreFinalisationRestauration(
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+
+function libelleEtapeRestauration_(etape) {
+  const libelles = {
+    INITIALISATION: 'initialisation',
+    SAUVEGARDE_SECURITE: 'sauvegarde de sécurité',
+    STAGING: 'staging',
+    VALIDATION_STAGING: 'validation',
+    BASCULEMENT: 'basculement',
+    MIGRATIONS: 'migrations',
+    DIAGNOSTIC: 'diagnostic',
+    FINALISATION: 'finalisation',
+    ROLLBACK: 'rollback',
+    ROLLBACK_INCOMPLET: 'rollback incomplet',
+    NETTOYAGE_INCOMPLET: 'finalisation incomplète',
+    FEUILLES_TECHNIQUES_ORPHELINES: 'diagnostic technique requis',
+    RECUPERATION_AUTOMATIQUE: 'récupération automatique'
+  };
+
+  return libelles[etape] || String(etape || 'inconnue');
+}
+
+
+function formaterDureeRestauration_(millisecondes) {
+  const secondes = Math.max(0, Math.round(
+    Number(millisecondes || 0) / 1000
+  ));
+
+  if (secondes < 60) {
+    return secondes + ' s';
+  }
+
+  return Math.floor(secondes / 60) + ' min ' +
+    String(secondes % 60).padStart(2, '0') + ' s';
+}
+
+function afficherFormationsAdministration() {
+  const corps = document.getElementById(
+    'corpsTableauFormationsAdministration'
+  );
+  const compteur = document.getElementById(
+    'compteurFormationsAdministration'
+  );
+
+  if (!corps) {
+    return;
+  }
+
+  const formations = etatApplication.formationsAdministration;
+
+  if (compteur) {
+    compteur.textContent =
+      formations.length +
+      (formations.length > 1 ? ' formations' : ' formation') +
+      ' · ' +
+      formations.filter(function (formation) {
+        return formation.actif;
+      }).length +
+      ' actives';
+  }
+
+  if (!formations.length) {
+    corps.innerHTML = `
+      <tr><td colspan="5" class="etat-vide">Aucune formation.</td></tr>
+    `;
+    return;
+  }
+
+  corps.innerHTML = formations.map(function (formation) {
+    return `
+      <tr>
+        <td><strong>${formation.ordre}</strong></td>
+        <td>${echapperHtml(formation.libelle)}</td>
+        <td>
+          <span class="badge-statut ${formation.actif ? 'badge-vert' : 'badge-gris'}">
+            ${formation.actif ? 'Active' : 'Inactive'}
+          </span>
+        </td>
+        <td>
+          ${formation.utilisee
+            ? '<span class="badge-statut badge-orange">Historique existant</span>'
+            : '<span class="badge-statut badge-gris">Non utilisée</span>'}
+        </td>
+        <td class="colonne-actions">
+          <button
+            type="button"
+            class="bouton-icone"
+            onclick="modifierFormationAdministration('${formation.idFormation}')"
+            title="Modifier"
+          >✎</button>
+          <button
+            type="button"
+            class="bouton-action-statut-referentiel"
+            onclick="basculerFormationAdministration('${formation.idFormation}', ${!formation.actif})"
+          >${formation.actif ? 'Désactiver' : 'Activer'}</button>
+          <button
+            type="button"
+            class="bouton-danger bouton-suppression-formation"
+            onclick="supprimerFormationAdministration('${formation.idFormation}')"
+          >${formation.utilisee ? 'Désactiver' : 'Supprimer'}</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function nouvelleFormationAdministration() {
+  document.getElementById('idFormationAdministration').value = '';
+  document.getElementById('libelleFormationAdministration').value = '';
+  document.getElementById('ordreFormationAdministration').value =
+    etatApplication.formationsAdministration.length + 1;
+  document.getElementById('actifFormationAdministration').checked = true;
+  document.getElementById(
+    'titreModalFormationAdministration'
+  ).textContent = 'Nouvelle formation';
+  document.getElementById(
+    'modalFormationAdministration'
+  ).classList.remove('masque');
+  document.body.classList.add('modal-ouverte');
+}
+
+function modifierFormationAdministration(idFormation) {
+  const formation = etatApplication.formationsAdministration.find(
+    function (element) {
+      return element.idFormation === idFormation;
+    }
+  );
+
+  if (!formation) {
+    afficherToast('Formation introuvable.', true);
+    return;
+  }
+
+  document.getElementById('idFormationAdministration').value =
+    formation.idFormation;
+  document.getElementById('libelleFormationAdministration').value =
+    formation.libelle;
+  document.getElementById('ordreFormationAdministration').value =
+    formation.ordre;
+  document.getElementById('actifFormationAdministration').checked =
+    Boolean(formation.actif);
+  document.getElementById(
+    'titreModalFormationAdministration'
+  ).textContent = 'Modifier la formation';
+  document.getElementById(
+    'modalFormationAdministration'
+  ).classList.remove('masque');
+  document.body.classList.add('modal-ouverte');
+}
+
+function fermerModalFormationAdministration() {
+  document.getElementById(
+    'modalFormationAdministration'
+  )?.classList.add('masque');
+  document.body.classList.remove('modal-ouverte');
+}
+
+function soumettreFormationAdministration(evenement) {
+  evenement.preventDefault();
+
+  const bouton = document.getElementById(
+    'boutonEnregistrerFormationAdministration'
+  );
+  const donnees = {
+    idFormation: document.getElementById(
+      'idFormationAdministration'
+    ).value,
+    libelle: document.getElementById(
+      'libelleFormationAdministration'
+    ).value,
+    ordre: document.getElementById(
+      'ordreFormationAdministration'
+    ).value,
+    actif: document.getElementById(
+      'actifFormationAdministration'
+    ).checked
+  };
+
+  bouton.disabled = true;
+  bouton.textContent = 'Enregistrement…';
+
+  google.script.run
+    .withSuccessHandler(function (resultat) {
+      bouton.disabled = false;
+      bouton.textContent = 'Enregistrer';
+      fermerModalFormationAdministration();
+      afficherToast(resultat.message, false);
+      initialiserPageAdministration();
+    })
+    .withFailureHandler(function (erreur) {
+      bouton.disabled = false;
+      bouton.textContent = 'Enregistrer';
+      afficherToast(extraireMessageErreur(erreur), true);
+    })
+    .enregistrerFormationAdministration(
+      donnees,
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+function basculerFormationAdministration(idFormation, actif) {
+  google.script.run
+    .withSuccessHandler(function (resultat) {
+      afficherToast(resultat.message, false);
+      initialiserPageAdministration();
+    })
+    .withFailureHandler(gererErreurServeur)
+    .basculerActifFormationAdministration(
+      idFormation,
+      actif,
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+function supprimerFormationAdministration(idFormation) {
+  const formation = etatApplication.formationsAdministration.find(
+    function (element) {
+      return element.idFormation === idFormation;
+    }
+  );
+
+  if (!formation) {
+    afficherToast('Formation introuvable.', true);
+    return;
+  }
+
+  const message = formation.utilisee
+    ? 'Cette formation est utilisée. Elle sera uniquement désactivée. Continuer ?'
+    : 'Supprimer définitivement cette formation inutilisée ?';
+
+  if (!window.confirm(message)) {
+    return;
+  }
+
+  google.script.run
+    .withSuccessHandler(function (resultat) {
+      afficherToast(resultat.message, false);
+      initialiserPageAdministration();
+    })
+    .withFailureHandler(gererErreurServeur)
+    .supprimerFormationAdministration(
+      idFormation,
+      obtenirJetonAdministrateurApplication()
+    );
 }
 
 </script>

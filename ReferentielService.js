@@ -37,7 +37,7 @@ function getCategoriesReferentiel(formation) {
     return [];
   }
 
-  const donnees = preparerDonneesReferentiel_();
+  const donnees = preparerDonneesReferentiel_(true);
   const idsUtilises = obtenirIdsItemsUtilisesReferentiel_();
   const items = lireItemsReferentiel_(donnees.feuilleItems);
 
@@ -77,7 +77,7 @@ function getItemsReferentiel(formation) {
     return [];
   }
 
-  const donnees = preparerDonneesReferentiel_();
+  const donnees = preparerDonneesReferentiel_(true);
   const categories = lireCategoriesReferentiel_(
     donnees.feuilleCategories
   );
@@ -134,7 +134,14 @@ function getItemsReferentiel(formation) {
 /**
  * Crée ou modifie une catégorie pédagogique.
  */
-function enregistrerCategorieReferentiel(donnees) {
+function enregistrerCategorieReferentiel(
+  donnees,
+  jetonAdministrateur
+) {
+  const sessionUtilisateur = exigerAdministrateur_(
+    jetonAdministrateur
+  );
+  exigerEcritureAutorisee_();
   verifierCategorieReferentiel_(donnees);
 
   return avecVerrouReferentiel_(function () {
@@ -226,6 +233,21 @@ function enregistrerCategorieReferentiel(donnees) {
       ordre
     );
 
+    journaliserActionSensible_(
+      donnees.idCategorie
+        ? 'CATEGORIE_MODIFICATION'
+        : 'CATEGORIE_CREATION',
+      'CATEGORIE_REFERENTIEL',
+      idCategorie,
+      {
+        formation: formation,
+        intitule: ligne[index.CATEGORIE],
+        ordre: ordre,
+        actif: ligne[index.ACTIF]
+      },
+      sessionUtilisateur.identifiantHistorique
+    );
+
     return {
       succes: true,
       idCategorie: idCategorie,
@@ -240,7 +262,14 @@ function enregistrerCategorieReferentiel(donnees) {
 /**
  * Crée ou modifie un item pédagogique.
  */
-function enregistrerItemReferentiel(donnees) {
+function enregistrerItemReferentiel(
+  donnees,
+  jetonAdministrateur
+) {
+  const sessionUtilisateur = exigerAdministrateur_(
+    jetonAdministrateur
+  );
+  exigerEcritureAutorisee_();
   verifierItemReferentiel_(donnees);
 
   return avecVerrouReferentiel_(function () {
@@ -384,6 +413,22 @@ function enregistrerItemReferentiel(donnees) {
       );
     }
 
+    journaliserActionSensible_(
+      donnees.idItem
+        ? 'ITEM_REFERENTIEL_MODIFICATION'
+        : 'ITEM_REFERENTIEL_CREATION',
+      'ITEM_REFERENTIEL',
+      idItem,
+      {
+        formation: formation,
+        idCategorie: idCategorie,
+        intitule: ligne[index.ITEM],
+        ordre: ordre,
+        actif: ligne[index.ACTIF]
+      },
+      sessionUtilisateur.identifiantHistorique
+    );
+
     return {
       succes: true,
       idItem: idItem,
@@ -395,59 +440,121 @@ function enregistrerItemReferentiel(donnees) {
 }
 
 
-function deplacerCategorieReferentiel(idCategorie, direction) {
-  return deplacerElementReferentiel_(
+function deplacerCategorieReferentiel(
+  idCategorie,
+  direction,
+  jetonAdministrateur
+) {
+  const sessionUtilisateur = exigerAdministrateur_(
+    jetonAdministrateur
+  );
+  exigerEcritureAutorisee_();
+  const resultat = deplacerElementReferentiel_(
     'categorie',
     idCategorie,
     direction
   );
+
+  journaliserActionSensible_(
+    'CATEGORIE_DEPLACEMENT',
+    'CATEGORIE_REFERENTIEL',
+    idCategorie,
+    { direction: direction },
+    sessionUtilisateur.identifiantHistorique
+  );
+
+  return resultat;
 }
 
 
-function deplacerItemReferentiel(idItem, direction) {
-  return deplacerElementReferentiel_(
+function deplacerItemReferentiel(
+  idItem,
+  direction,
+  jetonAdministrateur
+) {
+  const sessionUtilisateur = exigerAdministrateur_(
+    jetonAdministrateur
+  );
+  exigerEcritureAutorisee_();
+  const resultat = deplacerElementReferentiel_(
     'item',
     idItem,
     direction
   );
+
+  journaliserActionSensible_(
+    'ITEM_REFERENTIEL_DEPLACEMENT',
+    'ITEM_REFERENTIEL',
+    idItem,
+    { direction: direction },
+    sessionUtilisateur.identifiantHistorique
+  );
+
+  return resultat;
 }
 
 
 function basculerActifCategorieReferentiel(
   idCategorie,
-  actif
+  actif,
+  jetonAdministrateur
 ) {
-  const preparation = preparerDonneesReferentiel_();
-  const feuille = preparation.feuilleCategories;
-  const categorie = lireCategoriesReferentiel_(feuille)
-    .find(function (element) {
-      return element.idCategorie === String(idCategorie);
-    });
+  const sessionUtilisateur = exigerAdministrateur_(
+    jetonAdministrateur
+  );
+  exigerEcritureAutorisee_();
+  return avecVerrouReferentiel_(function () {
+    const preparation = preparerDonneesReferentiel_();
+    const feuille = preparation.feuilleCategories;
+    const categorie = lireCategoriesReferentiel_(feuille)
+      .find(function (element) {
+        return element.idCategorie === String(idCategorie);
+      });
 
-  if (!categorie) {
-    throw new Error('Catégorie pédagogique introuvable.');
-  }
+    if (!categorie) {
+      throw new Error('Catégorie pédagogique introuvable.');
+    }
 
-  const nouvelEtat = convertirActifReferentiel_(actif);
-  const index = obtenirIndexReferentiel_(feuille);
+    const nouvelEtat = convertirActifReferentiel_(actif);
+    const index = obtenirIndexReferentiel_(feuille);
 
-  feuille
-    .getRange(
-      categorie.numeroLigne,
-      index.ACTIF + 1
-    )
-    .setValue(nouvelEtat ? 'Oui' : 'Non');
+    feuille
+      .getRange(
+        categorie.numeroLigne,
+        index.ACTIF + 1
+      )
+      .setValue(nouvelEtat ? 'Oui' : 'Non');
 
-  return {
-    succes: true,
-    message: nouvelEtat
-      ? 'Catégorie activée.'
-      : 'Catégorie désactivée.'
-  };
+    journaliserActionSensible_(
+      nouvelEtat
+        ? 'CATEGORIE_ACTIVATION'
+        : 'CATEGORIE_DESACTIVATION',
+      'CATEGORIE_REFERENTIEL',
+      idCategorie,
+      { actif: nouvelEtat },
+      sessionUtilisateur.identifiantHistorique
+    );
+
+    return {
+      succes: true,
+      message: nouvelEtat
+        ? 'Catégorie activée.'
+        : 'Catégorie désactivée.'
+    };
+  });
 }
 
 
-function basculerActifItemReferentiel(idItem, actif) {
+function basculerActifItemReferentiel(
+  idItem,
+  actif,
+  jetonAdministrateur
+) {
+  const sessionUtilisateur = exigerAdministrateur_(
+    jetonAdministrateur
+  );
+  exigerEcritureAutorisee_();
+
   return avecVerrouReferentiel_(function () {
     const preparation = preparerDonneesReferentiel_();
     const feuille = preparation.feuilleItems;
@@ -524,6 +631,16 @@ function basculerActifItemReferentiel(idItem, actif) {
       );
     }
 
+    journaliserActionSensible_(
+      nouvelEtat
+        ? 'ITEM_REFERENTIEL_ACTIVATION'
+        : 'ITEM_REFERENTIEL_DESACTIVATION',
+      'ITEM_REFERENTIEL',
+      identifiant,
+      { actif: nouvelEtat },
+      sessionUtilisateur.identifiantHistorique
+    );
+
     return {
       succes: true,
       idItem: identifiant,
@@ -539,7 +656,15 @@ function basculerActifItemReferentiel(idItem, actif) {
 /**
  * Supprime une catégorie jamais utilisée, sinon la désactive.
  */
-function supprimerCategorieReferentiel(idCategorie) {
+function supprimerCategorieReferentiel(
+  idCategorie,
+  jetonAdministrateur
+) {
+  const sessionUtilisateur = exigerAdministrateur_(
+    jetonAdministrateur
+  );
+  exigerEcritureAutorisee_();
+
   return avecVerrouReferentiel_(function () {
     const preparation = preparerDonneesReferentiel_();
     const feuilleCategories = preparation.feuilleCategories;
@@ -579,6 +704,14 @@ function supprimerCategorieReferentiel(idCategorie) {
         )
         .setValue('Non');
 
+      journaliserActionSensible_(
+        'CATEGORIE_DESACTIVATION_HISTORIQUE',
+        'CATEGORIE_REFERENTIEL',
+        idCategorie,
+        { suppressionPhysique: false },
+        sessionUtilisateur.identifiantHistorique
+      );
+
       return {
         succes: true,
         supprime: false,
@@ -603,6 +736,17 @@ function supprimerCategorieReferentiel(idCategorie) {
       categorie.formation
     );
 
+    journaliserActionSensible_(
+      'CATEGORIE_SUPPRESSION',
+      'CATEGORIE_REFERENTIEL',
+      idCategorie,
+      {
+        suppressionPhysique: true,
+        formation: categorie.formation
+      },
+      sessionUtilisateur.identifiantHistorique
+    );
+
     return {
       succes: true,
       supprime: true,
@@ -616,7 +760,15 @@ function supprimerCategorieReferentiel(idCategorie) {
 /**
  * Supprime un item jamais utilisé, sinon le désactive.
  */
-function supprimerItemReferentiel(idItem) {
+function supprimerItemReferentiel(
+  idItem,
+  jetonAdministrateur
+) {
+  const sessionUtilisateur = exigerAdministrateur_(
+    jetonAdministrateur
+  );
+  exigerEcritureAutorisee_();
+
   return avecVerrouReferentiel_(function () {
     const preparation = preparerDonneesReferentiel_();
     const feuille = preparation.feuilleItems;
@@ -639,6 +791,14 @@ function supprimerItemReferentiel(idItem) {
         .getRange(item.numeroLigne, index.ACTIF + 1)
         .setValue('Non');
 
+      journaliserActionSensible_(
+        'ITEM_REFERENTIEL_DESACTIVATION_HISTORIQUE',
+        'ITEM_REFERENTIEL',
+        idItem,
+        { suppressionPhysique: false },
+        sessionUtilisateur.identifiantHistorique
+      );
+
       return {
         succes: true,
         supprime: false,
@@ -653,6 +813,17 @@ function supprimerItemReferentiel(idItem) {
       item.idCategorie
     );
 
+    journaliserActionSensible_(
+      'ITEM_REFERENTIEL_SUPPRESSION',
+      'ITEM_REFERENTIEL',
+      idItem,
+      {
+        suppressionPhysique: true,
+        idCategorie: item.idCategorie
+      },
+      sessionUtilisateur.identifiantHistorique
+    );
+
     return {
       succes: true,
       supprime: true,
@@ -663,21 +834,18 @@ function supprimerItemReferentiel(idItem) {
 }
 
 
-function preparerDonneesReferentiel_() {
+function preparerDonneesReferentiel_(lecturePure) {
   const classeur = SpreadsheetApp.getActiveSpreadsheet();
   const feuilleCategories = obtenirFeuilleStructuree_(
     classeur,
-    CONFIG_CATEGORIES_REFERENTIEL
+    CONFIG_CATEGORIES_REFERENTIEL,
+    lecturePure
   );
 
   const feuilleItems = obtenirFeuilleStructuree_(
     classeur,
-    CONFIG_ITEMS_REFERENTIEL
-  );
-
-  migrerItemsSansCategorieReferentiel_(
-    feuilleCategories,
-    feuilleItems
+    CONFIG_ITEMS_REFERENTIEL,
+    lecturePure
   );
 
   return {
@@ -687,151 +855,23 @@ function preparerDonneesReferentiel_() {
 }
 
 
-function obtenirFeuilleStructuree_(classeur, configuration) {
-  let feuille = classeur.getSheetByName(
+function obtenirFeuilleStructuree_(
+  classeur,
+  configuration,
+  lecturePure
+) {
+  if (lecturePure) {
+    return obtenirFeuilleLecturePure_(
+      classeur,
+      configuration.feuille,
+      configuration.colonnes
+    );
+  }
+
+  return assurerFeuilleMigration_(
+    classeur,
     configuration.feuille
   );
-
-  if (!feuille) {
-    feuille = classeur.insertSheet(configuration.feuille);
-  }
-
-  if (
-    feuille.getLastRow() < 1 ||
-    feuille.getLastColumn() < 1
-  ) {
-    feuille
-      .getRange(
-        1,
-        1,
-        1,
-        configuration.colonnes.length
-      )
-      .setValues([configuration.colonnes]);
-  }
-
-  let entetes = feuille
-    .getRange(1, 1, 1, feuille.getLastColumn())
-    .getValues()[0];
-
-  let index = creerIndexReferentiel_(entetes);
-
-  configuration.colonnes.forEach(function (colonne) {
-    if (Number.isInteger(index[colonne])) {
-      return;
-    }
-
-    const nouvelleColonne = feuille.getLastColumn() + 1;
-    feuille
-      .getRange(1, nouvelleColonne)
-      .setValue(colonne);
-
-    entetes.push(colonne);
-    index = creerIndexReferentiel_(entetes);
-  });
-
-  feuille
-    .getRange(1, 1, 1, feuille.getLastColumn())
-    .setFontWeight('bold');
-
-  feuille.setFrozenRows(1);
-  return feuille;
-}
-
-
-/**
- * Rattache sans perte les anciens items orphelins à une catégorie créée.
- */
-function migrerItemsSansCategorieReferentiel_(
-  feuilleCategories,
-  feuilleItems
-) {
-  const categories = lireCategoriesReferentiel_(
-    feuilleCategories
-  );
-
-  const items = lireItemsReferentiel_(feuilleItems);
-  const categoriesParId = {};
-
-  categories.forEach(function (categorie) {
-    categoriesParId[categorie.idCategorie] = categorie;
-  });
-
-  const indexItems = obtenirIndexReferentiel_(feuilleItems);
-  const categoriesMigration = {};
-
-  items.forEach(function (item) {
-    const categorie = categoriesParId[item.idCategorie];
-
-    if (
-      categorie &&
-      categorie.formation === item.formation
-    ) {
-      return;
-    }
-
-    if (!item.formation) {
-      return;
-    }
-
-    let categorieMigration =
-      categoriesMigration[item.formation] ||
-      categories.find(function (element) {
-        return (
-          element.formation === item.formation &&
-          element.intitule.toLowerCase() ===
-            'items pédagogiques'
-        );
-      });
-
-    if (!categorieMigration) {
-      const categoriesFormation = categories.filter(
-        function (element) {
-          return element.formation === item.formation;
-        }
-      );
-
-      const ligne = new Array(
-        feuilleCategories.getLastColumn()
-      ).fill('');
-
-      const indexCategories = obtenirIndexReferentiel_(
-        feuilleCategories
-      );
-
-      categorieMigration = {
-        idCategorie: Utilities.getUuid(),
-        formation: item.formation,
-        intitule: 'Items pédagogiques',
-        ordre: categoriesFormation.length + 1,
-        actif: true
-      };
-
-      ligne[indexCategories.ID_CATEGORIE] =
-        categorieMigration.idCategorie;
-      ligne[indexCategories.FORMATION] = item.formation;
-      ligne[indexCategories.CATEGORIE] =
-        categorieMigration.intitule;
-      ligne[indexCategories.ORDRE] =
-        categorieMigration.ordre;
-      ligne[indexCategories.ACTIF] = 'Oui';
-
-      feuilleCategories.appendRow(ligne);
-      categories.push(categorieMigration);
-      categoriesParId[categorieMigration.idCategorie] =
-        categorieMigration;
-    }
-
-    categoriesMigration[item.formation] =
-      categorieMigration;
-
-    feuilleItems
-      .getRange(
-        item.numeroLigne,
-        indexItems.ID_CATEGORIE + 1
-      )
-      .setValue(categorieMigration.idCategorie);
-  });
 }
 
 
@@ -1273,17 +1313,5 @@ function verifierFormationActiveReferentiel_(formation) {
 
 
 function avecVerrouReferentiel_(traitement) {
-  const verrou = LockService.getDocumentLock();
-
-  if (!verrou.tryLock(30000)) {
-    throw new Error(
-      'Le référentiel est déjà en cours de modification.'
-    );
-  }
-
-  try {
-    return traitement();
-  } finally {
-    verrou.releaseLock();
-  }
+  return executerMutationMetier_(traitement);
 }

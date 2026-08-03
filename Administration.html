@@ -1,0 +1,440 @@
+<div class="page page-administration">
+
+  <div class="entete-page">
+    <h1>Administration</h1>
+    <p>Gestion des formations et état de la session administrateur.</p>
+  </div>
+
+  <section class="bloc bloc-parametre-administration">
+    <div>
+      <h2>Session administrateur</h2>
+      <p>
+        Le mot de passe est conservé uniquement sous forme hachée dans
+        les propriétés privées du script.
+      </p>
+    </div>
+
+    <div
+      id="diagnosticIdentificationAdministration"
+      class="diagnostic-identification-administration"
+    ></div>
+  </section>
+
+  <section class="bloc bloc-diagnostic-administration">
+    <div class="entete-page entete-page-actions entete-diagnostic-administration">
+      <div>
+        <h2>Diagnostic</h2>
+        <p>
+          État du schéma, des identifiants et des références entre feuilles.
+        </p>
+      </div>
+
+      <div class="actions-diagnostic-administration">
+        <button
+          type="button"
+          class="bouton-secondaire"
+          onclick="lancerDiagnosticAdministration()"
+        >Lancer un diagnostic</button>
+        <button
+          type="button"
+          class="bouton-principal"
+          onclick="executerMigrationsAdministration()"
+        >Exécuter les migrations</button>
+      </div>
+    </div>
+
+    <div class="grille-diagnostic-administration">
+      <article class="carte-diagnostic-administration">
+        <span>Version du schéma</span>
+        <strong id="versionSchemaAdministration">—</strong>
+      </article>
+      <article class="carte-diagnostic-administration">
+        <span>Migrations exécutées</span>
+        <strong id="nombreMigrationsAdministration">—</strong>
+      </article>
+      <article class="carte-diagnostic-administration">
+        <span>Intégrité des feuilles</span>
+        <strong id="integriteFeuillesAdministration">—</strong>
+      </article>
+      <article class="carte-diagnostic-administration">
+        <span>Erreurs détectées</span>
+        <strong id="nombreErreursAdministration">—</strong>
+      </article>
+    </div>
+
+    <div class="grille-details-diagnostic-administration">
+      <div>
+        <h3>Migrations</h3>
+        <div id="listeMigrationsAdministration" class="liste-diagnostic-administration">
+          Chargement…
+        </div>
+      </div>
+      <div>
+        <h3>Feuilles</h3>
+        <div id="listeFeuillesAdministration" class="liste-diagnostic-administration">
+          Chargement…
+        </div>
+      </div>
+    </div>
+
+    <div class="erreurs-diagnostic-administration">
+      <h3>Erreurs détectées</h3>
+      <div id="listeErreursAdministration">
+        Chargement…
+      </div>
+    </div>
+  </section>
+
+  <section class="bloc bloc-sauvegardes-administration">
+    <div class="entete-page entete-page-actions entete-sauvegardes-administration">
+      <div>
+        <h2>Sauvegardes</h2>
+        <p>
+          Export JSON complet, signé et vérifié dans le Drive privé du propriétaire.
+        </p>
+      </div>
+
+      <span class="badge-phase-sauvegarde">Phase 3 · Restauration sécurisée</span>
+    </div>
+
+    <div class="grille-creation-sauvegarde-administration">
+      <div class="groupe-champ zone-commentaire-sauvegarde">
+        <div class="entete-champ-sauvegarde">
+          <label for="commentaireSauvegardeAdministration">
+            Commentaire
+          </label>
+          <span id="compteurCommentaireSauvegardeAdministration">
+            0 / 500
+          </span>
+        </div>
+        <textarea
+          id="commentaireSauvegardeAdministration"
+          class="champ"
+          rows="4"
+          maxlength="500"
+          placeholder="Motif ou contexte de cette sauvegarde…"
+          oninput="mettreAJourCompteurCommentaireSauvegarde()"
+        ></textarea>
+      </div>
+
+      <div class="actions-creation-sauvegarde">
+        <button
+          type="button"
+          id="boutonCreerSauvegardeAdministration"
+          class="bouton-principal"
+          onclick="creerSauvegardeAdministration()"
+        >Créer une sauvegarde</button>
+
+        <p>
+          Toutes les feuilles déclarées sont lues sans modifier leurs données.
+        </p>
+      </div>
+    </div>
+
+    <div
+      id="etatProgressionSauvegardeAdministration"
+      class="etat-progression-sauvegarde"
+      aria-live="polite"
+    >Prêt à créer une sauvegarde manuelle.</div>
+
+    <div
+      id="resultatDerniereSauvegardeAdministration"
+      class="resultat-sauvegarde-administration"
+    >
+      <div class="etat-vide">
+        Chargement de la dernière sauvegarde…
+      </div>
+    </div>
+
+    <div class="separateur-inventaire-sauvegardes"></div>
+
+    <div
+      id="etatRestaurationAdministration"
+      class="etat-restauration-administration"
+      aria-live="polite"
+    ></div>
+
+    <div class="entete-inventaire-sauvegardes">
+      <div>
+        <h3>Inventaire et restaurabilité</h3>
+        <p>
+          Une restauration exige un test concluant, une prévisualisation et une sauvegarde de sécurité vérifiée.
+        </p>
+      </div>
+
+      <button
+        type="button"
+        class="bouton-secondaire"
+        onclick="actualiserInventaireSauvegardesAdministration()"
+      >Actualiser la liste</button>
+    </div>
+
+    <div
+      id="listeSauvegardesRestaurabiliteAdministration"
+      class="liste-sauvegardes-restaurabilite"
+    >
+      <div class="etat-vide">Chargement de l’inventaire…</div>
+    </div>
+  </section>
+
+  <section class="bloc">
+    <div class="entete-page entete-page-actions entete-formations-administration">
+      <div>
+        <h2>Formations</h2>
+        <p id="compteurFormationsAdministration">
+          Chargement…
+        </p>
+      </div>
+
+      <button
+        type="button"
+        class="bouton-principal"
+        onclick="nouvelleFormationAdministration()"
+      >+ Nouvelle formation</button>
+    </div>
+
+    <div class="tableau-responsive">
+      <table class="tableau tableau-formations-administration">
+        <thead>
+          <tr>
+            <th>Ordre</th>
+            <th>Libellé</th>
+            <th>Statut</th>
+            <th>Utilisation</th>
+            <th class="colonne-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="corpsTableauFormationsAdministration">
+          <tr>
+            <td colspan="5" class="etat-vide">
+              Chargement des formations…
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+</div>
+
+<div
+  id="modalRestaurabiliteSauvegardeAdministration"
+  class="modal-overlay masque"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="titreModalRestaurabiliteSauvegarde"
+>
+  <div class="modal-contenu modal-restaurabilite-sauvegarde">
+    <div class="modal-entete">
+      <div>
+        <h2 id="titreModalRestaurabiliteSauvegarde">
+          Consultation de la sauvegarde
+        </h2>
+        <p id="sousTitreModalRestaurabiliteSauvegarde">
+          Métadonnées, manifeste et rapport de simulation.
+        </p>
+      </div>
+      <button
+        type="button"
+        class="bouton-fermer-modal"
+        onclick="fermerModalRestaurabiliteSauvegarde()"
+        aria-label="Fermer"
+      >×</button>
+    </div>
+
+    <div
+      id="contenuModalRestaurabiliteSauvegarde"
+      class="modal-corps contenu-modal-restaurabilite"
+    >
+      <div class="etat-vide">Chargement…</div>
+    </div>
+
+    <div class="modal-pied">
+      <button
+        type="button"
+        id="boutonRestaurerDepuisConsultation"
+        class="bouton-secondaire"
+        onclick="preparerRestaurationDepuisConsultationAdministration()"
+        disabled
+      >Préparer la restauration</button>
+      <button
+        type="button"
+        class="bouton-principal"
+        onclick="fermerModalRestaurabiliteSauvegarde()"
+      >Fermer</button>
+    </div>
+  </div>
+</div>
+
+<div
+  id="modalPreparationRestaurationAdministration"
+  class="modal-overlay masque"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="titreModalPreparationRestauration"
+>
+  <div class="modal-contenu modal-preparation-restauration">
+    <div class="modal-entete">
+      <div>
+        <h2 id="titreModalPreparationRestauration">
+          Préparer la restauration
+        </h2>
+        <p>
+          Vérification renforcée avant remplacement intégral des données.
+        </p>
+      </div>
+      <button
+        type="button"
+        class="bouton-fermer-modal"
+        onclick="fermerModalPreparationRestaurationAdministration()"
+        aria-label="Fermer"
+      >×</button>
+    </div>
+
+    <div
+      id="contenuPreparationRestaurationAdministration"
+      class="modal-corps contenu-preparation-restauration"
+    >
+      <div class="etat-vide">Chargement…</div>
+    </div>
+
+    <div
+      id="confirmationRestaurationAdministration"
+      class="confirmation-restauration-administration masque"
+    >
+      <label class="case-confirmation-restauration">
+        <input
+          type="checkbox"
+          id="confirmerSauvegardeSecuriteRestauration"
+        >
+        <span>
+          Je confirme qu’une sauvegarde automatique de sécurité doit être
+          créée et vérifiée avant le basculement.
+        </span>
+      </label>
+
+      <div class="grille-confirmation-restauration">
+        <div class="groupe-champ">
+          <label for="texteConfirmationRestauration">
+            Saisir RESTAURER
+          </label>
+          <input
+            type="text"
+            id="texteConfirmationRestauration"
+            class="champ"
+            autocomplete="off"
+          >
+        </div>
+        <div class="groupe-champ">
+          <label for="motDePasseConfirmationRestauration">
+            Mot de passe administrateur
+          </label>
+          <input
+            type="password"
+            id="motDePasseConfirmationRestauration"
+            class="champ"
+            autocomplete="current-password"
+          >
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-pied">
+      <button
+        type="button"
+        class="bouton-secondaire"
+        onclick="fermerModalPreparationRestaurationAdministration()"
+      >Annuler</button>
+      <button
+        type="button"
+        id="boutonConfirmerRestaurationAdministration"
+        class="bouton-danger"
+        onclick="confirmerEtExecuterRestaurationAdministration()"
+        disabled
+      >Confirmer et restaurer</button>
+    </div>
+  </div>
+</div>
+
+<div
+  id="modalFormationAdministration"
+  class="modal-overlay masque"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="titreModalFormationAdministration"
+>
+  <div class="modal-contenu modal-formation-administration">
+    <div class="modal-entete">
+      <div>
+        <h2 id="titreModalFormationAdministration">
+          Nouvelle formation
+        </h2>
+        <p>
+          Le changement de libellé est répercuté dans les données liées.
+        </p>
+      </div>
+      <button
+        type="button"
+        class="bouton-fermer-modal"
+        onclick="fermerModalFormationAdministration()"
+        aria-label="Fermer"
+      >×</button>
+    </div>
+
+    <form onsubmit="soumettreFormationAdministration(event)">
+      <input type="hidden" id="idFormationAdministration">
+
+      <div class="modal-corps">
+        <div class="groupe-champ">
+          <label for="libelleFormationAdministration">Libellé *</label>
+          <input
+            type="text"
+            id="libelleFormationAdministration"
+            class="champ"
+            required
+          >
+        </div>
+
+        <div class="groupe-champ groupe-champ-large">
+          <label for="ordreFormationAdministration">Ordre *</label>
+          <input
+            type="number"
+            id="ordreFormationAdministration"
+            class="champ"
+            min="1"
+            step="1"
+            required
+          >
+        </div>
+
+        <label class="interrupteur-formateur">
+          <input
+            type="checkbox"
+            id="actifFormationAdministration"
+            checked
+          >
+          <span class="interrupteur-visuel"></span>
+          <span>
+            <strong>Formation active</strong>
+            <small>
+              Une formation inactive n’est plus proposée dans les nouveaux dossiers.
+            </small>
+          </span>
+        </label>
+      </div>
+
+      <div class="modal-pied">
+        <button
+          type="button"
+          class="bouton-secondaire"
+          onclick="fermerModalFormationAdministration()"
+        >Annuler</button>
+        <button
+          type="submit"
+          id="boutonEnregistrerFormationAdministration"
+          class="bouton-principal"
+        >Enregistrer</button>
+      </div>
+    </form>
+  </div>
+</div>

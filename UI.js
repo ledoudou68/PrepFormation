@@ -1,4 +1,11 @@
 function doGet() {
+  const recuperation =
+    recupererRestaurationInterrompueAuDemarrage_();
+
+  if (!recuperation.operationActive) {
+    executerMigrationsAuDemarrage_();
+  }
+
   return HtmlService
     .createTemplateFromFile('Index')
     .evaluate()
@@ -12,19 +19,22 @@ function include(nomFichier) {
     .getContent();
 }
 
-function getPage(nomPage) {
+function getPage(nomPage, jetonAdministrateur) {
   const pagesAutorisees = [
     'Accueil',
     'Stagiaires',
     'Formateurs',
     'Sessions',
     'Referentiel',
-    'Indemnisation'
+    'Indemnisation',
+    'Administration'
   ];
 
   if (!pagesAutorisees.includes(nomPage)) {
     throw new Error('Page inconnue.');
   }
+
+  verifierAccesPage_(nomPage, jetonAdministrateur);
 
   return HtmlService
     .createTemplateFromFile(nomPage)

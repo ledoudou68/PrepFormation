@@ -22,6 +22,63 @@
 
   <div id="toast" class="toast"></div>
 
+  <div
+    id="modalAccesAdministrateur"
+    class="modal-overlay masque"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="titreModalAccesAdministrateur"
+  >
+    <div class="modal-contenu modal-acces-administrateur">
+      <div class="modal-entete">
+        <div>
+          <h2 id="titreModalAccesAdministrateur">
+            Accès administrateur
+          </h2>
+          <p>
+            La session sera verrouillée après 30 minutes d’inactivité.
+          </p>
+        </div>
+        <button
+          type="button"
+          class="bouton-fermer-modal"
+          onclick="fermerModalAccesAdministrateur()"
+          aria-label="Fermer"
+        >×</button>
+      </div>
+
+      <form onsubmit="soumettreAccesAdministrateur(event)">
+        <div class="modal-corps">
+          <div class="groupe-champ">
+            <label for="motDePasseAdministrateur">
+              Mot de passe administrateur
+            </label>
+            <input
+              type="password"
+              id="motDePasseAdministrateur"
+              class="champ"
+              autocomplete="off"
+              required
+            >
+          </div>
+        </div>
+
+        <div class="modal-pied">
+          <button
+            type="button"
+            class="bouton-secondaire"
+            onclick="fermerModalAccesAdministrateur()"
+          >Annuler</button>
+          <button
+            type="submit"
+            id="boutonValiderAccesAdministrateur"
+            class="bouton-principal"
+          >Déverrouiller</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <header class="topbar">
 
     <button
@@ -37,6 +94,28 @@
       <div class="titre-application">PrepFormation</div>
       <div class="sous-titre">Suivi des préparations</div>
     </div>
+
+    <div class="actions-acces-administration">
+      <button
+        type="button"
+        id="boutonAccesAdministrateur"
+        class="bouton-acces-administrateur"
+        onclick="ouvrirModalAccesAdministrateur()"
+      >Accès administrateur</button>
+
+      <button
+        type="button"
+        id="boutonVerrouillerAdministration"
+        class="bouton-verrouiller-administration masque"
+        onclick="verrouillerAdministrationInterface()"
+      >Verrouiller l’administration</button>
+    </div>
+
+    <div
+      id="identiteUtilisateurApplication"
+      class="identite-utilisateur-application"
+      aria-live="polite"
+    >Mode formateur</div>
 
   </header>
 
@@ -82,8 +161,9 @@
 
       <button
         type="button"
-        class="menu-item"
+        class="menu-item masque"
         data-page="Referentiel"
+        data-admin-only="true"
       >
         <span class="menu-icone">📚</span>
         <span>Référentiel</span>
@@ -91,11 +171,22 @@
 
       <button
         type="button"
-        class="menu-item"
+        class="menu-item masque"
         data-page="Indemnisation"
+        data-admin-only="true"
       >
         <span class="menu-icone">€</span>
         <span>Indemnisations</span>
+      </button>
+
+      <button
+        type="button"
+        class="menu-item masque"
+        data-page="Administration"
+        data-admin-only="true"
+      >
+        <span class="menu-icone">⚙</span>
+        <span>Administration</span>
       </button>
 
     </aside>
