@@ -998,15 +998,6 @@ function creerStagingRestauration_(
       canonicaliserSauvegarde_(source)
     );
 
-    console.log(JSON.stringify({
-      evenement: 'RESTAURATION_STAGING_EMPREINTE_AVANT_ECRITURE',
-      feuille: configuration.feuille,
-      empreinteCalculeeAvantEcriture:
-        liaison.empreinteAvantEcriture,
-      empreinteSigneeSauvegarde:
-        sauvegarde.integrity.sheetHashes[configuration.feuille]
-    }));
-
     liaison.etat = 'CREEE';
     enregistrerEtatOperationRestauration_(proprietes, etat);
     ecrireFeuilleStagingRestauration_(feuille, source);
@@ -1135,14 +1126,6 @@ function validerStagingRestauration_(classeur, sauvegarde, etat) {
         hacherTexteSauvegarde_(canonicaliserSauvegarde_(source))
       );
 
-      console.log(JSON.stringify({
-        evenement: 'RESTAURATION_STAGING_EMPREINTE_APRES_ECRITURE',
-        feuille: configuration.feuille,
-        empreinteCalculeeAvantEcriture: hashAvantEcriture,
-        empreinteRelueApresEcriture: hashRelu,
-        empreinteSigneeSauvegarde: hashAttendu
-      }));
-
       if (!comparaisonConstanteSecurite_(hashRelu, hashAttendu)) {
         const diagnostic = construireDiagnosticDivergenceStaging_(
           feuille,
@@ -1152,11 +1135,6 @@ function validerStagingRestauration_(classeur, sauvegarde, etat) {
           hashRelu,
           hashAttendu
         );
-
-        console.error(JSON.stringify({
-          evenement: 'RESTAURATION_STAGING_DIVERGENCE',
-          diagnostic: diagnostic
-        }));
 
         throw new Error(
           formaterErreurDivergenceStaging_(
@@ -1462,59 +1440,57 @@ function classifierDifferenceValeurStaging_(difference) {
 
 function formaterValeurDiagnosticStaging_(valeur, presente) {
   if (!presente) {
-    return '[cellule absente]';
+    return 'undefined';
   }
 
-  if (valeur instanceof Date) {
-    return valeur.toISOString();
-  }
+  const texte = JSON.stringify(valeur);
 
-  if (
-    valeur &&
-    typeof valeur === 'object' &&
-    !Array.isArray(valeur) &&
-    valeur.type === 'DATE_ISO_UTC'
-  ) {
-    return String(valeur.value || '');
-  }
-
-  if (valeur === '') {
-    return '[chaîne vide]';
-  }
-
-  if (valeur === null) {
-    return 'null';
-  }
-
-  const texte = typeof valeur === 'object'
-    ? canonicaliserSauvegarde_(valeur)
-    : String(valeur);
-
-  return texte.length > 120
-    ? texte.slice(0, 117) + '…'
-    : texte;
+  return texte === undefined ? 'undefined' : texte;
 }
 
 
 function formaterErreurDivergenceStaging_(nomFeuille, diagnostic) {
   const difference = diagnostic.premiereDifference;
-  const position = difference.portee === 'CELLULE'
-    ? 'ligne ' + difference.ligne + ', colonne ' +
-      difference.colonne +
-      (difference.entete ? ' (' + difference.entete + ')' : '')
-    : 'hors cellule (' + difference.entete + ')';
+  const cellule = difference.portee === 'CELLULE'
+    ? convertirNumeroColonneRestauration_(difference.colonne) +
+      difference.ligne
+    : 'aucune (divergence de métadonnée)';
+  const ligne = difference.portee === 'CELLULE'
+    ? String(difference.ligne)
+    : 'hors cellule';
+  const colonne = difference.portee === 'CELLULE'
+    ? (difference.entete || '[sans nom]') +
+      ' (#' + difference.colonne + ')'
+    : difference.entete + ' (#0)';
 
   return 'L’empreinte relue du staging est invalide pour ' +
-    nomFeuille + '. Empreinte avant écriture=' +
-    diagnostic.empreinteCalculeeAvantEcriture +
+    nomFeuille + '. Empreinte attendue=' +
+    diagnostic.empreinteSigneeSauvegarde +
     '; empreinte relue=' +
     diagnostic.empreinteRelueApresEcriture +
-    '; première différence: ' + position +
-    '; attendue=' + difference.valeurAttendueAffichee +
-    '; relue=' + difference.valeurRelueAffichee +
+    '; première cellule différente=' + cellule +
+    '; ligne Google=' + ligne +
+    '; colonne=' + colonne +
+    '; valeur attendue (JSON.stringify)=' +
+    difference.valeurAttendueAffichee +
+    '; valeur relue (JSON.stringify)=' +
+    difference.valeurRelueAffichee +
     '; type attendu=' + difference.typeAttendu +
-    '; type relu=' + difference.typeRelu +
-    '; catégorie=' + difference.categorieDifference + '.';
+    '; type relu=' + difference.typeRelu + '.';
+}
+
+
+function convertirNumeroColonneRestauration_(numero) {
+  let valeur = Math.max(1, Math.floor(Number(numero) || 1));
+  let lettres = '';
+
+  while (valeur > 0) {
+    valeur--;
+    lettres = String.fromCharCode(65 + (valeur % 26)) + lettres;
+    valeur = Math.floor(valeur / 26);
+  }
+
+  return lettres;
 }
 
 
@@ -2738,9 +2714,10 @@ function verifierPointEchecRestauration_(options, point) {
 function nettoyerMessagePublicRestauration_(erreur) {
   const message = String(erreur && erreur.message || erreur || '')
     .replace(/__PF_[A-Za-z0-9_]+/g, '[feuille technique]');
-  const limite = message.includes(
-    'Empreinte avant écriture='
-  ) ? 1500 : 500;
 
-  return message.slice(0, limite);
+  if (message.includes('Empreinte attendue=')) {
+    return message;
+  }
+
+  return message.slice(0, 500);
 }

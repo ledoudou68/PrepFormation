@@ -639,11 +639,11 @@ test('diagnostic staging localise uniquement la première Date différente', () 
   );
   assert.strictEqual(
     diagnostic.premiereDifference.valeurAttendueAffichee,
-    '2026-08-04T09:00:00.000Z'
+    '{"type":"DATE_ISO_UTC","value":"2026-08-04T09:00:00.000Z"}'
   );
   assert.strictEqual(
     diagnostic.premiereDifference.valeurRelueAffichee,
-    '2026-08-04T10:00:00.000Z'
+    '"2026-08-04T10:00:00.000Z"'
   );
   assert.strictEqual(diagnostic.premiereDifference.typeAttendu, 'Date');
   assert.strictEqual(diagnostic.premiereDifference.typeRelu, 'Date');
@@ -655,14 +655,24 @@ test('diagnostic staging localise uniquement la première Date différente', () 
   const message = env.run(
     'formaterErreurDivergenceStaging_("STAGIAIRES", __diagnostic);'
   );
-  assert(message.includes('Empreinte avant écriture=hash-avant'));
+  assert(message.includes('Empreinte attendue=hash-signe'));
   assert(message.includes('empreinte relue=hash-apres'));
-  assert(message.includes('ligne 2, colonne 2 (DATE_STAGE)'));
-  assert(message.includes('attendue=2026-08-04T09:00:00.000Z'));
-  assert(message.includes('relue=2026-08-04T10:00:00.000Z'));
+  assert(message.includes('première cellule différente=B2'));
+  assert(message.includes('ligne Google=2'));
+  assert(message.includes('colonne=DATE_STAGE (#2)'));
+  assert(message.includes(
+    'valeur attendue (JSON.stringify)={"type":"DATE_ISO_UTC","value":"2026-08-04T09:00:00.000Z"}'
+  ));
+  assert(message.includes(
+    'valeur relue (JSON.stringify)="2026-08-04T10:00:00.000Z"'
+  ));
   assert(message.includes('type attendu=Date'));
   assert(message.includes('type relu=Date'));
-  assert(message.includes('catégorie=Date'));
+  env.context.__messageDiagnostic = message;
+  const messagePublic = env.run(
+    'nettoyerMessagePublicRestauration_(new Error(__messageDiagnostic));'
+  );
+  assert.strictEqual(messagePublic, message);
 });
 
 test('diagnostic staging identifie une cellule réellement vide', () => {
