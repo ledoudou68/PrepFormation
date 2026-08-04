@@ -46,6 +46,12 @@ class FakeRange {
     return this.getValues()[0][0];
   }
 
+  isBlank() {
+    return this.getValues().every(row =>
+      row.every(value => value === '' || value === null)
+    );
+  }
+
   setValue(value) {
     return this.setValues([[value]]);
   }
@@ -569,6 +575,147 @@ test('création puis modification réelle d’un item du référentiel', () => {
   assert.strictEqual(data[1][3], 'Item modifié');
   assert.strictEqual(data[1][4], 'Nouvelle description');
   assert.strictEqual(data[1][6], 'Non');
+});
+
+test('diagnostic staging localise uniquement la première Date différente', () => {
+  const env = createContext([
+    'MigrationService.js',
+    'SauvegardeService.js',
+    'RestaurationService.js'
+  ]);
+  const book = new FakeBook();
+  const dateRelue = new Date('2026-08-04T10:00:00.000Z');
+  const sheet = book.add('__PF_STG_TEST_0', [[
+    'ID_STAGIAIRE', 'DATE_STAGE', 'ACTIF'
+  ], [
+    'S-1', dateRelue, false
+  ]]);
+  env.setBook(book);
+  env.context.__sheet = sheet;
+  env.context.__expected = {
+    exists: true,
+    headers: ['ID_STAGIAIRE', 'DATE_STAGE', 'ACTIF'],
+    rows: [[
+      'S-1',
+      { type: 'DATE_ISO_UTC', value: '2026-08-04T09:00:00.000Z' },
+      true
+    ]],
+    rowCount: 1,
+    columnCount: 3,
+    cellCount: 6,
+    idColumn: 'ID_STAGIAIRE',
+    identifiedRowCount: 1
+  };
+  env.context.__actual = {
+    exists: true,
+    headers: ['ID_STAGIAIRE', 'DATE_STAGE', 'ACTIF'],
+    rows: [[
+      'S-1',
+      { type: 'DATE_ISO_UTC', value: '2026-08-04T10:00:00.000Z' },
+      false
+    ]],
+    rowCount: 1,
+    columnCount: 3,
+    cellCount: 6,
+    idColumn: 'ID_STAGIAIRE',
+    identifiedRowCount: 1
+  };
+  const diagnostic = env.run(
+    'construireDiagnosticDivergenceStaging_(__sheet, __expected, __actual, "hash-avant", "hash-apres", "hash-signe");'
+  );
+  assert.strictEqual(
+    diagnostic.empreinteCalculeeAvantEcriture,
+    'hash-avant'
+  );
+  assert.strictEqual(
+    diagnostic.empreinteRelueApresEcriture,
+    'hash-apres'
+  );
+  assert.strictEqual(diagnostic.premiereDifference.ligne, 2);
+  assert.strictEqual(diagnostic.premiereDifference.colonne, 2);
+  assert.strictEqual(
+    diagnostic.premiereDifference.entete,
+    'DATE_STAGE'
+  );
+  assert.strictEqual(
+    diagnostic.premiereDifference.valeurAttendueAffichee,
+    '2026-08-04T09:00:00.000Z'
+  );
+  assert.strictEqual(
+    diagnostic.premiereDifference.valeurRelueAffichee,
+    '2026-08-04T10:00:00.000Z'
+  );
+  assert.strictEqual(diagnostic.premiereDifference.typeAttendu, 'Date');
+  assert.strictEqual(diagnostic.premiereDifference.typeRelu, 'Date');
+  assert.strictEqual(
+    diagnostic.premiereDifference.categorieDifference,
+    'Date'
+  );
+  env.context.__diagnostic = diagnostic;
+  const message = env.run(
+    'formaterErreurDivergenceStaging_("STAGIAIRES", __diagnostic);'
+  );
+  assert(message.includes('Empreinte avant écriture=hash-avant'));
+  assert(message.includes('empreinte relue=hash-apres'));
+  assert(message.includes('ligne 2, colonne 2 (DATE_STAGE)'));
+  assert(message.includes('attendue=2026-08-04T09:00:00.000Z'));
+  assert(message.includes('relue=2026-08-04T10:00:00.000Z'));
+  assert(message.includes('type attendu=Date'));
+  assert(message.includes('type relu=Date'));
+  assert(message.includes('catégorie=Date'));
+});
+
+test('diagnostic staging identifie une cellule réellement vide', () => {
+  const env = createContext([
+    'MigrationService.js',
+    'SauvegardeService.js',
+    'RestaurationService.js'
+  ]);
+  const book = new FakeBook();
+  const sheet = book.add('__PF_STG_TEST_1', [[
+    'ID_STAGIAIRE', 'TELEPHONE'
+  ], [
+    'S-1', ''
+  ]]);
+  env.setBook(book);
+  env.context.__sheet = sheet;
+  env.context.__expected = {
+    exists: true,
+    headers: ['ID_STAGIAIRE', 'TELEPHONE'],
+    rows: [['S-1', '0600000000']],
+    rowCount: 1,
+    columnCount: 2,
+    cellCount: 4,
+    idColumn: 'ID_STAGIAIRE',
+    identifiedRowCount: 1
+  };
+  env.context.__actual = {
+    exists: true,
+    headers: ['ID_STAGIAIRE', 'TELEPHONE'],
+    rows: [['S-1', '']],
+    rowCount: 1,
+    columnCount: 2,
+    cellCount: 4,
+    idColumn: 'ID_STAGIAIRE',
+    identifiedRowCount: 1
+  };
+  const diagnostic = env.run(
+    'construireDiagnosticDivergenceStaging_(__sheet, __expected, __actual, "avant", "apres", "signe");'
+  );
+  assert.strictEqual(diagnostic.premiereDifference.ligne, 2);
+  assert.strictEqual(diagnostic.premiereDifference.colonne, 2);
+  assert.strictEqual(
+    diagnostic.premiereDifference.typeAttendu,
+    'chaîne'
+  );
+  assert.strictEqual(
+    diagnostic.premiereDifference.typeRelu,
+    'cellule vide'
+  );
+  assert.strictEqual(
+    diagnostic.premiereDifference.categorieDifference,
+    'cellule vide'
+  );
 });
 
 let passed = 0;

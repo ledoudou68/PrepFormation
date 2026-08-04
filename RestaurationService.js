@@ -994,6 +994,19 @@ function creerStagingRestauration_(
     const feuille = classeur.insertSheet(nomTemporaire);
     const source = sauvegarde.sheets[configuration.feuille];
 
+    liaison.empreinteAvantEcriture = hacherTexteSauvegarde_(
+      canonicaliserSauvegarde_(source)
+    );
+
+    console.log(JSON.stringify({
+      evenement: 'RESTAURATION_STAGING_EMPREINTE_AVANT_ECRITURE',
+      feuille: configuration.feuille,
+      empreinteCalculeeAvantEcriture:
+        liaison.empreinteAvantEcriture,
+      empreinteSigneeSauvegarde:
+        sauvegarde.integrity.sheetHashes[configuration.feuille]
+    }));
+
     liaison.etat = 'CREEE';
     enregistrerEtatOperationRestauration_(proprietes, etat);
     ecrireFeuilleStagingRestauration_(feuille, source);
@@ -1117,11 +1130,39 @@ function validerStagingRestauration_(classeur, sauvegarde, etat) {
       );
       const hashAttendu = sauvegarde.integrity
         .sheetHashes[configuration.feuille];
+      const hashAvantEcriture = String(
+        liaison.empreinteAvantEcriture ||
+        hacherTexteSauvegarde_(canonicaliserSauvegarde_(source))
+      );
+
+      console.log(JSON.stringify({
+        evenement: 'RESTAURATION_STAGING_EMPREINTE_APRES_ECRITURE',
+        feuille: configuration.feuille,
+        empreinteCalculeeAvantEcriture: hashAvantEcriture,
+        empreinteRelueApresEcriture: hashRelu,
+        empreinteSigneeSauvegarde: hashAttendu
+      }));
 
       if (!comparaisonConstanteSecurite_(hashRelu, hashAttendu)) {
+        const diagnostic = construireDiagnosticDivergenceStaging_(
+          feuille,
+          source,
+          relue,
+          hashAvantEcriture,
+          hashRelu,
+          hashAttendu
+        );
+
+        console.error(JSON.stringify({
+          evenement: 'RESTAURATION_STAGING_DIVERGENCE',
+          diagnostic: diagnostic
+        }));
+
         throw new Error(
-          'L’empreinte relue du staging est invalide pour ' +
-          configuration.feuille + '.'
+          formaterErreurDivergenceStaging_(
+            configuration.feuille,
+            diagnostic
+          )
         );
       }
     } else if (
@@ -1164,6 +1205,316 @@ function validerStagingRestauration_(classeur, sauvegarde, etat) {
   }
 
   return diagnostic;
+}
+
+
+/**
+ * Instrumentation de diagnostic uniquement. Cette comparaison ne participe
+ * ni au calcul des empreintes ni à la décision de valider le staging.
+ */
+function construireDiagnosticDivergenceStaging_(
+  feuille,
+  attendue,
+  relue,
+  empreinteAvantEcriture,
+  empreinteRelue,
+  empreinteSignee
+) {
+  const difference = trouverPremiereDifferenceStaging_(
+    attendue,
+    relue
+  );
+
+  if (difference.portee === 'CELLULE') {
+    enrichirDifferenceCelluleStaging_(feuille, difference);
+  }
+
+  difference.typeAttendu = decrireTypeValeurStaging_(
+    difference.valeurAttendue,
+    difference.attenduePresente,
+    false
+  );
+  difference.typeRelu = decrireTypeValeurStaging_(
+    difference.valeurRelueBrute,
+    difference.reluePresente,
+    difference.celluleRelueVide
+  );
+  difference.categorieDifference =
+    classifierDifferenceValeurStaging_(difference);
+  difference.valeurAttendueAffichee =
+    formaterValeurDiagnosticStaging_(
+      difference.valeurAttendue,
+      difference.attenduePresente
+    );
+  difference.valeurRelueAffichee =
+    formaterValeurDiagnosticStaging_(
+      difference.valeurRelueBrute,
+      difference.reluePresente
+    );
+
+  return {
+    empreinteCalculeeAvantEcriture:
+      String(empreinteAvantEcriture || ''),
+    empreinteRelueApresEcriture: String(empreinteRelue || ''),
+    empreinteSigneeSauvegarde: String(empreinteSignee || ''),
+    premiereDifference: difference
+  };
+}
+
+
+function trouverPremiereDifferenceStaging_(attendue, relue) {
+  const lignesAttendues = [attendue.headers || []]
+    .concat(attendue.rows || []);
+  const lignesRelues = [relue.headers || []]
+    .concat(relue.rows || []);
+  const nombreLignes = Math.max(
+    lignesAttendues.length,
+    lignesRelues.length
+  );
+
+  for (let ligne = 0; ligne < nombreLignes; ligne++) {
+    const ligneAttendue = lignesAttendues[ligne] || [];
+    const ligneRelue = lignesRelues[ligne] || [];
+    const nombreColonnes = Math.max(
+      ligneAttendue.length,
+      ligneRelue.length
+    );
+
+    for (let colonne = 0; colonne < nombreColonnes; colonne++) {
+      const attenduePresente = colonne < ligneAttendue.length;
+      const reluePresente = colonne < ligneRelue.length;
+      const valeurAttendue = ligneAttendue[colonne];
+      const valeurRelue = ligneRelue[colonne];
+
+      if (
+        attenduePresente !== reluePresente ||
+        canonicaliserSauvegarde_(valeurAttendue) !==
+          canonicaliserSauvegarde_(valeurRelue)
+      ) {
+        return {
+          portee: 'CELLULE',
+          ligne: ligne + 1,
+          colonne: colonne + 1,
+          entete: String(
+            (attendue.headers || [])[colonne] ||
+            (relue.headers || [])[colonne] ||
+            ''
+          ),
+          attenduePresente: attenduePresente,
+          reluePresente: reluePresente,
+          valeurAttendue: valeurAttendue,
+          valeurRelue: valeurRelue,
+          valeurRelueBrute: valeurRelue,
+          celluleRelueVide: false
+        };
+      }
+    }
+  }
+
+  const champs = [
+    'exists',
+    'rowCount',
+    'columnCount',
+    'cellCount',
+    'idColumn',
+    'identifiedRowCount'
+  ];
+
+  for (let index = 0; index < champs.length; index++) {
+    const champ = champs[index];
+
+    if (
+      canonicaliserSauvegarde_(attendue[champ]) !==
+      canonicaliserSauvegarde_(relue[champ])
+    ) {
+      return {
+        portee: 'METADONNEE',
+        ligne: 0,
+        colonne: 0,
+        entete: champ,
+        attenduePresente: Object.prototype.hasOwnProperty.call(
+          attendue,
+          champ
+        ),
+        reluePresente: Object.prototype.hasOwnProperty.call(relue, champ),
+        valeurAttendue: attendue[champ],
+        valeurRelue: relue[champ],
+        valeurRelueBrute: relue[champ],
+        celluleRelueVide: false
+      };
+    }
+  }
+
+  return {
+    portee: 'OBJET_CANONIQUE',
+    ligne: 0,
+    colonne: 0,
+    entete: 'objet canonique complet',
+    attenduePresente: true,
+    reluePresente: true,
+    valeurAttendue: attendue,
+    valeurRelue: relue,
+    valeurRelueBrute: relue,
+    celluleRelueVide: false
+  };
+}
+
+
+function enrichirDifferenceCelluleStaging_(feuille, difference) {
+  if (
+    !feuille ||
+    !Number.isInteger(difference.ligne) ||
+    !Number.isInteger(difference.colonne) ||
+    difference.ligne < 1 ||
+    difference.colonne < 1
+  ) {
+    return;
+  }
+
+  try {
+    const cellule = feuille.getRange(
+      difference.ligne,
+      difference.colonne
+    );
+
+    difference.valeurRelueBrute = cellule.getValue();
+    difference.celluleRelueVide = typeof cellule.isBlank === 'function'
+      ? cellule.isBlank()
+      : false;
+  } catch (erreurLectureDiagnostic) {
+    difference.erreurLectureCellule = String(
+      erreurLectureDiagnostic.message || erreurLectureDiagnostic
+    );
+  }
+}
+
+
+function decrireTypeValeurStaging_(valeur, presente, celluleVide) {
+  if (!presente) {
+    return 'cellule absente';
+  }
+
+  if (celluleVide) {
+    return 'cellule vide';
+  }
+
+  if (
+    valeur instanceof Date ||
+    valeur &&
+      typeof valeur === 'object' &&
+      !Array.isArray(valeur) &&
+      valeur.type === 'DATE_ISO_UTC'
+  ) {
+    return 'Date';
+  }
+
+  if (typeof valeur === 'number') {
+    return 'nombre';
+  }
+
+  if (typeof valeur === 'boolean') {
+    return 'booléen';
+  }
+
+  if (valeur === '') {
+    return 'chaîne vide';
+  }
+
+  if (typeof valeur === 'string') {
+    return 'chaîne';
+  }
+
+  return 'autre type (' + (
+    valeur === null ? 'null' : typeof valeur
+  ) + ')';
+}
+
+
+function classifierDifferenceValeurStaging_(difference) {
+  const types = [
+    difference.typeAttendu,
+    difference.typeRelu
+  ];
+
+  if (types.includes('Date')) {
+    return 'Date';
+  }
+
+  if (types.includes('nombre')) {
+    return 'nombre';
+  }
+
+  if (types.includes('booléen')) {
+    return 'booléen';
+  }
+
+  if (types.includes('cellule vide')) {
+    return 'cellule vide';
+  }
+
+  if (types.includes('chaîne vide')) {
+    return 'chaîne vide';
+  }
+
+  return 'autre type';
+}
+
+
+function formaterValeurDiagnosticStaging_(valeur, presente) {
+  if (!presente) {
+    return '[cellule absente]';
+  }
+
+  if (valeur instanceof Date) {
+    return valeur.toISOString();
+  }
+
+  if (
+    valeur &&
+    typeof valeur === 'object' &&
+    !Array.isArray(valeur) &&
+    valeur.type === 'DATE_ISO_UTC'
+  ) {
+    return String(valeur.value || '');
+  }
+
+  if (valeur === '') {
+    return '[chaîne vide]';
+  }
+
+  if (valeur === null) {
+    return 'null';
+  }
+
+  const texte = typeof valeur === 'object'
+    ? canonicaliserSauvegarde_(valeur)
+    : String(valeur);
+
+  return texte.length > 120
+    ? texte.slice(0, 117) + '…'
+    : texte;
+}
+
+
+function formaterErreurDivergenceStaging_(nomFeuille, diagnostic) {
+  const difference = diagnostic.premiereDifference;
+  const position = difference.portee === 'CELLULE'
+    ? 'ligne ' + difference.ligne + ', colonne ' +
+      difference.colonne +
+      (difference.entete ? ' (' + difference.entete + ')' : '')
+    : 'hors cellule (' + difference.entete + ')';
+
+  return 'L’empreinte relue du staging est invalide pour ' +
+    nomFeuille + '. Empreinte avant écriture=' +
+    diagnostic.empreinteCalculeeAvantEcriture +
+    '; empreinte relue=' +
+    diagnostic.empreinteRelueApresEcriture +
+    '; première différence: ' + position +
+    '; attendue=' + difference.valeurAttendueAffichee +
+    '; relue=' + difference.valeurRelueAffichee +
+    '; type attendu=' + difference.typeAttendu +
+    '; type relu=' + difference.typeRelu +
+    '; catégorie=' + difference.categorieDifference + '.';
 }
 
 
@@ -2385,7 +2736,11 @@ function verifierPointEchecRestauration_(options, point) {
 
 
 function nettoyerMessagePublicRestauration_(erreur) {
-  return String(erreur && erreur.message || erreur || '')
-    .replace(/__PF_[A-Za-z0-9_]+/g, '[feuille technique]')
-    .slice(0, 500);
+  const message = String(erreur && erreur.message || erreur || '')
+    .replace(/__PF_[A-Za-z0-9_]+/g, '[feuille technique]');
+  const limite = message.includes(
+    'Empreinte avant écriture='
+  ) ? 1500 : 500;
+
+  return message.slice(0, limite);
 }
