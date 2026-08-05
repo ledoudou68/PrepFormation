@@ -13,6 +13,7 @@ const PREFIXES_FEUILLES_TECHNIQUES_RESTAURATION_ = [
   '__PF_BAD_'
 ];
 const TAILLE_BLOC_ECRITURE_RESTAURATION_ = 1000;
+const TAILLE_LOT_FORMAT_TEXTE_RESTAURATION_ = 500;
 const STATUTS_RESTAURATION_AUTORISES_ = [
   'RESTAURABLE',
   'RESTAURABLE_AVEC_MIGRATIONS'
@@ -1027,6 +1028,11 @@ function ecrireFeuilleStagingRestauration_(feuille, source) {
     return;
   }
 
+  appliquerFormatTexteChainesStaging_(
+    feuille,
+    [entetes].concat(lignes)
+  );
+
   feuille.getRange(1, 1, 1, colonnes).setValues([entetes]);
 
   for (
@@ -1043,6 +1049,69 @@ function ecrireFeuilleStagingRestauration_(feuille, source) {
       .getRange(debut + 2, 1, bloc.length, colonnes)
       .setValues(bloc);
   }
+}
+
+
+/**
+ * Préformate uniquement les cellules dont la valeur attendue est une chaîne.
+ * Les plages contiguës d'une même ligne sont regroupées puis appliquées par
+ * lots afin de ne modifier aucun format de nombre, booléen ou Date.
+ */
+function appliquerFormatTexteChainesStaging_(feuille, valeurs) {
+  const plages = [];
+
+  (valeurs || []).forEach(function (ligne, indexLigne) {
+    let debut = -1;
+
+    for (let colonne = 0; colonne <= ligne.length; colonne++) {
+      const estChaine = colonne < ligne.length &&
+        typeof ligne[colonne] === 'string';
+
+      if (estChaine && debut < 0) {
+        debut = colonne;
+      }
+
+      if (!estChaine && debut >= 0) {
+        plages.push(
+          construirePlageA1Restauration_(
+            indexLigne + 1,
+            debut + 1,
+            colonne
+          )
+        );
+        debut = -1;
+      }
+    }
+  });
+
+  for (
+    let debut = 0;
+    debut < plages.length;
+    debut += TAILLE_LOT_FORMAT_TEXTE_RESTAURATION_
+  ) {
+    feuille
+      .getRangeList(
+        plages.slice(
+          debut,
+          debut + TAILLE_LOT_FORMAT_TEXTE_RESTAURATION_
+        )
+      )
+      .setNumberFormat('@');
+  }
+}
+
+
+function construirePlageA1Restauration_(
+  ligne,
+  premiereColonne,
+  derniereColonne
+) {
+  const debut = convertirNumeroColonneRestauration_(premiereColonne) +
+    ligne;
+  const fin = convertirNumeroColonneRestauration_(derniereColonne) +
+    ligne;
+
+  return debut === fin ? debut : debut + ':' + fin;
 }
 
 

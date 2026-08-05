@@ -8,6 +8,13 @@ const vm = require('vm');
 
 const ROOT = path.resolve(__dirname, '..');
 
+function columnNumberFromLetters(letters) {
+  return String(letters).split('').reduce(
+    (total, letter) => total * 26 + letter.charCodeAt(0) - 64,
+    0
+  );
+}
+
 class FakeRange {
   constructor(sheet, row, column, rows, columns) {
     this.sheet = sheet;
@@ -32,10 +39,22 @@ class FakeRange {
   setValues(values) {
     for (let r = 0; r < this.rows; r++) {
       for (let c = 0; c < this.columns; c++) {
+        const row = this.row + r;
+        const column = this.column + c;
+        let value = values[r][c];
+
+        if (
+          typeof value === 'string' &&
+          /^\d+$/.test(value) &&
+          this.sheet.numberFormatAt(row, column) !== '@'
+        ) {
+          value = Number(value);
+        }
+
         this.sheet.setValueAt(
-          this.row + r,
-          this.column + c,
-          values[r][c]
+          row,
+          column,
+          value
         );
       }
     }
@@ -64,13 +83,37 @@ class FakeRange {
   }
 
   getNumberFormats() {
-    return Array.from({ length: this.rows }, () =>
-      Array(this.columns).fill('')
+    return Array.from({ length: this.rows }, (_, r) =>
+      Array.from({ length: this.columns }, (_, c) =>
+        this.sheet.numberFormatAt(this.row + r, this.column + c)
+      )
     );
   }
 
-  setNumberFormat() { return this; }
-  setNumberFormats() { return this; }
+  setNumberFormat(format) {
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.columns; c++) {
+        this.sheet.setNumberFormatAt(
+          this.row + r,
+          this.column + c,
+          format
+        );
+      }
+    }
+    return this;
+  }
+  setNumberFormats(formats) {
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.columns; c++) {
+        this.sheet.setNumberFormatAt(
+          this.row + r,
+          this.column + c,
+          formats[r][c]
+        );
+      }
+    }
+    return this;
+  }
   setFontWeight() { return this; }
 }
 
@@ -79,6 +122,7 @@ class FakeSheet {
     this.book = book;
     this.name = name;
     this.data = (data || []).map(row => row.slice());
+    this.numberFormats = new Map();
   }
 
   getName() { return this.name; }
@@ -104,6 +148,32 @@ class FakeSheet {
   getRange(row, column, rows = 1, columns = 1) {
     return new FakeRange(this, row, column, rows, columns);
   }
+  getRangeList(notations) {
+    const ranges = notations.map(notation => {
+      const match = String(notation).match(
+        /^([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?$/
+      );
+      if (!match) throw new Error(`invalid A1 notation: ${notation}`);
+      const startColumn = columnNumberFromLetters(match[1]);
+      const startRow = Number(match[2]);
+      const endColumn = match[3]
+        ? columnNumberFromLetters(match[3])
+        : startColumn;
+      const endRow = match[4] ? Number(match[4]) : startRow;
+      return this.getRange(
+        startRow,
+        startColumn,
+        endRow - startRow + 1,
+        endColumn - startColumn + 1
+      );
+    });
+    return {
+      setNumberFormat(format) {
+        ranges.forEach(range => range.setNumberFormat(format));
+        return this;
+      }
+    };
+  }
   appendRow(row) {
     this.data.push(row.slice());
     return this;
@@ -118,6 +188,12 @@ class FakeSheet {
     while (this.data.length < row) this.data.push([]);
     while (this.data[row - 1].length < column) this.data[row - 1].push('');
     this.data[row - 1][column - 1] = value;
+  }
+  numberFormatAt(row, column) {
+    return this.numberFormats.get(`${row}:${column}`) || '';
+  }
+  setNumberFormatAt(row, column, format) {
+    this.numberFormats.set(`${row}:${column}`, String(format || ''));
   }
 }
 
@@ -726,6 +802,94 @@ test('diagnostic staging identifie une cellule réellement vide', () => {
     diagnostic.premiereDifference.categorieDifference,
     'cellule vide'
   );
+});
+
+test('staging préserve les chaînes numériques sans dégrader les types réels', () => {
+  const env = createContext([
+    'MigrationService.js',
+    'SauvegardeService.js',
+    'RestaurationService.js'
+  ]);
+  const book = new FakeBook();
+  const sheet = book.add('__PF_STG_TYPES_0', []);
+  const headers = [
+    'TELEPHONE',
+    'CODE_LONG',
+    'NOMBRE_REEL',
+    'BOOLEEN',
+    'DATE_REELLE',
+    'CHAINE_VIDE',
+    'CELLULE_VIDE'
+  ];
+  const source = {
+    exists: true,
+    headers,
+    rows: [[
+      '01234567890',
+      '123456789012345678901234567890',
+      12345.67,
+      true,
+      {
+        type: 'DATE_ISO_UTC',
+        value: '2026-08-04T12:34:56.000Z'
+      },
+      '',
+      ''
+    ]],
+    rowCount: 1,
+    columnCount: headers.length,
+    cellCount: headers.length * 2,
+    idColumn: 'TELEPHONE',
+    identifiedRowCount: 1
+  };
+  env.setBook(book);
+  env.context.__sheetTypes = sheet;
+  env.context.__sourceTypes = source;
+  env.run(
+    'ecrireFeuilleStagingRestauration_(__sheetTypes, __sourceTypes);'
+  );
+
+  const row = sheet.data[1];
+  assert.strictEqual(row[0], '01234567890');
+  assert.strictEqual(typeof row[0], 'string');
+  assert.strictEqual(
+    row[1],
+    '123456789012345678901234567890'
+  );
+  assert.strictEqual(typeof row[1], 'string');
+  assert.strictEqual(row[2], 12345.67);
+  assert.strictEqual(typeof row[2], 'number');
+  assert.strictEqual(row[3], true);
+  assert.strictEqual(typeof row[3], 'boolean');
+  assert(row[4] instanceof Date);
+  assert.strictEqual(row[4].toISOString(), '2026-08-04T12:34:56.000Z');
+  assert.strictEqual(row[5], '');
+  assert.strictEqual(typeof row[5], 'string');
+  assert.strictEqual(row[6], '');
+  assert.strictEqual(sheet.getRange(2, 7).isBlank(), true);
+
+  assert.strictEqual(sheet.numberFormatAt(2, 1), '@');
+  assert.strictEqual(sheet.numberFormatAt(2, 2), '@');
+  assert.strictEqual(sheet.numberFormatAt(2, 3), '');
+  assert.strictEqual(sheet.numberFormatAt(2, 4), '');
+  assert.strictEqual(sheet.numberFormatAt(2, 5), '');
+  assert.strictEqual(sheet.numberFormatAt(2, 6), '@');
+  assert.strictEqual(sheet.numberFormatAt(2, 7), '@');
+
+  env.context.__configurationTypes = {
+    identifiant: 'TELEPHONE'
+  };
+  const reread = env.run(
+    'lireFeuilleTemporaireRestauration_(__sheetTypes, __configurationTypes);'
+  );
+  env.context.__rereadTypes = reread;
+  const expectedHash = env.run(
+    'hacherTexteSauvegarde_(canonicaliserSauvegarde_(__sourceTypes));'
+  );
+  const rereadHash = env.run(
+    'hacherTexteSauvegarde_(canonicaliserSauvegarde_(__rereadTypes));'
+  );
+  assert.strictEqual(rereadHash, expectedHash);
 });
 
 let passed = 0;
