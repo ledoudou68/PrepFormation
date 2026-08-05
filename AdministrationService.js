@@ -15,6 +15,8 @@ function getDonneesAdministration(jetonAdministrateur) {
 
   etatSauvegardes.inventaire =
     construireInventaireSauvegardesRestaurabilite_();
+  etatSauvegardes.planification =
+    obtenirConfigurationSauvegardesAutomatiques_();
 
   return {
     session: session,

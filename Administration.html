@@ -94,7 +94,7 @@
         </p>
       </div>
 
-      <span class="badge-phase-sauvegarde">Phase 3 · Restauration sécurisée</span>
+      <span class="badge-phase-sauvegarde">Phase 4 · Gestion et planification</span>
     </div>
 
     <div class="grille-creation-sauvegarde-administration">
@@ -146,6 +146,103 @@
       </div>
     </div>
 
+    <section class="section-planification-sauvegardes">
+      <div class="entete-section-planification-sauvegardes">
+        <div>
+          <h3>Sauvegardes automatiques</h3>
+          <p>
+            Le déclencheur est installé au nom du propriétaire du script.
+            L’heure d’exécution est approximative.
+          </p>
+        </div>
+        <span
+          id="badgeEtatPlanificationSauvegardes"
+          class="badge-sauvegarde badge-sauvegarde-anomalies"
+        >Chargement…</span>
+      </div>
+
+      <div class="grille-planification-sauvegardes">
+        <div class="groupe-champ">
+          <label for="frequenceSauvegardesAutomatiques">Fréquence</label>
+          <select
+            id="frequenceSauvegardesAutomatiques"
+            class="champ"
+            onchange="mettreAJourVisibilitePlanificationSauvegardes()"
+          >
+            <option value="DESACTIVE">Désactivées</option>
+            <option value="TOUTES_LES_6_HEURES">Toutes les 6 heures</option>
+            <option value="TOUTES_LES_12_HEURES">Toutes les 12 heures</option>
+            <option value="QUOTIDIENNE">Tous les jours</option>
+            <option value="HEBDOMADAIRE">Toutes les semaines</option>
+          </select>
+        </div>
+
+        <div
+          id="champJourSauvegardesAutomatiques"
+          class="groupe-champ masque"
+        >
+          <label for="jourSauvegardesAutomatiques">Jour</label>
+          <select id="jourSauvegardesAutomatiques" class="champ">
+            <option value="LUNDI">Lundi</option>
+            <option value="MARDI">Mardi</option>
+            <option value="MERCREDI">Mercredi</option>
+            <option value="JEUDI">Jeudi</option>
+            <option value="VENDREDI">Vendredi</option>
+            <option value="SAMEDI">Samedi</option>
+            <option value="DIMANCHE">Dimanche</option>
+          </select>
+        </div>
+
+        <div
+          id="champHeureSauvegardesAutomatiques"
+          class="groupe-champ masque"
+        >
+          <label for="heureSauvegardesAutomatiques">Heure approximative</label>
+          <input
+            type="number"
+            id="heureSauvegardesAutomatiques"
+            class="champ"
+            min="0"
+            max="23"
+            step="1"
+            value="3"
+          >
+        </div>
+
+        <div class="groupe-champ">
+          <label for="retentionSauvegardesAutomatiques">
+            Sauvegardes automatiques conservées
+          </label>
+          <select id="retentionSauvegardesAutomatiques" class="champ">
+            <option value="5">5</option>
+            <option value="10" selected>10</option>
+            <option value="20">20</option>
+            <option value="30">30</option>
+          </select>
+        </div>
+      </div>
+
+      <div
+        id="etatPlanificationSauvegardesAdministration"
+        class="etat-planification-sauvegardes"
+      >Configuration non chargée.</div>
+
+      <div class="actions-planification-sauvegardes">
+        <button
+          type="button"
+          id="boutonDesactiverSauvegardesAutomatiques"
+          class="bouton-secondaire"
+          onclick="desactiverSauvegardesAutomatiquesAdministration()"
+        >Désactiver</button>
+        <button
+          type="button"
+          id="boutonEnregistrerSauvegardesAutomatiques"
+          class="bouton-principal"
+          onclick="enregistrerPlanificationSauvegardesAdministration()"
+        >Enregistrer</button>
+      </div>
+    </section>
+
     <div class="separateur-inventaire-sauvegardes"></div>
 
     <div
@@ -167,6 +264,23 @@
         class="bouton-secondaire"
         onclick="actualiserInventaireSauvegardesAdministration()"
       >Actualiser la liste</button>
+    </div>
+
+    <div
+      id="resumeInventaireSauvegardesAdministration"
+      class="resume-inventaire-sauvegardes"
+    ></div>
+
+    <div
+      id="filtresInventaireSauvegardesAdministration"
+      class="filtres-inventaire-sauvegardes"
+      role="group"
+      aria-label="Filtrer les sauvegardes"
+    >
+      <button type="button" class="actif" data-filtre-sauvegarde="TOUTES" onclick="filtrerSauvegardesAdministration('TOUTES')">Toutes</button>
+      <button type="button" data-filtre-sauvegarde="MANUELLES" onclick="filtrerSauvegardesAdministration('MANUELLES')">Manuelles</button>
+      <button type="button" data-filtre-sauvegarde="AUTOMATIQUES" onclick="filtrerSauvegardesAdministration('AUTOMATIQUES')">Automatiques</button>
+      <button type="button" data-filtre-sauvegarde="SECURITE" onclick="filtrerSauvegardesAdministration('SECURITE')">Sauvegardes de sécurité</button>
     </div>
 
     <div
@@ -215,6 +329,68 @@
     </div>
   </section>
 
+</div>
+
+<div
+  id="modalSuppressionSauvegardeAdministration"
+  class="modal-overlay masque"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="titreModalSuppressionSauvegarde"
+>
+  <div class="modal-contenu modal-suppression-sauvegarde">
+    <div class="modal-entete">
+      <div>
+        <h2 id="titreModalSuppressionSauvegarde">
+          Supprimer la sauvegarde
+        </h2>
+        <p>
+          Le fichier et son rapport seront placés dans la corbeille Drive.
+        </p>
+      </div>
+      <button
+        type="button"
+        class="bouton-fermer-modal"
+        onclick="fermerModalSuppressionSauvegardeAdministration()"
+        aria-label="Fermer"
+      >×</button>
+    </div>
+
+    <div class="modal-corps">
+      <div
+        id="resumeSuppressionSauvegardeAdministration"
+        class="resume-suppression-sauvegarde"
+      ></div>
+
+      <div class="groupe-champ">
+        <label for="confirmationSuppressionSauvegardeAdministration">
+          Saisir SUPPRIMER
+        </label>
+        <input
+          type="text"
+          id="confirmationSuppressionSauvegardeAdministration"
+          class="champ"
+          autocomplete="off"
+          oninput="mettreAJourConfirmationSuppressionSauvegardeAdministration()"
+        >
+      </div>
+    </div>
+
+    <div class="modal-pied">
+      <button
+        type="button"
+        class="bouton-secondaire"
+        onclick="fermerModalSuppressionSauvegardeAdministration()"
+      >Annuler</button>
+      <button
+        type="button"
+        id="boutonConfirmerSuppressionSauvegardeAdministration"
+        class="bouton-danger"
+        onclick="confirmerSuppressionSauvegardeAdministration()"
+        disabled
+      >Placer dans la corbeille</button>
+    </div>
+  </div>
 </div>
 
 <div

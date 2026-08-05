@@ -4270,6 +4270,85 @@ button:disabled {
   background: var(--bordure);
 }
 
+.section-planification-sauvegardes {
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid var(--bordure);
+  border-radius: 10px;
+  background: #fafbfc;
+}
+
+.entete-section-planification-sauvegardes {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 15px;
+}
+
+.entete-section-planification-sauvegardes h3,
+.entete-section-planification-sauvegardes p {
+  margin: 0;
+}
+
+.entete-section-planification-sauvegardes p {
+  margin-top: 4px;
+  color: var(--texte-secondaire);
+  font-size: 11px;
+}
+
+.grille-planification-sauvegardes {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.etat-planification-sauvegardes {
+  margin-top: 14px;
+  padding: 12px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 9px;
+  border: 1px solid #e4e8ec;
+  border-radius: 8px;
+  background: var(--blanc);
+}
+
+.etat-planification-sauvegardes > div span,
+.etat-planification-sauvegardes > div strong {
+  display: block;
+}
+
+.etat-planification-sauvegardes > div span {
+  margin-bottom: 3px;
+  color: var(--texte-secondaire);
+  font-size: 10px;
+}
+
+.etat-planification-sauvegardes > div strong {
+  overflow-wrap: anywhere;
+  font-size: 11px;
+}
+
+.etat-planification-sauvegardes > p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--texte-secondaire);
+  font-size: 10px;
+}
+
+.etat-planification-sauvegardes .avertissement-planification-sauvegardes {
+  color: #8a5700;
+  font-weight: 700;
+}
+
+.actions-planification-sauvegardes {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .entete-inventaire-sauvegardes {
   margin-bottom: 14px;
   display: flex;
@@ -4292,6 +4371,93 @@ button:disabled {
 .liste-sauvegardes-restaurabilite {
   display: grid;
   gap: 12px;
+}
+
+.resume-inventaire-sauvegardes {
+  margin-bottom: 12px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.resume-inventaire-sauvegardes > div {
+  padding: 10px;
+  border: 1px solid var(--bordure);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.resume-inventaire-sauvegardes strong,
+.resume-inventaire-sauvegardes span {
+  display: block;
+}
+
+.resume-inventaire-sauvegardes strong {
+  margin-bottom: 3px;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.resume-inventaire-sauvegardes span {
+  color: var(--texte-secondaire);
+  font-size: 10px;
+}
+
+.filtres-inventaire-sauvegardes {
+  margin-bottom: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.filtres-inventaire-sauvegardes button {
+  padding: 7px 10px;
+  border: 1px solid var(--bordure);
+  border-radius: 999px;
+  background: var(--blanc);
+  color: var(--texte-secondaire);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.filtres-inventaire-sauvegardes button.actif {
+  border-color: var(--bleu);
+  background: #eef5fc;
+  color: var(--bleu-fonce);
+}
+
+.modal-suppression-sauvegarde {
+  width: min(620px, calc(100vw - 32px));
+}
+
+.resume-suppression-sauvegarde {
+  margin-bottom: 16px;
+  display: grid;
+  gap: 8px;
+}
+
+.resume-suppression-sauvegarde > div {
+  padding: 10px 12px;
+  border: 1px solid var(--bordure);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.resume-suppression-sauvegarde span,
+.resume-suppression-sauvegarde strong {
+  display: block;
+}
+
+.resume-suppression-sauvegarde span {
+  margin-bottom: 3px;
+  color: var(--texte-secondaire);
+  font-size: 10px;
+}
+
+.resume-suppression-sauvegarde strong {
+  overflow-wrap: anywhere;
+  font-size: 12px;
 }
 
 .avertissement-inventaire-sauvegardes {
@@ -4833,6 +4999,7 @@ button:disabled {
   }
 
   .entete-sauvegardes-administration,
+  .entete-section-planification-sauvegardes,
   .entete-resultat-sauvegarde,
   .pied-resultat-sauvegarde,
   .entete-inventaire-sauvegardes,
@@ -4849,6 +5016,12 @@ button:disabled {
 
   .grille-creation-sauvegarde-administration {
     grid-template-columns: 1fr;
+  }
+
+  .grille-planification-sauvegardes,
+  .etat-planification-sauvegardes,
+  .resume-inventaire-sauvegardes {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .grille-compteurs-sauvegarde {
@@ -4880,6 +5053,11 @@ button:disabled {
     width: 100%;
   }
 
+  .actions-planification-sauvegardes,
+  .actions-planification-sauvegardes button {
+    width: 100%;
+  }
+
   .grille-diagnostic-administration,
   .grille-details-diagnostic-administration {
     grid-template-columns: 1fr;
@@ -4891,6 +5069,12 @@ button:disabled {
 }
 
 @media (max-width: 520px) {
+  .grille-planification-sauvegardes,
+  .etat-planification-sauvegardes,
+  .resume-inventaire-sauvegardes {
+    grid-template-columns: 1fr;
+  }
+
   .compteurs-inventaire-sauvegarde,
   .grille-metadonnees-restaurabilite,
   .grille-validations-restaurabilite,

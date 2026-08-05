@@ -221,6 +221,7 @@ function construireInventaireSauvegardesRestaurabilite_() {
     return {
       disponible: false,
       sauvegardes: [],
+      resume: construireResumeGlobalInventaireSauvegardes_([]),
       fichiersIgnores: 0,
       erreur: String(erreur.message || erreur)
     };
@@ -230,6 +231,7 @@ function construireInventaireSauvegardesRestaurabilite_() {
     return {
       disponible: true,
       sauvegardes: [],
+      resume: construireResumeGlobalInventaireSauvegardes_([]),
       fichiersIgnores: 0,
       erreur: ''
     };
@@ -288,11 +290,57 @@ function construireInventaireSauvegardesRestaurabilite_() {
     );
   });
 
+  const proteges = obtenirBackupIdsProtegesRestauration_();
+
+  sauvegardes.forEach(function (sauvegarde) {
+    sauvegarde.protegeeOperationActive = proteges.has(
+      sauvegarde.backupId
+    );
+    sauvegarde.suppressionAutorisee =
+      !sauvegarde.protegeeOperationActive;
+  });
+
   return {
     disponible: true,
     sauvegardes: sauvegardes,
+    resume: construireResumeGlobalInventaireSauvegardes_(
+      sauvegardes
+    ),
     fichiersIgnores: ignores,
     erreur: ''
+  };
+}
+
+
+function construireResumeGlobalInventaireSauvegardes_(sauvegardes) {
+  const liste = Array.isArray(sauvegardes) ? sauvegardes : [];
+  const dates = liste
+    .map(function (sauvegarde) {
+      return String(sauvegarde.createdAt || '');
+    })
+    .filter(Boolean)
+    .sort();
+
+  return {
+    nombreTotal: liste.length,
+    espaceTotalOctets: liste.reduce(function (total, sauvegarde) {
+      return total + Number(sauvegarde.fileSizeBytes || 0);
+    }, 0),
+    plusAncienne: dates.length ? dates[0] : '',
+    plusRecente: dates.length ? dates[dates.length - 1] : '',
+    parType: {
+      manuelles: liste.filter(function (sauvegarde) {
+        return sauvegarde.type === TYPE_SAUVEGARDE_MANUELLE_;
+      }).length,
+      automatiques: liste.filter(function (sauvegarde) {
+        return sauvegarde.type ===
+          TYPE_SAUVEGARDE_AUTOMATIQUE_PLANIFIEE_;
+      }).length,
+      securite: liste.filter(function (sauvegarde) {
+        return sauvegarde.type ===
+          TYPE_SAUVEGARDE_SECURITE_RESTAURATION_;
+      }).length
+    }
   };
 }
 

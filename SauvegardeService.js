@@ -6,6 +6,8 @@ const VERSION_CANONICALISATION_SAUVEGARDE_ = 1;
 const TYPE_SAUVEGARDE_MANUELLE_ = 'MANUELLE';
 const TYPE_SAUVEGARDE_SECURITE_RESTAURATION_ =
   'AUTO_AVANT_RESTAURATION';
+const TYPE_SAUVEGARDE_AUTOMATIQUE_PLANIFIEE_ =
+  'AUTO_PLANIFIEE';
 const OCTETS_AVERTISSEMENT_SAUVEGARDE_ = 5 * 1024 * 1024;
 const OCTETS_MAX_PHASE_1_SAUVEGARDE_ = 45 * 1024 * 1024;
 const DUREE_PRUDENTE_PHASE_1_MS_ = 4 * 60 * 1000;
@@ -86,7 +88,8 @@ function creerSauvegardeCompleteInterne_(
 
   if (![
     TYPE_SAUVEGARDE_MANUELLE_,
-    TYPE_SAUVEGARDE_SECURITE_RESTAURATION_
+    TYPE_SAUVEGARDE_SECURITE_RESTAURATION_,
+    TYPE_SAUVEGARDE_AUTOMATIQUE_PLANIFIEE_
   ].includes(type)) {
     throw new Error('Type de sauvegarde interne invalide.');
   }
@@ -190,7 +193,11 @@ function creerSauvegardeCompleteInterne_(
       journaliserActionSensible_(
         type === TYPE_SAUVEGARDE_MANUELLE_
           ? 'SAUVEGARDE_MANUELLE_CREATION'
-          : 'SAUVEGARDE_SECURITE_RESTAURATION_CREATION',
+          : (
+            type === TYPE_SAUVEGARDE_AUTOMATIQUE_PLANIFIEE_
+              ? 'SAUVEGARDE_AUTOMATIQUE_CREATION'
+              : 'SAUVEGARDE_SECURITE_RESTAURATION_CREATION'
+          ),
         'SAUVEGARDE',
         sauvegarde.backupId,
         {
@@ -225,6 +232,91 @@ function creerSauvegardeCompleteInterne_(
 
     throw erreur;
   }
+}
+
+
+/**
+ * Place une sauvegarde et ses rapports de restaurabilité dans la corbeille.
+ * L'identité et l'intégrité du JSON sont vérifiées avant toute mutation
+ * Drive. Aucune suppression définitive n'est utilisée.
+ */
+function supprimerSauvegardeAdministration(
+  backupId,
+  confirmation,
+  jetonAdministrateur
+) {
+  const session = exigerAdministrateur_(jetonAdministrateur);
+  const identifiant = nettoyerBackupIdSauvegarde_(backupId);
+
+  return executerMutationMetier_(function () {
+    journaliserActionSensible_(
+      'SAUVEGARDE_SUPPRESSION_DEMANDE',
+      'SAUVEGARDE',
+      identifiant,
+      { confirmationRecue: Boolean(String(confirmation || '')) },
+      session.identifiantHistorique
+    );
+
+    if (String(confirmation || '').trim() !== 'SUPPRIMER') {
+      journaliserActionSensible_(
+        'SAUVEGARDE_SUPPRESSION_ECHEC',
+        'SAUVEGARDE',
+        identifiant,
+        { raison: 'CONFIRMATION_INCORRECTE' },
+        session.identifiantHistorique
+      );
+      throw new Error('Saisis exactement le mot SUPPRIMER.');
+    }
+
+    journaliserActionSensible_(
+      'SAUVEGARDE_SUPPRESSION_CONFIRMATION',
+      'SAUVEGARDE',
+      identifiant,
+      { confirmationValide: true },
+      session.identifiantHistorique
+    );
+
+    try {
+      const resultat = placerSauvegardeCorbeilleInterne_(
+        identifiant,
+        { autoriserProtectionActive: false }
+      );
+
+      journaliserActionSensible_(
+        'SAUVEGARDE_SUPPRESSION_SUCCES',
+        'SAUVEGARDE',
+        identifiant,
+        {
+          type: resultat.type,
+          rapportsPlacesCorbeille:
+            resultat.nombreRapportsCorbeille,
+          suppressionDefinitive: false
+        },
+        session.identifiantHistorique
+      );
+
+      return {
+        succes: true,
+        message: 'La sauvegarde a été placée dans la corbeille Drive.',
+        backupId: identifiant,
+        type: resultat.type,
+        nombreRapportsCorbeille:
+          resultat.nombreRapportsCorbeille,
+        suppressionDefinitive: false
+      };
+    } catch (erreur) {
+      journaliserActionSensible_(
+        'SAUVEGARDE_SUPPRESSION_ECHEC',
+        'SAUVEGARDE',
+        identifiant,
+        {
+          raison: String(erreur.message || erreur).slice(0, 500)
+        },
+        session.identifiantHistorique
+      );
+      throw erreur;
+    }
+  });
 }
 
 
@@ -1552,6 +1644,184 @@ function trouverDernierFichierSauvegarde_(dossier) {
   }
 
   return meilleur;
+}
+
+
+function placerSauvegardeCorbeilleInterne_(backupId, options) {
+  const identifiant = nettoyerBackupIdSauvegarde_(backupId);
+  const parametres = options || {};
+  const proteges = obtenirBackupIdsProtegesRestauration_();
+
+  if (
+    !parametres.autoriserProtectionActive &&
+    proteges.has(identifiant)
+  ) {
+    throw new Error(
+      'Cette sauvegarde est utilisée par une restauration active et ne peut pas être supprimée.'
+    );
+  }
+
+  const contexte = obtenirContexteRestaurabilite_(false);
+  const fichier = trouverFichierSauvegardeRestaurabilite_(
+    contexte.dossier,
+    identifiant
+  );
+
+  if (!fichier) {
+    throw new Error('Sauvegarde introuvable.');
+  }
+
+  const validation = validerFichierSauvegardeRestaurabilite_(
+    fichier,
+    contexte,
+    identifiant
+  );
+  const rapports = trouverRapportsSauvegardePourCorbeille_(
+    contexte.dossier,
+    identifiant
+  );
+  const deplaces = [];
+
+  try {
+    rapports.forEach(function (rapport) {
+      rapport.setTrashed(true);
+      deplaces.push(rapport);
+    });
+
+    fichier.setTrashed(true);
+    deplaces.push(fichier);
+  } catch (erreur) {
+    deplaces.slice().reverse().forEach(function (element) {
+      try {
+        element.setTrashed(false);
+      } catch (erreurRetour) {
+        console.error(erreurRetour);
+      }
+    });
+    throw new Error(
+      'Le placement dans la corbeille a échoué ; les éléments déjà déplacés ont été restaurés.'
+    );
+  }
+
+  try {
+    mettreAJourDerniereSauvegardeApresCorbeille_(
+      identifiant,
+      contexte.dossier
+    );
+  } catch (erreurEtatDerniereSauvegarde) {
+    console.error(erreurEtatDerniereSauvegarde);
+  }
+
+  return {
+    backupId: identifiant,
+    type: validation.sauvegarde.metadata.type,
+    createdAt: validation.sauvegarde.metadata.createdAt,
+    comment: String(validation.sauvegarde.metadata.comment || ''),
+    nombreRapportsCorbeille: rapports.length
+  };
+}
+
+
+function trouverRapportsSauvegardePourCorbeille_(dossier, backupId) {
+  const fichiers = dossier.getFiles();
+  const rapports = [];
+
+  while (fichiers.hasNext()) {
+    const fichier = fichiers.next();
+
+    if (
+      fichier.isTrashed() ||
+      !String(fichier.getName() || '')
+        .endsWith(SUFFIXE_RAPPORT_RESTAURABILITE_)
+    ) {
+      continue;
+    }
+
+    const description = lireDescriptionRapportRestaurabilite_(fichier);
+
+    if (!description || description.backupId !== backupId) {
+      continue;
+    }
+
+    verifierRapportSauvegardePourCorbeille_(fichier, backupId);
+    rapports.push(fichier);
+  }
+
+  return rapports;
+}
+
+
+function verifierRapportSauvegardePourCorbeille_(fichier, backupId) {
+  let rapport;
+
+  try {
+    rapport = JSON.parse(
+      fichier.getBlob().getDataAsString('UTF-8')
+    );
+  } catch (erreur) {
+    throw new Error(
+      'Un rapport de restaurabilité associé est illisible ; la suppression est bloquée.'
+    );
+  }
+
+  const integrite = rapport && rapport.integrity;
+  const contenu = JSON.parse(JSON.stringify(rapport || {}));
+
+  delete contenu.integrity;
+
+  if (
+    !rapport ||
+    rapport.format !== FORMAT_RAPPORT_RESTAURABILITE_ ||
+    Number(rapport.formatVersion) !==
+      VERSION_FORMAT_RAPPORT_RESTAURABILITE_ ||
+    String(rapport.backupId || '') !== backupId ||
+    !integrite ||
+    integrite.hashAlgorithm !== 'SHA-256' ||
+    !comparaisonConstanteSecurite_(
+      hacherTexteSauvegarde_(
+        canonicaliserSauvegarde_(contenu)
+      ),
+      String(integrite.contentHash || '')
+    )
+  ) {
+    throw new Error(
+      'L’identité ou l’intégrité d’un rapport associé est invalide ; la suppression est bloquée.'
+    );
+  }
+}
+
+
+function mettreAJourDerniereSauvegardeApresCorbeille_(
+  backupId,
+  dossier
+) {
+  const proprietes = PropertiesService.getScriptProperties();
+
+  if (
+    String(proprietes.getProperty(
+      PROPRIETE_DERNIERE_SAUVEGARDE_
+    ) || '') !== backupId
+  ) {
+    return;
+  }
+
+  const derniere = trouverDernierFichierSauvegarde_(dossier);
+
+  if (!derniere) {
+    proprietes.deleteProperty(PROPRIETE_DERNIERE_SAUVEGARDE_);
+    return;
+  }
+
+  const description = lireDescriptionFichierSauvegarde_(derniere);
+
+  if (description && description.backupId) {
+    proprietes.setProperty(
+      PROPRIETE_DERNIERE_SAUVEGARDE_,
+      description.backupId
+    );
+  } else {
+    proprietes.deleteProperty(PROPRIETE_DERNIERE_SAUVEGARDE_);
+  }
 }
 
 

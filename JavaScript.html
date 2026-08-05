@@ -53,6 +53,8 @@ const etatApplication = {
   rafraichirRestaurationApresFermeture: false,
   backupIdRestaurabiliteActif: '',
   consultationRestaurabiliteActive: null,
+  filtreSauvegardesAdministration: 'TOUTES',
+  backupSuppressionAdministration: null,
   derniereActiviteAdministration: 0,
   minuterieAdministration: null,
   renouvellementAdministrationEnCours: false
@@ -7183,6 +7185,10 @@ function initialiserPageAdministration() {
       afficherSauvegardesAdministration(
         etatApplication.sauvegardesAdministration
       );
+      afficherPlanificationSauvegardesAdministration(
+        (etatApplication.sauvegardesAdministration || {})
+          .planification
+      );
       afficherInventaireSauvegardesAdministration(
         (etatApplication.sauvegardesAdministration || {})
           .inventaire
@@ -7770,16 +7776,239 @@ function formaterDateSauvegardeAdministration_(valeur) {
 }
 
 
+function afficherPlanificationSauvegardesAdministration(config) {
+  config = config || {};
+  const frequence = document.getElementById(
+    'frequenceSauvegardesAutomatiques'
+  );
+  const heure = document.getElementById(
+    'heureSauvegardesAutomatiques'
+  );
+  const jour = document.getElementById(
+    'jourSauvegardesAutomatiques'
+  );
+  const retention = document.getElementById(
+    'retentionSauvegardesAutomatiques'
+  );
+  const badge = document.getElementById(
+    'badgeEtatPlanificationSauvegardes'
+  );
+  const etat = document.getElementById(
+    'etatPlanificationSauvegardesAdministration'
+  );
+
+  if (frequence) {
+    frequence.value = config.mode || 'DESACTIVE';
+  }
+
+  if (heure) {
+    heure.value = Number(config.heure || 0);
+  }
+
+  if (jour) {
+    jour.value = config.jourHebdomadaire || 'LUNDI';
+  }
+
+  if (retention) {
+    retention.value = String(config.retention || 10);
+  }
+
+  mettreAJourVisibilitePlanificationSauvegardes();
+
+  const active = config.mode && config.mode !== 'DESACTIVE';
+  const coherent = config.configurationCoherente !== false;
+
+  if (badge) {
+    badge.textContent = active
+      ? (coherent ? 'Active' : 'À vérifier')
+      : 'Désactivée';
+    badge.className = 'badge-sauvegarde ' + (
+      active && coherent
+        ? 'badge-sauvegarde-conforme'
+        : 'badge-sauvegarde-anomalies'
+    );
+  }
+
+  if (etat) {
+    etat.innerHTML = `
+      <div><span>Fréquence</span><strong>${echapperHtml(libelleFrequenceSauvegardeAutomatique_(config.mode))}</strong></div>
+      <div><span>Prochaine exécution estimée</span><strong>${config.prochaineExecutionEstimee ? echapperHtml(formaterDateSauvegardeAdministration_(config.prochaineExecutionEstimee)) : '—'}</strong></div>
+      <div><span>Dernière exécution</span><strong>${config.lastExecutionAt ? echapperHtml(formaterDateSauvegardeAdministration_(config.lastExecutionAt)) : 'Jamais'}</strong></div>
+      <div><span>Dernier résultat</span><strong>${echapperHtml(config.lastResult || 'JAMAIS_EXECUTEE')}${config.lastDurationMs ? ' · ' + Number(config.lastDurationMs) + ' ms' : ''}</strong></div>
+      <p>${echapperHtml(config.lastMessage || config.precisionHoraire || 'Les horaires Apps Script sont approximatifs.')}</p>
+      ${!coherent ? '<p class="avertissement-planification-sauvegardes">La configuration et les déclencheurs installés ne correspondent pas. Enregistre à nouveau la configuration.</p>' : ''}
+    `;
+  }
+
+  const boutonDesactiver = document.getElementById(
+    'boutonDesactiverSauvegardesAutomatiques'
+  );
+
+  if (boutonDesactiver) {
+    boutonDesactiver.disabled = !active &&
+      !Number(config.nombreDeclencheursPrepFormation || 0);
+  }
+}
+
+
+function libelleFrequenceSauvegardeAutomatique_(mode) {
+  const libelles = {
+    DESACTIVE: 'Désactivées',
+    TOUTES_LES_6_HEURES: 'Toutes les 6 heures',
+    TOUTES_LES_12_HEURES: 'Toutes les 12 heures',
+    QUOTIDIENNE: 'Tous les jours',
+    HEBDOMADAIRE: 'Toutes les semaines'
+  };
+
+  return libelles[mode] || 'Désactivées';
+}
+
+
+function mettreAJourVisibilitePlanificationSauvegardes() {
+  const frequence = document.getElementById(
+    'frequenceSauvegardesAutomatiques'
+  );
+  const mode = frequence ? frequence.value : 'DESACTIVE';
+  const champHeure = document.getElementById(
+    'champHeureSauvegardesAutomatiques'
+  );
+  const champJour = document.getElementById(
+    'champJourSauvegardesAutomatiques'
+  );
+
+  champHeure?.classList.toggle(
+    'masque',
+    !['QUOTIDIENNE', 'HEBDOMADAIRE'].includes(mode)
+  );
+  champJour?.classList.toggle(
+    'masque',
+    mode !== 'HEBDOMADAIRE'
+  );
+}
+
+
+function enregistrerPlanificationSauvegardesAdministration() {
+  if (!estAdministrateurApplication()) {
+    afficherToast('Accès réservé à l’administrateur.', true);
+    return;
+  }
+
+  const bouton = document.getElementById(
+    'boutonEnregistrerSauvegardesAutomatiques'
+  );
+  const configuration = {
+    mode: document.getElementById(
+      'frequenceSauvegardesAutomatiques'
+    )?.value || 'DESACTIVE',
+    heure: Number(document.getElementById(
+      'heureSauvegardesAutomatiques'
+    )?.value || 0),
+    jourHebdomadaire: document.getElementById(
+      'jourSauvegardesAutomatiques'
+    )?.value || 'LUNDI',
+    retention: Number(document.getElementById(
+      'retentionSauvegardesAutomatiques'
+    )?.value || 10)
+  };
+
+  if (bouton) {
+    bouton.disabled = true;
+    bouton.textContent = 'Enregistrement…';
+  }
+
+  google.script.run
+    .withSuccessHandler(function (resultat) {
+      if (bouton) {
+        bouton.disabled = false;
+        bouton.textContent = 'Enregistrer';
+      }
+
+      etatApplication.sauvegardesAdministration =
+        etatApplication.sauvegardesAdministration || {};
+      etatApplication.sauvegardesAdministration.planification = resultat;
+      afficherPlanificationSauvegardesAdministration(resultat);
+      afficherToast('Planification enregistrée.', false);
+    })
+    .withFailureHandler(function (erreur) {
+      if (bouton) {
+        bouton.disabled = false;
+        bouton.textContent = 'Enregistrer';
+      }
+
+      afficherToast(extraireMessageErreur(erreur), true);
+    })
+    .enregistrerConfigurationSauvegardesAutomatiques(
+      configuration,
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+
+function desactiverSauvegardesAutomatiquesAdministration() {
+  if (!window.confirm(
+    'Désactiver les sauvegardes automatiques et retirer le déclencheur PrepFormation ?'
+  )) {
+    return;
+  }
+
+  const bouton = document.getElementById(
+    'boutonDesactiverSauvegardesAutomatiques'
+  );
+
+  if (bouton) {
+    bouton.disabled = true;
+    bouton.textContent = 'Désactivation…';
+  }
+
+  google.script.run
+    .withSuccessHandler(function (resultat) {
+      if (bouton) {
+        bouton.textContent = 'Désactiver';
+      }
+
+      etatApplication.sauvegardesAdministration =
+        etatApplication.sauvegardesAdministration || {};
+      etatApplication.sauvegardesAdministration.planification = resultat;
+      afficherPlanificationSauvegardesAdministration(resultat);
+      afficherToast('Sauvegardes automatiques désactivées.', false);
+    })
+    .withFailureHandler(function (erreur) {
+      if (bouton) {
+        bouton.disabled = false;
+        bouton.textContent = 'Désactiver';
+      }
+
+      afficherToast(extraireMessageErreur(erreur), true);
+    })
+    .desactiverSauvegardesAutomatiques(
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+
 function afficherInventaireSauvegardesAdministration(inventaire) {
   const zone = document.getElementById(
     'listeSauvegardesRestaurabiliteAdministration'
   );
-
   if (!zone) {
     return;
   }
 
   inventaire = inventaire || {};
+
+  document.querySelectorAll('[data-filtre-sauvegarde]').forEach(
+    function (bouton) {
+      bouton.classList.toggle(
+        'actif',
+        bouton.dataset.filtreSauvegarde ===
+          etatApplication.filtreSauvegardesAdministration
+      );
+    }
+  );
+
+  afficherResumeInventaireSauvegardesAdministration_(
+    inventaire.resume || {}
+  );
 
   if (inventaire.erreur) {
     zone.innerHTML = `
@@ -7791,14 +8020,27 @@ function afficherInventaireSauvegardesAdministration(inventaire) {
     return;
   }
 
-  const sauvegardes = Array.isArray(inventaire.sauvegardes)
+  const toutesLesSauvegardes = Array.isArray(inventaire.sauvegardes)
     ? inventaire.sauvegardes
     : [];
+  const sauvegardes = filtrerListeSauvegardesAdministration_(
+    toutesLesSauvegardes,
+    etatApplication.filtreSauvegardesAdministration
+  );
+
+  if (!toutesLesSauvegardes.length) {
+    zone.innerHTML = `
+      <div class="etat-vide etat-vide-sauvegarde">
+        Aucune sauvegarde JSON valide pour cette installation.
+      </div>
+    `;
+    return;
+  }
 
   if (!sauvegardes.length) {
     zone.innerHTML = `
       <div class="etat-vide etat-vide-sauvegarde">
-        Aucune sauvegarde JSON valide pour cette installation.
+        Aucune sauvegarde ne correspond à ce filtre.
       </div>
     `;
     return;
@@ -7885,12 +8127,73 @@ function afficherInventaireSauvegardesAdministration(inventaire) {
                 ${sauvegarde.restaurationAutorisee ? '' : 'disabled'}
                 title="${sauvegarde.restaurationAutorisee ? 'Prévisualiser puis restaurer' : 'Un test concluant et actuel est obligatoire'}"
               >Préparer la restauration</button>
+              <button
+                type="button"
+                class="bouton-danger bouton-suppression-sauvegarde"
+                onclick="ouvrirSuppressionSauvegardeAdministration('${id}')"
+                ${sauvegarde.suppressionAutorisee === false ? 'disabled' : ''}
+                title="${sauvegarde.protegeeOperationActive ? 'Sauvegarde protégée par une restauration active' : 'Placer dans la corbeille Drive'}"
+              >Supprimer</button>
             </div>
           </div>
         </article>
       `;
     }).join('')}
   `;
+}
+
+
+function afficherResumeInventaireSauvegardesAdministration_(resume) {
+  const zone = document.getElementById(
+    'resumeInventaireSauvegardesAdministration'
+  );
+
+  if (!zone) {
+    return;
+  }
+
+  resume = resume || {};
+  zone.innerHTML = `
+    <div><strong>${Number(resume.nombreTotal || 0).toLocaleString('fr-FR')}</strong><span>Sauvegardes</span></div>
+    <div><strong>${echapperHtml(formaterTailleSauvegardeAdministration_(resume.espaceTotalOctets))}</strong><span>Espace total</span></div>
+    <div><strong>${resume.plusAncienne ? echapperHtml(formaterDateSauvegardeAdministration_(resume.plusAncienne)) : '—'}</strong><span>Plus ancienne</span></div>
+    <div><strong>${resume.plusRecente ? echapperHtml(formaterDateSauvegardeAdministration_(resume.plusRecente)) : '—'}</strong><span>Plus récente</span></div>
+  `;
+}
+
+
+function filtrerListeSauvegardesAdministration_(sauvegardes, filtre) {
+  const typeParFiltre = {
+    MANUELLES: 'MANUELLE',
+    AUTOMATIQUES: 'AUTO_PLANIFIEE',
+    SECURITE: 'AUTO_AVANT_RESTAURATION'
+  };
+  const type = typeParFiltre[filtre];
+
+  return type
+    ? sauvegardes.filter(function (sauvegarde) {
+      return sauvegarde.type === type;
+    })
+    : sauvegardes.slice();
+}
+
+
+function filtrerSauvegardesAdministration(filtre) {
+  etatApplication.filtreSauvegardesAdministration = filtre || 'TOUTES';
+
+  document.querySelectorAll('[data-filtre-sauvegarde]').forEach(
+    function (bouton) {
+      bouton.classList.toggle(
+        'actif',
+        bouton.dataset.filtreSauvegarde ===
+          etatApplication.filtreSauvegardesAdministration
+      );
+    }
+  );
+
+  afficherInventaireSauvegardesAdministration(
+    ((etatApplication.sauvegardesAdministration || {}).inventaire) || {}
+  );
 }
 
 
@@ -8103,6 +8406,134 @@ function telechargerSauvegardeInventaireAdministration(
     })
     .preparerTelechargementSauvegarde(
       backupId,
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+
+function ouvrirSuppressionSauvegardeAdministration(backupId) {
+  const inventaire = (
+    (etatApplication.sauvegardesAdministration || {}).inventaire || {}
+  );
+  const sauvegarde = (inventaire.sauvegardes || []).find(
+    function (element) {
+      return element.backupId === backupId;
+    }
+  );
+
+  if (!sauvegarde) {
+    afficherToast('Sauvegarde introuvable dans l’inventaire.', true);
+    return;
+  }
+
+  if (sauvegarde.suppressionAutorisee === false) {
+    afficherToast(
+      'Cette sauvegarde est protégée par une restauration active.',
+      true
+    );
+    return;
+  }
+
+  etatApplication.backupSuppressionAdministration = sauvegarde;
+  const resume = document.getElementById(
+    'resumeSuppressionSauvegardeAdministration'
+  );
+  const champ = document.getElementById(
+    'confirmationSuppressionSauvegardeAdministration'
+  );
+  const modal = document.getElementById(
+    'modalSuppressionSauvegardeAdministration'
+  );
+
+  if (resume) {
+    resume.innerHTML = `
+      <div><span>Date</span><strong>${echapperHtml(formaterDateSauvegardeAdministration_(sauvegarde.createdAt))}</strong></div>
+      <div><span>Type</span><strong>${echapperHtml(sauvegarde.type || '')}</strong></div>
+      <div><span>Commentaire</span><strong>${echapperHtml(sauvegarde.comment || 'Sans commentaire')}</strong></div>
+    `;
+  }
+
+  if (champ) {
+    champ.value = '';
+  }
+
+  mettreAJourConfirmationSuppressionSauvegardeAdministration();
+  modal?.classList.remove('masque');
+  document.body.classList.add('modal-ouverte');
+  window.setTimeout(function () {
+    champ?.focus();
+  }, 0);
+}
+
+
+function fermerModalSuppressionSauvegardeAdministration() {
+  document.getElementById(
+    'modalSuppressionSauvegardeAdministration'
+  )?.classList.add('masque');
+  document.body.classList.remove('modal-ouverte');
+  etatApplication.backupSuppressionAdministration = null;
+}
+
+
+function mettreAJourConfirmationSuppressionSauvegardeAdministration() {
+  const champ = document.getElementById(
+    'confirmationSuppressionSauvegardeAdministration'
+  );
+  const bouton = document.getElementById(
+    'boutonConfirmerSuppressionSauvegardeAdministration'
+  );
+
+  if (bouton) {
+    bouton.disabled = !champ || champ.value.trim() !== 'SUPPRIMER';
+  }
+}
+
+
+function confirmerSuppressionSauvegardeAdministration() {
+  const sauvegarde = etatApplication.backupSuppressionAdministration;
+  const champ = document.getElementById(
+    'confirmationSuppressionSauvegardeAdministration'
+  );
+  const bouton = document.getElementById(
+    'boutonConfirmerSuppressionSauvegardeAdministration'
+  );
+
+  if (!sauvegarde || !sauvegarde.backupId) {
+    afficherToast('Sauvegarde introuvable.', true);
+    return;
+  }
+
+  if (!champ || champ.value.trim() !== 'SUPPRIMER') {
+    afficherToast('Saisis exactement le mot SUPPRIMER.', true);
+    return;
+  }
+
+  if (bouton) {
+    bouton.disabled = true;
+    bouton.textContent = 'Placement dans la corbeille…';
+  }
+
+  google.script.run
+    .withSuccessHandler(function (resultat) {
+      if (bouton) {
+        bouton.textContent = 'Placer dans la corbeille';
+      }
+
+      fermerModalSuppressionSauvegardeAdministration();
+      afficherToast(resultat.message, false);
+      initialiserPageAdministration();
+    })
+    .withFailureHandler(function (erreur) {
+      if (bouton) {
+        bouton.disabled = false;
+        bouton.textContent = 'Placer dans la corbeille';
+      }
+
+      afficherToast(extraireMessageErreur(erreur), true);
+    })
+    .supprimerSauvegardeAdministration(
+      sauvegarde.backupId,
+      champ.value,
       obtenirJetonAdministrateurApplication()
     );
 }
