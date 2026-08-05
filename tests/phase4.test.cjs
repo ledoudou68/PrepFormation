@@ -114,9 +114,9 @@ function createScriptAppFixture() {
 
   const ScriptApp = {
     WeekDay: {
-      LUNDI: 'MONDAY', MARDI: 'TUESDAY', MERCREDI: 'WEDNESDAY',
-      JEUDI: 'THURSDAY', VENDREDI: 'FRIDAY', SAMEDI: 'SATURDAY',
-      DIMANCHE: 'SUNDAY'
+      MONDAY: 'MONDAY', TUESDAY: 'TUESDAY', WEDNESDAY: 'WEDNESDAY',
+      THURSDAY: 'THURSDAY', FRIDAY: 'FRIDAY', SATURDAY: 'SATURDAY',
+      SUNDAY: 'SUNDAY'
     },
     getProjectTriggers: () => triggers.slice(),
     deleteTrigger: trigger => {
@@ -262,6 +262,65 @@ test('planification hebdomadaire utilise jour, heure et fréquence attendus', ()
   assert(fixture.script.calls.some(call => call[0] === 'everyWeeks' && call[1] === 1));
   assert(fixture.script.calls.some(call => call[0] === 'onWeekDay' && call[1] === 'FRIDAY'));
   assert(fixture.script.calls.some(call => call[0] === 'atHour' && call[1] === 7));
+});
+
+test('les sept valeurs françaises du select utilisent les enums WeekDay anglais', () => {
+  const fixture = createPlanningFixture();
+  const attendus = {
+    LUNDI: 'MONDAY',
+    MARDI: 'TUESDAY',
+    MERCREDI: 'WEDNESDAY',
+    JEUDI: 'THURSDAY',
+    VENDREDI: 'FRIDAY',
+    SAMEDI: 'SATURDAY',
+    DIMANCHE: 'SUNDAY'
+  };
+
+  Object.keys(attendus).forEach(jour => {
+    assert.equal(
+      fixture.context.obtenirJourSemaineSauvegardeAutomatique_(jour),
+      attendus[jour]
+    );
+  });
+});
+
+test('la valeur du select Jour est envoyée sans transformation au serveur', () => {
+  const html = fs.readFileSync(
+    path.join(ROOT, 'Administration.html'),
+    'utf8'
+  );
+  const client = fs.readFileSync(
+    path.join(ROOT, 'JavaScript.html'),
+    'utf8'
+  );
+  const valeurs = [
+    'LUNDI', 'MARDI', 'MERCREDI', 'JEUDI',
+    'VENDREDI', 'SAMEDI', 'DIMANCHE'
+  ];
+
+  valeurs.forEach(jour => {
+    assert(html.includes(`<option value="${jour}">`));
+  });
+  assert(client.includes(
+    "jourHebdomadaire: document.getElementById(\n      'jourSauvegardesAutomatiques'\n    )?.value || 'LUNDI'"
+  ));
+});
+
+test('un jour invalide produit une erreur explicite avant onWeekDay', () => {
+  const fixture = createPlanningFixture();
+
+  assert.throws(
+    () => fixture.context.creerDeclencheurSauvegardeAutomatique_({
+      mode: 'HEBDOMADAIRE',
+      heure: 7,
+      jourHebdomadaire: 'FRIDAY'
+    }),
+    /Jour de la semaine invalide : FRIDAY/
+  );
+  assert.equal(
+    fixture.script.calls.some(call => call[0] === 'onWeekDay'),
+    false
+  );
 });
 
 test('remplacement du déclencheur conserve exactement un déclencheur PrepFormation', () => {

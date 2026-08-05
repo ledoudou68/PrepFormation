@@ -48,6 +48,17 @@ function enregistrerConfigurationSauvegardesAutomatiques(
   const session = exigerAdministrateur_(jetonAdministrateur);
 
   return executerMutationMetier_(function () {
+    const valeurRecue = String(
+      configuration && configuration.jourHebdomadaire || ''
+    );
+
+    if (
+      String(configuration && configuration.mode || '') ===
+        'HEBDOMADAIRE'
+    ) {
+      obtenirJourSemaineSauvegardeAutomatique_(valeurRecue);
+    }
+
     const config = normaliserConfigurationSauvegardesAutomatiques_(
       configuration
     );
@@ -573,6 +584,10 @@ function normaliserRetentionSauvegardeAutomatique_(valeur) {
 
 
 function creerDeclencheurSauvegardeAutomatique_(config) {
+  const valeurRecue = String(config.jourHebdomadaire || '');
+  const weekDay = config.mode === 'HEBDOMADAIRE'
+    ? obtenirJourSemaineSauvegardeAutomatique_(valeurRecue)
+    : null;
   let constructeur = ScriptApp
     .newTrigger(FONCTION_DECLENCHEUR_SAUVEGARDE_AUTOMATIQUE_)
     .timeBased();
@@ -591,15 +606,34 @@ function creerDeclencheurSauvegardeAutomatique_(config) {
     constructeur = constructeur
       .atHour(config.heure)
       .everyWeeks(1)
-      .onWeekDay(
-        ScriptApp.WeekDay[config.jourHebdomadaire]
-      )
+      .onWeekDay(weekDay)
       .inTimezone(fuseau);
   } else {
     throw new Error('Fréquence de sauvegarde automatique invalide.');
   }
 
   return constructeur.create();
+}
+
+
+function obtenirJourSemaineSauvegardeAutomatique_(valeurRecue) {
+  const jours = {
+    LUNDI: ScriptApp.WeekDay.MONDAY,
+    MARDI: ScriptApp.WeekDay.TUESDAY,
+    MERCREDI: ScriptApp.WeekDay.WEDNESDAY,
+    JEUDI: ScriptApp.WeekDay.THURSDAY,
+    VENDREDI: ScriptApp.WeekDay.FRIDAY,
+    SAMEDI: ScriptApp.WeekDay.SATURDAY,
+    DIMANCHE: ScriptApp.WeekDay.SUNDAY
+  };
+  const valeur = String(valeurRecue || '');
+  const weekDay = jours[valeur];
+
+  if (!weekDay) {
+    throw new Error('Jour de la semaine invalide : ' + valeurRecue);
+  }
+
+  return weekDay;
 }
 
 
