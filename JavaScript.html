@@ -48,6 +48,9 @@ const etatApplication = {
   restaurationAdministration: null,
   previewRestaurationActive: null,
   minuterieProgressionRestauration: null,
+  generationSuiviRestauration: 0,
+  restaurationModaleFermable: false,
+  rafraichirRestaurationApresFermeture: false,
   backupIdRestaurabiliteActif: '',
   consultationRestaurabiliteActive: null,
   derniereActiviteAdministration: 0,
@@ -8543,6 +8546,9 @@ function ouvrirModalPreparationRestaurationAdministration_() {
     'boutonConfirmerRestaurationAdministration'
   );
 
+  etatApplication.restaurationModaleFermable = false;
+  etatApplication.rafraichirRestaurationApresFermeture = false;
+
   if (contenu) {
     contenu.innerHTML = `
       <div class="etat-vide">
@@ -8556,6 +8562,9 @@ function ouvrirModalPreparationRestaurationAdministration_() {
   if (bouton) {
     bouton.disabled = true;
     bouton.textContent = 'Confirmer et restaurer';
+    bouton.classList.remove('bouton-principal');
+    bouton.classList.add('bouton-danger');
+    bouton.onclick = confirmerEtExecuterRestaurationAdministration;
   }
 
   if (modal) {
@@ -8567,13 +8576,21 @@ function ouvrirModalPreparationRestaurationAdministration_() {
 function fermerModalPreparationRestaurationAdministration() {
   const etat = etatApplication.restaurationAdministration || {};
 
-  if (etat.operationActive) {
+  if (
+    etat.operationActive &&
+    !etatApplication.restaurationModaleFermable
+  ) {
     afficherToast(
       'La fenêtre reste disponible pendant la restauration.',
       true
     );
     return;
   }
+
+  const actualiserApresFermeture =
+    etatApplication.rafraichirRestaurationApresFermeture;
+
+  arreterSuiviRestaurationAdministration_();
 
   document.getElementById(
     'modalPreparationRestaurationAdministration'
@@ -8585,6 +8602,15 @@ function fermerModalPreparationRestaurationAdministration() {
 
   if (motDePasse) {
     motDePasse.value = '';
+  }
+
+  reinitialiserControlesModalRestaurationAdministration_();
+  etatApplication.restaurationModaleFermable = false;
+  etatApplication.rafraichirRestaurationApresFermeture = false;
+
+  if (actualiserApresFermeture) {
+    actualiserInventaireSauvegardesAdministration(false);
+    actualiserEtatRestaurationAdministration_(true);
   }
 }
 
@@ -8790,8 +8816,12 @@ function demarrerExecutionRestaurationAdministration_(confirmationId) {
   );
 
   if (bouton) {
+    bouton.disabled = true;
     bouton.textContent = 'Restauration en cours…';
   }
+
+  etatApplication.restaurationModaleFermable = false;
+  etatApplication.rafraichirRestaurationApresFermeture = false;
 
   afficherProgressionRestaurationDansModal_({
     etape: 'SAUVEGARDE_SECURITE',
@@ -8803,11 +8833,12 @@ function demarrerExecutionRestaurationAdministration_(confirmationId) {
 
   google.script.run
     .withSuccessHandler(function (resultat) {
-      arreterSuiviRestaurationAdministration_();
-
       if (resultat.recuperationRequise) {
+        afficherErreurPreparationRestaurationAdministration_(
+          resultat.message
+        );
+        terminerInterfaceRestaurationAdministration_();
         afficherToast(resultat.message, true);
-        actualiserEtatRestaurationAdministration_();
         return;
       }
 
@@ -8828,17 +8859,14 @@ function demarrerExecutionRestaurationAdministration_(confirmationId) {
       afficherEtatRestaurationAdministration(
         etatApplication.restaurationAdministration
       );
-      basculerInterfacePendantRestauration_(false);
+      terminerInterfaceRestaurationAdministration_();
       afficherToast(resultat.message, false);
-      actualiserInventaireSauvegardesAdministration(false);
     })
     .withFailureHandler(function (erreur) {
-      arreterSuiviRestaurationAdministration_();
-      basculerInterfacePendantRestauration_(false);
       const message = extraireMessageErreur(erreur);
       afficherErreurPreparationRestaurationAdministration_(message);
+      terminerInterfaceRestaurationAdministration_();
       afficherToast(message, true);
-      actualiserEtatRestaurationAdministration_();
     })
     .executerRestaurationConfirmee(
       confirmationId,
@@ -8849,9 +8877,11 @@ function demarrerExecutionRestaurationAdministration_(confirmationId) {
 
 function demarrerSuiviRestaurationAdministration_() {
   arreterSuiviRestaurationAdministration_();
+  const generation = etatApplication.generationSuiviRestauration;
+
   etatApplication.minuterieProgressionRestauration =
     window.setInterval(function () {
-      actualiserEtatRestaurationAdministration_(true);
+      actualiserEtatRestaurationAdministration_(true, generation);
     }, 2500);
 }
 
@@ -8863,12 +8893,25 @@ function arreterSuiviRestaurationAdministration_() {
     );
     etatApplication.minuterieProgressionRestauration = null;
   }
+
+  etatApplication.generationSuiviRestauration++;
 }
 
 
-function actualiserEtatRestaurationAdministration_(silencieux) {
+function actualiserEtatRestaurationAdministration_(
+  silencieux,
+  generationSuivi
+) {
   google.script.run
     .withSuccessHandler(function (etat) {
+      if (
+        Number.isInteger(generationSuivi) &&
+        generationSuivi !==
+          etatApplication.generationSuiviRestauration
+      ) {
+        return;
+      }
+
       etatApplication.restaurationAdministration = etat;
       afficherEtatRestaurationAdministration(etat);
 
@@ -8943,7 +8986,10 @@ function afficherEtatRestaurationAdministration(etat) {
 
 
 function basculerInterfacePendantRestauration_(bloquer) {
-  document.querySelectorAll('.page-administration button').forEach(
+  document.querySelectorAll(
+    '.page-administration button, ' +
+    '#modalPreparationRestaurationAdministration button'
+  ).forEach(
     function (bouton) {
       if (bouton.dataset.autorisePendantRestauration === 'true') {
         return;
@@ -8959,10 +9005,13 @@ function basculerInterfacePendantRestauration_(bloquer) {
             : 'false';
         }
         bouton.disabled = true;
-      } else if (
-        bouton.dataset.etaitDesactiveRestauration === 'false'
-      ) {
-        bouton.disabled = false;
+      } else if (Object.prototype.hasOwnProperty.call(
+        bouton.dataset,
+        'etaitDesactiveRestauration'
+      )) {
+        if (bouton.dataset.etaitDesactiveRestauration === 'false') {
+          bouton.disabled = false;
+        }
         delete bouton.dataset.etaitDesactiveRestauration;
       }
     }
@@ -9021,16 +9070,7 @@ function afficherResultatRestaurationAdministration_(resultat) {
   const confirmation = document.getElementById(
     'confirmationRestaurationAdministration'
   );
-  const bouton = document.getElementById(
-    'boutonConfirmerRestaurationAdministration'
-  );
-
   confirmation?.classList.add('masque');
-
-  if (bouton) {
-    bouton.disabled = true;
-    bouton.textContent = 'Restauration terminée';
-  }
 
   if (contenu) {
     contenu.innerHTML = `
@@ -9041,6 +9081,61 @@ function afficherResultatRestaurationAdministration_(resultat) {
         <span>Schéma : ${Number(resultat.versionSchema)} · Durée : ${echapperHtml(formaterDureeRestauration_(resultat.dureeMs))}</span>
       </div>
     `;
+  }
+}
+
+
+function terminerInterfaceRestaurationAdministration_() {
+  arreterSuiviRestaurationAdministration_();
+
+  const etat = etatApplication.restaurationAdministration || {};
+  etat.operationActive = null;
+  etatApplication.restaurationAdministration = etat;
+  etatApplication.restaurationModaleFermable = true;
+  etatApplication.rafraichirRestaurationApresFermeture = true;
+
+  basculerInterfacePendantRestauration_(false);
+  afficherEtatRestaurationAdministration(etat);
+
+  const bouton = document.getElementById(
+    'boutonConfirmerRestaurationAdministration'
+  );
+  const boutonFermer = document.getElementById(
+    'boutonFermerModalPreparationRestauration'
+  );
+  const boutonAnnuler = document.getElementById(
+    'boutonAnnulerPreparationRestauration'
+  );
+
+  if (bouton) {
+    bouton.disabled = false;
+    bouton.textContent = 'Fermer';
+    bouton.classList.remove('bouton-danger');
+    bouton.classList.add('bouton-principal');
+    bouton.onclick = fermerModalPreparationRestaurationAdministration;
+  }
+
+  if (boutonFermer) {
+    boutonFermer.disabled = false;
+  }
+
+  if (boutonAnnuler) {
+    boutonAnnuler.disabled = false;
+  }
+}
+
+
+function reinitialiserControlesModalRestaurationAdministration_() {
+  const bouton = document.getElementById(
+    'boutonConfirmerRestaurationAdministration'
+  );
+
+  if (bouton) {
+    bouton.disabled = true;
+    bouton.textContent = 'Confirmer et restaurer';
+    bouton.classList.remove('bouton-principal');
+    bouton.classList.add('bouton-danger');
+    bouton.onclick = confirmerEtExecuterRestaurationAdministration;
   }
 }
 
