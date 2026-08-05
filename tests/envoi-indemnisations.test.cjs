@@ -11,6 +11,7 @@ const source = fs.readFileSync(
 );
 
 function creerContexte() {
+  const proprietes = new Map();
   const contexte = {
     console,
     Date,
@@ -26,15 +27,33 @@ function creerContexte() {
     isNaN,
     Utilities: {
       getUuid: () => 'uuid-test',
-      formatDate: () => '01/08/2026 12:00:00'
+      formatDate: (date, zone, format) => format === 'yyyy'
+        ? '2026'
+        : '01/08/2026 12:00:00'
     },
     Session: {
       getScriptTimeZone: () => 'Europe/Paris'
     },
     MailApp: {
-      sendEmail: () => {}
+      sendEmail: () => {},
+      getRemainingDailyQuota: () => 100
+    },
+    ScriptApp: {
+      AuthMode: { FULL: 'FULL' },
+      requireScopes: () => {}
+    },
+    PropertiesService: {
+      getScriptProperties: () => ({
+        getProperty: cle => proprietes.has(cle)
+          ? proprietes.get(cle)
+          : null,
+        setProperty: (cle, valeur) => {
+          proprietes.set(cle, String(valeur));
+        }
+      })
     }
   };
+  contexte.__proprietes = proprietes;
   vm.createContext(contexte);
   vm.runInContext(source, contexte, {
     filename: 'EnvoiIndemnisationsService.js'
@@ -493,6 +512,316 @@ test('la migration 4 est versionnée, complète et idempotente', () => {
       'STATUT_ENVOI', 'MESSAGE_ERREUR', 'SESSION_ADMIN',
       'DATE_CREATION'
     ]
+  );
+});
+
+test('l’autorisation MailApp demande uniquement le scope d’envoi sans envoyer', () => {
+  const c = creerContexte();
+  let scopes = null;
+  let envois = 0;
+  c.ScriptApp.requireScopes = (mode, valeurs) => {
+    scopes = { mode, valeurs };
+  };
+  c.MailApp.sendEmail = () => { envois++; };
+  const quota = c.autoriserEnvoiEmails();
+  assert.strictEqual(quota, 100);
+  assert.strictEqual(envois, 0);
+  assert.strictEqual(scopes.mode, 'FULL');
+  assert.deepStrictEqual(Array.from(scopes.valeurs), [
+    'https://www.googleapis.com/auth/script.send_mail'
+  ]);
+});
+
+test('la première référence de l’année est IND-AAAA-0001', () => {
+  const c = creerContexte();
+  assert.strictEqual(
+    c.calculerProchaineReferenceIndemnisation_(2026, null, []),
+    'IND-2026-0001'
+  );
+});
+
+test('la séquence passe de 0001 à 0002', () => {
+  const c = creerContexte();
+  assert.strictEqual(
+    c.calculerProchaineReferenceIndemnisation_(
+      2026,
+      '1',
+      ['IND-2026-0001']
+    ),
+    'IND-2026-0002'
+  );
+});
+
+test('la séquence recommence à 0001 lors du changement d’année', () => {
+  const c = creerContexte();
+  assert.strictEqual(
+    c.calculerProchaineReferenceIndemnisation_(
+      2027,
+      null,
+      ['IND-2026-0099']
+    ),
+    'IND-2027-0001'
+  );
+});
+
+test('une propriété absente ou invalide est reconstruite depuis la base', () => {
+  const c = creerContexte();
+  assert.strictEqual(
+    c.calculerProchaineReferenceIndemnisation_(
+      2026,
+      'valeur-invalide',
+      ['IND-2026-0007']
+    ),
+    'IND-2026-0008'
+  );
+});
+
+test('une propriété inférieure à l’historique est corrigée par cohérence', () => {
+  const c = creerContexte();
+  assert.strictEqual(
+    c.calculerProchaineReferenceIndemnisation_(
+      2026,
+      '2',
+      ['IND-2026-0012']
+    ),
+    'IND-2026-0013'
+  );
+});
+
+test('les références de l’historique et des prestations sont réservées', () => {
+  const c = creerContexte();
+  const etat = c.construireEtatReferencesIndemnisation_(
+    [{
+      idEnvoi: 'E1',
+      reference: ' ind-2026-0001 ',
+      statut: 'TERMINE'
+    }],
+    [{
+      idEnvoi: 'E2',
+      reference: 'IND-2026-0002'
+    }],
+    ''
+  );
+  assert(etat.referencesUtilisees.has('IND-2026-0001'));
+  assert(etat.referencesUtilisees.has('IND-2026-0002'));
+  assert.strictEqual(
+    c.calculerProchaineReferenceIndemnisation_(
+      2026,
+      null,
+      Array.from(etat.referencesUtilisees)
+    ),
+    'IND-2026-0003'
+  );
+});
+
+test('un envoi en cours réserve sa référence', () => {
+  const c = creerContexte();
+  const etat = c.construireEtatReferencesIndemnisation_(
+    [{
+      idEnvoi: 'E1',
+      reference: 'IND-2026-0004',
+      statut: 'EN_COURS_AVANT_ENVOI'
+    }],
+    [],
+    ''
+  );
+  assert(etat.referencesUtilisees.has('IND-2026-0004'));
+});
+
+test('deux envois sérialisés ne reçoivent jamais le même numéro', () => {
+  const c = creerContexte();
+  const premiere = c.calculerProchaineReferenceIndemnisation_(
+    2026,
+    null,
+    []
+  );
+  const etatApresReservation = c.construireEtatReferencesIndemnisation_(
+    [{
+      idEnvoi: 'E1',
+      reference: premiere,
+      statut: 'EN_COURS_AVANT_ENVOI'
+    }],
+    [],
+    ''
+  );
+  const seconde = c.calculerProchaineReferenceIndemnisation_(
+    2026,
+    null,
+    Array.from(etatApresReservation.referencesUtilisees)
+  );
+  assert.strictEqual(premiere, 'IND-2026-0001');
+  assert.strictEqual(seconde, 'IND-2026-0002');
+});
+
+test('une proposition devenue indisponible est remplacée automatiquement', () => {
+  const c = creerContexte();
+  c.obtenirEtatReferencesIndemnisation_ = () => ({
+    referencesUtilisees: new Set(['IND-2026-0001']),
+    referenceOperationCourante: ''
+  });
+  const resolution = c.resoudreReferenceDefinitiveIndemnisation_(
+    'IND-2026-0001',
+    'IND-2026-0001',
+    'E2'
+  );
+  assert.strictEqual(resolution.reference, 'IND-2026-0002');
+  assert.strictEqual(resolution.ajusteeAutomatiquement, true);
+});
+
+test('une référence manuelle sûre et unique est acceptée', () => {
+  const c = creerContexte();
+  c.obtenirEtatReferencesIndemnisation_ = () => ({
+    referencesUtilisees: new Set(),
+    referenceOperationCourante: ''
+  });
+  const resolution = c.resoudreReferenceDefinitiveIndemnisation_(
+    'Demande spéciale 42',
+    'IND-2026-0001',
+    'E1'
+  );
+  assert.strictEqual(resolution.reference, 'Demande spéciale 42');
+});
+
+test('une référence manuelle déjà utilisée est refusée sans changer de valeur', () => {
+  const c = creerContexte();
+  c.obtenirEtatReferencesIndemnisation_ = () => ({
+    referencesUtilisees: new Set(['DEMANDE SPÉCIALE 42']),
+    referenceOperationCourante: ''
+  });
+  assert.throws(
+    () => c.resoudreReferenceDefinitiveIndemnisation_(
+      'demande spéciale 42',
+      'IND-2026-0001',
+      'E1'
+    ),
+    /déjà utilisée/
+  );
+});
+
+test('une référence manuelle avec caractères dangereux est refusée', () => {
+  const c = creerContexte();
+  assert.throws(
+    () => c.validerReferenceIndemnisation_('<script>alert(1)</script>'),
+    /non autorisés/
+  );
+});
+
+test('un échec avant MailApp rend la référence réutilisable', () => {
+  const c = creerContexte();
+  const etat = c.construireEtatReferencesIndemnisation_(
+    [{
+      idEnvoi: 'E1',
+      reference: 'IND-2026-0001',
+      statut: 'ECHEC_ENVOI'
+    }],
+    [],
+    ''
+  );
+  assert.strictEqual(etat.referencesUtilisees.size, 0);
+  assert.strictEqual(
+    c.calculerProchaineReferenceIndemnisation_(
+      2026,
+      null,
+      Array.from(etat.referencesUtilisees)
+    ),
+    'IND-2026-0001'
+  );
+});
+
+test('un échec après MailApp conserve définitivement la référence', () => {
+  const c = creerContexte();
+  const etat = c.construireEtatReferencesIndemnisation_(
+    [{
+      idEnvoi: 'E1',
+      reference: 'IND-2026-0001',
+      statut: 'REGULARISATION_REQUISE'
+    }],
+    [],
+    ''
+  );
+  assert(etat.referencesUtilisees.has('IND-2026-0001'));
+});
+
+test('un échec MailApp ne fait pas avancer la propriété de séquence', () => {
+  const c = creerContexte();
+  const d = demande();
+  d.reference = 'IND-2026-0001';
+  c.trouverHistoriqueEnvoiIndemnisation_ = () => null;
+  c.creerHistoriqueEnvoiIndemnisation_ = valeur => ({
+    idEnvoi: valeur.idEnvoi,
+    numeroLigne: 2
+  });
+  c.MailApp.sendEmail = () => { throw new Error('refus MailApp'); };
+  c.mettreAJourHistoriqueEnvoiIndemnisation_ = () => {};
+  c.journaliserActionSensible_ = () => {};
+
+  assert.throws(
+    () => c.envoyerDemandeIndemnisationEmailInterne_(
+      d,
+      { identifiantHistorique: 'SESSION_ADMIN:test' }
+    ),
+    /Aucune prestation n’a été modifiée/
+  );
+  assert.strictEqual(
+    c.__proprietes.has(
+      'PREPFORMATION_INDEMNISATION_SEQUENCE_2026'
+    ),
+    false
+  );
+});
+
+test('la référence définitive est identique dans le mail, les prestations et l’historique', () => {
+  const c = creerContexte();
+  const d = demande();
+  d.reference = 'IND-2026-0042';
+  d.corpsTexte = 'Référence IND-2026-0042';
+  d.corpsHtml = '<p>Référence IND-2026-0042</p>';
+  const references = {};
+  c.trouverHistoriqueEnvoiIndemnisation_ = () => null;
+  c.creerHistoriqueEnvoiIndemnisation_ = valeur => {
+    references.historique = valeur.reference;
+    return { idEnvoi: valeur.idEnvoi, numeroLigne: 2 };
+  };
+  c.MailApp.sendEmail = options => {
+    assert(options.body.includes(d.reference));
+    assert(options.htmlBody.includes(d.reference));
+    references.mail = d.reference;
+  };
+  c.mettreAJourHistoriqueEnvoiIndemnisation_ = () => {};
+  c.mettreAJourPrestationsApresEnvoi_ = valeur => {
+    references.prestations = valeur.reference;
+  };
+  c.journaliserActionSensible_ = () => {};
+
+  const resultat = c.envoyerDemandeIndemnisationEmailInterne_(
+    d,
+    { identifiantHistorique: 'SESSION_ADMIN:test' }
+  );
+  references.reponse = resultat.reference;
+
+  assert.deepStrictEqual(references, {
+    historique: 'IND-2026-0042',
+    mail: 'IND-2026-0042',
+    prestations: 'IND-2026-0042',
+    reponse: 'IND-2026-0042'
+  });
+});
+
+test('une référence automatique manuelle supérieure avance la propriété', () => {
+  const c = creerContexte();
+  c.__proprietes.set(
+    'PREPFORMATION_INDEMNISATION_SEQUENCE_2026',
+    '4'
+  );
+  assert.strictEqual(
+    c.enregistrerSequenceReferenceIndemnisation_('IND-2026-0012'),
+    true
+  );
+  assert.strictEqual(
+    c.__proprietes.get(
+      'PREPFORMATION_INDEMNISATION_SEQUENCE_2026'
+    ),
+    '12'
   );
 });
 

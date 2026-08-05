@@ -12,6 +12,24 @@ const STATUT_ENVOI_MESSAGE_ENVOYE_ = 'EMAIL_ENVOYE_MAJ_EN_COURS';
 const STATUT_ENVOI_TERMINE_ = 'TERMINE';
 const STATUT_ENVOI_ECHEC_ = 'ECHEC_ENVOI';
 const STATUT_ENVOI_REGULARISATION_ = 'REGULARISATION_REQUISE';
+const PREFIXE_SEQUENCE_INDEMNISATION_ =
+  'PREPFORMATION_INDEMNISATION_SEQUENCE_';
+const LONGUEUR_MAX_REFERENCE_INDEMNISATION_ = 100;
+
+
+/**
+ * Fonction publique temporaire, exécutable uniquement depuis l'éditeur
+ * Apps Script afin de déclencher le consentement OAuth de MailApp.
+ * Elle n'est appelée par aucune interface et n'envoie aucun message.
+ */
+function autoriserEnvoiEmails() {
+  ScriptApp.requireScopes(
+    ScriptApp.AuthMode.FULL,
+    ['https://www.googleapis.com/auth/script.send_mail']
+  );
+
+  return MailApp.getRemainingDailyQuota();
+}
 
 
 /**
@@ -25,13 +43,16 @@ function preparerDemandeIndemnisationEmail(
   exigerAdministrateur_(jetonAdministrateur);
   donnees = donnees || {};
 
-  return construireDemandeIndemnisationEmail_(
+  const referenceProposee =
+    proposerProchaineReferenceIndemnisation_();
+
+  const demande = construireDemandeIndemnisationEmail_(
     donnees.idsPrestations,
     {
       idEnvoi: nettoyerIdentifiantEnvoiIndemnisation_(
         Utilities.getUuid()
       ),
-      reference: donnees.reference,
+      reference: referenceProposee,
       objet: donnees.objet,
       introduction: donnees.introduction,
       remarqueFinale: donnees.remarqueFinale,
@@ -39,6 +60,11 @@ function preparerDemandeIndemnisationEmail(
       refuserIndemnisees: true
     }
   );
+
+  demande.referenceProposeeAutomatique = referenceProposee;
+  demande.referenceGenereeAutomatiquement = true;
+
+  return demande;
 }
 
 
@@ -61,13 +87,20 @@ function envoyerDemandeIndemnisationEmail(
       );
     }
 
+    const idEnvoi = nettoyerIdentifiantEnvoiIndemnisation_(
+      donnees.idEnvoi
+    );
+    const resolutionReference =
+      resoudreReferenceDefinitiveIndemnisation_(
+        donnees.reference,
+        donnees.referenceProposeeAutomatique,
+        idEnvoi
+      );
     const demande = construireDemandeIndemnisationEmail_(
       donnees.idsPrestations,
       {
-        idEnvoi: nettoyerIdentifiantEnvoiIndemnisation_(
-          donnees.idEnvoi
-        ),
-        reference: donnees.reference,
+        idEnvoi: idEnvoi,
+        reference: resolutionReference.reference,
         objet: donnees.objet,
         introduction: donnees.introduction,
         remarqueFinale: donnees.remarqueFinale,
@@ -75,6 +108,12 @@ function envoyerDemandeIndemnisationEmail(
         refuserIndemnisees: true
       }
     );
+
+    demande.referenceProposeeAutomatique =
+      String(donnees.referenceProposeeAutomatique || '').trim();
+    demande.referenceAjusteeAutomatiquement =
+      resolutionReference.ajusteeAutomatiquement;
+    demande.referenceRejouee = resolutionReference.rejouee;
 
     return envoyerDemandeIndemnisationEmailInterne_(
       demande,
@@ -159,6 +198,13 @@ function envoyerDemandeIndemnisationEmailInterne_(demande, session) {
     }
 
     MailApp.sendEmail(optionsEnvoi);
+
+    try {
+      enregistrerSequenceReferenceIndemnisation_(demande.reference);
+    } catch (erreurSequence) {
+      demande.avertissementSequence =
+        limiterMessageErreurEnvoiIndemnisation_(erreurSequence);
+    }
   } catch (erreurEnvoi) {
     mettreAJourHistoriqueEnvoiIndemnisation_(historique, {
       STATUT_ENVOI: STATUT_ENVOI_ECHEC_,
@@ -250,6 +296,10 @@ function envoyerDemandeIndemnisationEmailInterne_(demande, session) {
     volumeHeures: demande.volumeHeures,
     volumeHeuresLibelle: demande.volumeHeuresLibelle,
     reference: demande.reference,
+    referenceProposeeAutomatique:
+      demande.referenceProposeeAutomatique,
+    referenceAjusteeAutomatiquement:
+      Boolean(demande.referenceAjusteeAutomatiquement),
     message: 'Demande d’indemnisation envoyée et prestations mises à jour.'
   };
 }
@@ -281,6 +331,10 @@ function traiterReexecutionEnvoiIndemnisation_(demande, historique) {
       volumeHeures: demande.volumeHeures,
       volumeHeuresLibelle: demande.volumeHeuresLibelle,
       reference: demande.reference,
+      referenceProposeeAutomatique:
+        demande.referenceProposeeAutomatique,
+      referenceAjusteeAutomatiquement:
+        Boolean(demande.referenceAjusteeAutomatiquement),
       message: 'Cette demande a déjà été envoyée. Aucun nouvel e-mail n’a été émis.'
     };
   }
@@ -290,6 +344,344 @@ function traiterReexecutionEnvoiIndemnisation_(demande, historique) {
     historique.statut + '). Aucun nouvel e-mail n’a été émis. ' +
     'Vérifie l’historique avant toute action manuelle.'
   );
+}
+
+
+function proposerProchaineReferenceIndemnisation_() {
+  const annee = Number(Utilities.formatDate(
+    new Date(),
+    Session.getScriptTimeZone(),
+    'yyyy'
+  ));
+  const etat = obtenirEtatReferencesIndemnisation_('');
+  const valeurPropriete = PropertiesService
+    .getScriptProperties()
+    .getProperty(PREFIXE_SEQUENCE_INDEMNISATION_ + annee);
+
+  return calculerProchaineReferenceIndemnisation_(
+    annee,
+    valeurPropriete,
+    Array.from(etat.referencesUtilisees)
+  );
+}
+
+
+function resoudreReferenceDefinitiveIndemnisation_(
+  referenceDemandee,
+  referenceProposee,
+  idEnvoi
+) {
+  const etat = obtenirEtatReferencesIndemnisation_(idEnvoi);
+
+  if (etat.referenceOperationCourante) {
+    return {
+      reference: etat.referenceOperationCourante,
+      ajusteeAutomatiquement: false,
+      rejouee: true
+    };
+  }
+
+  let reference = String(referenceDemandee || '').trim();
+  const proposition = String(referenceProposee || '').trim();
+
+  if (!reference) {
+    reference = proposition || proposerProchaineReferenceIndemnisation_();
+  }
+
+  validerReferenceIndemnisation_(reference);
+
+  const normalisee = normaliserReferenceIndemnisation_(reference);
+  const propositionNormalisee =
+    normaliserReferenceIndemnisation_(proposition);
+
+  if (etat.referencesUtilisees.has(normalisee)) {
+    if (
+      propositionNormalisee &&
+      normalisee === propositionNormalisee &&
+      analyserReferenceAutomatiqueIndemnisation_(reference)
+    ) {
+      const annee = Number(Utilities.formatDate(
+        new Date(),
+        Session.getScriptTimeZone(),
+        'yyyy'
+      ));
+      const valeurPropriete = PropertiesService
+        .getScriptProperties()
+        .getProperty(PREFIXE_SEQUENCE_INDEMNISATION_ + annee);
+      const nouvelleReference = calculerProchaineReferenceIndemnisation_(
+        annee,
+        valeurPropriete,
+        Array.from(etat.referencesUtilisees)
+      );
+
+      return {
+        reference: nouvelleReference,
+        ajusteeAutomatiquement: true,
+        rejouee: false
+      };
+    }
+
+    throw new Error(
+      'La référence « ' + reference + ' » est déjà utilisée. ' +
+      'Choisis une autre référence.'
+    );
+  }
+
+  return {
+    reference: reference,
+    ajusteeAutomatiquement: false,
+    rejouee: false
+  };
+}
+
+
+function obtenirEtatReferencesIndemnisation_(idEnvoiCourant) {
+  const classeur = SpreadsheetApp.getActiveSpreadsheet();
+  const historique = lireTableIndemnisation_(
+    classeur,
+    'HISTORIQUE_ENVOIS_INDEMNISATIONS'
+  );
+  const prestations = lireTableIndemnisation_(
+    classeur,
+    'PRESTATIONS_FORMATEURS'
+  );
+
+  verifierColonnesIndemnisation_(
+    historique,
+    'HISTORIQUE_ENVOIS_INDEMNISATIONS',
+    ['ID_ENVOI', 'REFERENCE_DEMANDE', 'STATUT_ENVOI']
+  );
+  verifierColonnesIndemnisation_(
+    prestations,
+    'PRESTATIONS_FORMATEURS',
+    ['ID_ENVOI', 'REFERENCE_DEMANDE']
+  );
+
+  const lignesHistorique = historique.lignes.map(function (ligne) {
+    return {
+      idEnvoi: String(ligne[historique.index.ID_ENVOI] || '').trim(),
+      reference: String(
+        ligne[historique.index.REFERENCE_DEMANDE] || ''
+      ).trim(),
+      statut: String(
+        ligne[historique.index.STATUT_ENVOI] || ''
+      ).trim()
+    };
+  });
+  const lignesPrestations = prestations.lignes.map(function (ligne) {
+    return {
+      idEnvoi: String(ligne[prestations.index.ID_ENVOI] || '').trim(),
+      reference: String(
+        ligne[prestations.index.REFERENCE_DEMANDE] || ''
+      ).trim()
+    };
+  });
+
+  return construireEtatReferencesIndemnisation_(
+    lignesHistorique,
+    lignesPrestations,
+    idEnvoiCourant
+  );
+}
+
+
+function construireEtatReferencesIndemnisation_(
+  historiques,
+  prestations,
+  idEnvoiCourant
+) {
+  const identifiantCourant = String(idEnvoiCourant || '').trim();
+  const referencesUtilisees = new Set();
+  const referencesOperationCourante = new Set();
+
+  (historiques || []).forEach(function (historique) {
+    const reference = String(historique.reference || '').trim();
+    const statut = String(historique.statut || '').trim();
+    const idEnvoi = String(historique.idEnvoi || '').trim();
+
+    if (!reference || statut === STATUT_ENVOI_ECHEC_) {
+      return;
+    }
+
+    if (identifiantCourant && idEnvoi === identifiantCourant) {
+      referencesOperationCourante.add(reference);
+      return;
+    }
+
+    referencesUtilisees.add(
+      normaliserReferenceIndemnisation_(reference)
+    );
+  });
+
+  (prestations || []).forEach(function (prestation) {
+    const reference = String(prestation.reference || '').trim();
+    const idEnvoi = String(prestation.idEnvoi || '').trim();
+
+    if (!reference) {
+      return;
+    }
+
+    if (identifiantCourant && idEnvoi === identifiantCourant) {
+      referencesOperationCourante.add(reference);
+      return;
+    }
+
+    referencesUtilisees.add(
+      normaliserReferenceIndemnisation_(reference)
+    );
+  });
+
+  const referencesCourantesNormalisees = new Set(
+    Array.from(referencesOperationCourante).map(
+      normaliserReferenceIndemnisation_
+    )
+  );
+
+  if (referencesCourantesNormalisees.size > 1) {
+    throw new Error(
+      'L’opération ' + identifiantCourant +
+      ' utilise plusieurs références incompatibles.'
+    );
+  }
+
+  return {
+    referencesUtilisees: referencesUtilisees,
+    referenceOperationCourante:
+      Array.from(referencesOperationCourante)[0] || ''
+  };
+}
+
+
+function calculerProchaineReferenceIndemnisation_(
+  annee,
+  valeurPropriete,
+  referencesUtilisees
+) {
+  const anneeValide = Math.floor(Number(annee));
+
+  if (anneeValide < 2000 || anneeValide > 9999) {
+    throw new Error('Année invalide pour la référence d’indemnisation.');
+  }
+
+  const textePropriete = String(valeurPropriete == null
+    ? ''
+    : valeurPropriete).trim();
+  const sequencePropriete = /^\d+$/.test(textePropriete)
+    ? Math.max(0, Number(textePropriete))
+    : 0;
+  const references = new Set(
+    (referencesUtilisees || []).map(
+      normaliserReferenceIndemnisation_
+    ).filter(Boolean)
+  );
+  let sequence = sequencePropriete;
+
+  references.forEach(function (reference) {
+    const analyse = analyserReferenceAutomatiqueIndemnisation_(reference);
+
+    if (analyse && analyse.annee === anneeValide) {
+      sequence = Math.max(sequence, analyse.sequence);
+    }
+  });
+
+  do {
+    sequence++;
+
+    if (sequence > 9999) {
+      throw new Error(
+        'La séquence annuelle des indemnisations est épuisée.'
+      );
+    }
+  } while (references.has(
+    normaliserReferenceIndemnisation_(
+      formaterReferenceAutomatiqueIndemnisation_(
+        anneeValide,
+        sequence
+      )
+    )
+  ));
+
+  return formaterReferenceAutomatiqueIndemnisation_(
+    anneeValide,
+    sequence
+  );
+}
+
+
+function formaterReferenceAutomatiqueIndemnisation_(annee, sequence) {
+  return 'IND-' + String(annee) + '-' +
+    String(sequence).padStart(4, '0');
+}
+
+
+function analyserReferenceAutomatiqueIndemnisation_(reference) {
+  const correspondance = /^IND-(\d{4})-(\d{4})$/.exec(
+    normaliserReferenceIndemnisation_(reference)
+  );
+
+  if (!correspondance) {
+    return null;
+  }
+
+  return {
+    annee: Number(correspondance[1]),
+    sequence: Number(correspondance[2])
+  };
+}
+
+
+function enregistrerSequenceReferenceIndemnisation_(reference) {
+  const analyse = analyserReferenceAutomatiqueIndemnisation_(reference);
+
+  if (!analyse) {
+    return false;
+  }
+
+  const proprietes = PropertiesService.getScriptProperties();
+  const cle = PREFIXE_SEQUENCE_INDEMNISATION_ + analyse.annee;
+  const valeurActuelle = String(proprietes.getProperty(cle) || '').trim();
+  const sequenceActuelle = /^\d+$/.test(valeurActuelle)
+    ? Number(valeurActuelle)
+    : 0;
+
+  if (analyse.sequence > sequenceActuelle) {
+    proprietes.setProperty(cle, String(analyse.sequence));
+    return true;
+  }
+
+  return false;
+}
+
+
+function validerReferenceIndemnisation_(reference) {
+  const texte = String(reference || '').trim();
+
+  if (!texte) {
+    throw new Error('La référence commune de la demande est obligatoire.');
+  }
+
+  if (texte.length > LONGUEUR_MAX_REFERENCE_INDEMNISATION_) {
+    throw new Error(
+      'La référence ne doit pas dépasser ' +
+      LONGUEUR_MAX_REFERENCE_INDEMNISATION_ + ' caractères.'
+    );
+  }
+
+  if (!/^[A-Za-z0-9À-ÖØ-öø-ÿ._\/ -]+$/.test(texte)) {
+    throw new Error(
+      'La référence contient des caractères non autorisés.'
+    );
+  }
+
+  return texte;
+}
+
+
+function normaliserReferenceIndemnisation_(reference) {
+  return String(reference || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toUpperCase();
 }
 
 

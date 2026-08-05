@@ -7313,10 +7313,13 @@ function afficherPrevisualisationEmailIndemnisation(demande) {
           type="text"
           id="referenceEmailIndemnisation"
           class="champ"
-          maxlength="250"
+          maxlength="100"
           value="${echapperHtml(demande.reference || '')}"
           placeholder="Ex. DEM-2026-042"
         >
+        <small class="aide-reference-automatique-indemnisation">
+          Référence générée automatiquement
+        </small>
       </div>
       <div class="groupe-champ groupe-champ-large">
         <label for="objetEmailIndemnisation">Objet *</label>
@@ -7465,6 +7468,12 @@ function confirmerEnvoiEmailIndemnisation() {
         (resultat.rejouee
           ? 'Aucun nouvel e-mail n’a été émis. '
           : 'Demande envoyée avec succès. ') +
+        (resultat.referenceAjusteeAutomatiquement
+          ? 'La référence proposée ' +
+            resultat.referenceProposeeAutomatique +
+            ' était déjà utilisée ; la référence ' +
+            resultat.reference + ' a été attribuée automatiquement. '
+          : '') +
         'Destinataire : ' + resultat.destinataire + ' · ' +
         Number((resultat.copies || []).length) + ' formateur(s) en copie · ' +
         'Référence : ' + resultat.reference + ' · ' +
@@ -7486,6 +7495,8 @@ function confirmerEnvoiEmailIndemnisation() {
         idEnvoi: demande.idEnvoi,
         idsPrestations: demande.idsPrestations,
         reference: reference,
+        referenceProposeeAutomatique:
+          demande.referenceProposeeAutomatique,
         objet: objet,
         introduction: document.getElementById(
           'introductionEmailIndemnisation'
