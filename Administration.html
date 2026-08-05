@@ -20,6 +20,68 @@
     ></div>
   </section>
 
+  <section class="bloc bloc-parametres-email-indemnisation">
+    <div class="entete-page entete-page-actions">
+      <div>
+        <h2>Envoi des demandes d’indemnisation</h2>
+        <p>
+          Ces valeurs sont utilisées pour préparer les courriels adressés au chef de centre.
+        </p>
+      </div>
+    </div>
+
+    <div class="grille-parametres-email-indemnisation">
+      <div class="groupe-champ">
+        <label for="emailChefCentreAdministration">E-mail du chef de centre</label>
+        <input
+          type="email"
+          id="emailChefCentreAdministration"
+          class="champ"
+          maxlength="320"
+          autocomplete="off"
+        >
+      </div>
+      <div class="groupe-champ">
+        <label for="nomChefCentreAdministration">Nom du chef de centre</label>
+        <input
+          type="text"
+          id="nomChefCentreAdministration"
+          class="champ"
+          maxlength="250"
+        >
+      </div>
+      <div class="groupe-champ">
+        <label for="nomCentreAdministration">Nom du centre</label>
+        <input
+          type="text"
+          id="nomCentreAdministration"
+          class="champ"
+          maxlength="250"
+        >
+      </div>
+      <div class="groupe-champ groupe-champ-large">
+        <label for="objetMailIndemnisationAdministration">Objet du message</label>
+        <input
+          type="text"
+          id="objetMailIndemnisationAdministration"
+          class="champ"
+          maxlength="500"
+          placeholder="Demande d’indemnisation des formateurs – {{PERIODE}}"
+        >
+        <small>La variable {{PERIODE}} est remplacée automatiquement.</small>
+      </div>
+    </div>
+
+    <div class="actions-parametres-email-indemnisation">
+      <button
+        type="button"
+        id="boutonEnregistrerParametresEmailIndemnisation"
+        class="bouton-principal"
+        onclick="enregistrerParametresEmailIndemnisationAdministration()"
+      >Enregistrer les paramètres</button>
+    </div>
+  </section>
+
   <section class="bloc bloc-diagnostic-administration">
     <div class="entete-page entete-page-actions entete-diagnostic-administration">
       <div>

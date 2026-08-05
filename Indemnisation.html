@@ -169,6 +169,14 @@
           type="button"
           class="bouton-principal action-selection-indemnisation"
           disabled
+          onclick="ouvrirPreparationEmailIndemnisation()"
+        >
+          ✉ Préparer la demande par e-mail
+        </button>
+        <button
+          type="button"
+          class="bouton-principal action-selection-indemnisation"
+          disabled
           onclick="ouvrirActionIndemnisation('Demande envoyée')"
         >
           Marquer comme demande envoyée
@@ -252,6 +260,36 @@
       <div class="etat-vide">
         Sélectionne une ou plusieurs prestations pour afficher le récapitulatif.
       </div>
+    </div>
+  </div>
+
+  <div class="bloc bloc-historique-envois-indemnisations">
+    <div class="entete-recapitulatif-indemnisations">
+      <div>
+        <h2>Derniers envois</h2>
+        <p>Historique durable des demandes, sans renvoi automatique.</p>
+      </div>
+    </div>
+    <div class="tableau-responsive">
+      <table class="tableau tableau-historique-envois-indemnisations">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Référence</th>
+            <th>Destinataire</th>
+            <th>Copies</th>
+            <th>Prestations</th>
+            <th>Formateurs</th>
+            <th>Séances</th>
+            <th>Volume</th>
+            <th>Statut</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="corpsHistoriqueEnvoisIndemnisations">
+          <tr><td colspan="10" class="etat-vide">Chargement…</td></tr>
+        </tbody>
+      </table>
     </div>
   </div>
 
@@ -343,5 +381,53 @@
         >Confirmer</button>
       </div>
     </form>
+  </div>
+</div>
+
+<div
+  id="modalEmailIndemnisation"
+  class="modal-overlay masque"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="titreModalEmailIndemnisation"
+>
+  <div class="modal-contenu modal-email-indemnisation">
+    <div class="modal-entete">
+      <div>
+        <h2 id="titreModalEmailIndemnisation">
+          Préparer la demande par e-mail
+        </h2>
+        <p id="sousTitreModalEmailIndemnisation">
+          Vérification obligatoire avant envoi.
+        </p>
+      </div>
+      <button
+        type="button"
+        id="boutonFermerModalEmailIndemnisation"
+        class="bouton-fermer-modal"
+        onclick="fermerModalEmailIndemnisation()"
+        aria-label="Fermer"
+      >×</button>
+    </div>
+
+    <div id="contenuModalEmailIndemnisation" class="modal-corps">
+      <div class="etat-vide">Préparation de la demande…</div>
+    </div>
+
+    <div class="modal-pied">
+      <button
+        type="button"
+        id="boutonAnnulerEmailIndemnisation"
+        class="bouton-secondaire"
+        onclick="fermerModalEmailIndemnisation()"
+      >Annuler</button>
+      <button
+        type="button"
+        id="boutonEnvoyerEmailIndemnisation"
+        class="bouton-principal"
+        onclick="confirmerEnvoiEmailIndemnisation()"
+        disabled
+      >Envoyer la demande</button>
+    </div>
   </div>
 </div>

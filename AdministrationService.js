@@ -6,6 +6,12 @@ const COLONNES_FORMATIONS_ADMINISTRATION = [
   'ORDRE',
   'ACTIF'
 ];
+const CLES_PARAMETRES_EMAIL_INDEMNISATION_ = [
+  'EMAIL_CHEF_CENTRE',
+  'NOM_CHEF_CENTRE',
+  'NOM_CENTRE',
+  'OBJET_MAIL_INDEMNISATION'
+];
 
 
 function getDonneesAdministration(jetonAdministrateur) {
@@ -21,12 +27,177 @@ function getDonneesAdministration(jetonAdministrateur) {
   return {
     session: session,
     formations: lireFormationsAdministration_(),
+    parametresIndemnisation:
+      lireParametresEmailIndemnisation_(),
     diagnostic: verifierIntegriteBase(jetonAdministrateur),
     sauvegardes: etatSauvegardes,
     restauration: getEtatRestaurationAdministration(
       jetonAdministrateur
     )
   };
+}
+
+
+function enregistrerParametresEmailIndemnisationAdministration(
+  donnees,
+  jetonAdministrateur
+) {
+  const session = exigerAdministrateur_(jetonAdministrateur);
+
+  return executerMutationMetier_(function () {
+    return enregistrerParametresEmailIndemnisationAdministrationInterne_(
+      donnees,
+      session
+    );
+  });
+}
+
+
+function enregistrerParametresEmailIndemnisationAdministrationInterne_(
+  donnees,
+  session
+) {
+  donnees = donnees || {};
+
+  const valeurs = {
+    EMAIL_CHEF_CENTRE: String(
+      donnees.emailChefCentre || ''
+    ).trim().slice(0, 320),
+    NOM_CHEF_CENTRE: String(
+      donnees.nomChefCentre || ''
+    ).trim().slice(0, 250),
+    NOM_CENTRE: String(
+      donnees.nomCentre || ''
+    ).trim().slice(0, 250),
+    OBJET_MAIL_INDEMNISATION: String(
+      donnees.objetMailIndemnisation || ''
+    ).trim().slice(0, 500)
+  };
+
+  if (
+    valeurs.EMAIL_CHEF_CENTRE &&
+    !adresseEmailValideAdministration_(valeurs.EMAIL_CHEF_CENTRE)
+  ) {
+    throw new Error('L’adresse e-mail du chef de centre est invalide.');
+  }
+
+  if (!valeurs.OBJET_MAIL_INDEMNISATION) {
+    throw new Error('L’objet du message est obligatoire.');
+  }
+
+  const classeur = SpreadsheetApp.getActiveSpreadsheet();
+  const feuille = obtenirFeuilleLecturePure_(
+    classeur,
+    'PARAMETRES',
+    ['CLE', 'VALEUR']
+  );
+  const donneesFeuille = feuille.getDataRange().getValues();
+  const index = creerIndexAdministration_(donneesFeuille[0]);
+  const lignesParCle = {};
+
+  donneesFeuille.slice(1).forEach(function (ligne, position) {
+    const cle = normaliserAdministration_(ligne[index.CLE]);
+
+    if (cle) {
+      lignesParCle[cle] = position + 2;
+    }
+  });
+
+  CLES_PARAMETRES_EMAIL_INDEMNISATION_.forEach(function (cle) {
+    if (!lignesParCle[cle]) {
+      throw new Error(
+        'Le paramètre ' + cle +
+        ' est absent. Exécute les migrations avant l’enregistrement.'
+      );
+    }
+  });
+
+  const restaurations = [];
+
+  try {
+    CLES_PARAMETRES_EMAIL_INDEMNISATION_.forEach(function (cle) {
+      const cellule = feuille.getRange(
+        lignesParCle[cle],
+        index.VALEUR + 1
+      );
+      restaurations.push({
+        cellule: cellule,
+        valeur: cellule.getValue()
+      });
+      cellule.setValue(valeurs[cle]);
+    });
+
+    SpreadsheetApp.flush();
+
+    journaliserActionSensible_(
+      'PARAMETRES_EMAIL_INDEMNISATION_MODIFICATION',
+      'PARAMETRES',
+      'EMAIL_INDEMNISATION',
+      {
+        emailChefRenseigne: Boolean(valeurs.EMAIL_CHEF_CENTRE),
+        nomChefRenseigne: Boolean(valeurs.NOM_CHEF_CENTRE),
+        nomCentreRenseigne: Boolean(valeurs.NOM_CENTRE),
+        objetRenseigne: Boolean(valeurs.OBJET_MAIL_INDEMNISATION)
+      },
+      session.identifiantHistorique
+    );
+  } catch (erreur) {
+    restaurations.reverse().forEach(function (restauration) {
+      restauration.cellule.setValue(restauration.valeur);
+    });
+    SpreadsheetApp.flush();
+    throw erreur;
+  }
+
+  return {
+    succes: true,
+    message: 'Paramètres d’envoi enregistrés.',
+    parametres: construireParametresEmailIndemnisation_(valeurs)
+  };
+}
+
+
+function lireParametresEmailIndemnisation_() {
+  const feuille = obtenirFeuilleLecturePure_(
+    SpreadsheetApp.getActiveSpreadsheet(),
+    'PARAMETRES',
+    ['CLE', 'VALEUR']
+  );
+  const donnees = feuille.getDataRange().getValues();
+  const index = creerIndexAdministration_(donnees[0]);
+  const valeurs = {};
+
+  donnees.slice(1).forEach(function (ligne) {
+    const cle = normaliserAdministration_(ligne[index.CLE]);
+
+    if (CLES_PARAMETRES_EMAIL_INDEMNISATION_.includes(cle)) {
+      valeurs[cle] = String(ligne[index.VALEUR] || '').trim();
+    }
+  });
+
+  CLES_PARAMETRES_EMAIL_INDEMNISATION_.forEach(function (cle) {
+    if (!Object.prototype.hasOwnProperty.call(valeurs, cle)) {
+      valeurs[cle] = '';
+    }
+  });
+
+  return construireParametresEmailIndemnisation_(valeurs);
+}
+
+
+function construireParametresEmailIndemnisation_(valeurs) {
+  return {
+    emailChefCentre: valeurs.EMAIL_CHEF_CENTRE || '',
+    nomChefCentre: valeurs.NOM_CHEF_CENTRE || '',
+    nomCentre: valeurs.NOM_CENTRE || '',
+    objetMailIndemnisation:
+      valeurs.OBJET_MAIL_INDEMNISATION || ''
+  };
+}
+
+
+function adresseEmailValideAdministration_(adresse) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(adresse || ''));
 }
 
 

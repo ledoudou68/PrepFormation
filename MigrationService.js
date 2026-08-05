@@ -3,6 +3,17 @@
 const CONTEXTE_MIGRATION_AUTOMATIQUE_ = {};
 const CLE_VERSION_SCHEMA_ = 'VERSION_SCHEMA';
 const LIMITE_ERREURS_INTEGRITE_ = 500;
+const PARAMETRES_EMAIL_INDEMNISATION_DEFAUT_ = [
+  ['EMAIL_CHEF_CENTRE', '', 300, true],
+  ['NOM_CHEF_CENTRE', '', 301, true],
+  ['NOM_CENTRE', '', 302, true],
+  [
+    'OBJET_MAIL_INDEMNISATION',
+    'Demande d’indemnisation des formateurs – {{PERIODE}}',
+    303,
+    true
+  ]
+];
 
 const SCHEMA_BASE_ = [
   {
@@ -68,7 +79,7 @@ const SCHEMA_BASE_ = [
       'DUREE_HEURES', 'STATUT_INDEMNISATION',
       'DATE_DEMANDE', 'REFERENCE_DEMANDE',
       'REMARQUES_INDEMNISATION', 'DATE_CREATION',
-      'DATE_MODIFICATION'
+      'DATE_MODIFICATION', 'ID_ENVOI'
     ]
   },
   {
@@ -122,6 +133,18 @@ const SCHEMA_BASE_ = [
       'ID_SESSION_ITEM', 'ID_SESSION', 'ID_ITEM',
       'DATE_CREATION'
     ]
+  },
+  {
+    feuille: 'HISTORIQUE_ENVOIS_INDEMNISATIONS',
+    identifiant: 'ID_ENVOI',
+    colonnes: [
+      'ID_ENVOI', 'DATE_ENVOI', 'DESTINATAIRE',
+      'COPIES', 'OBJET', 'REFERENCE_DEMANDE',
+      'ID_PRESTATIONS', 'NOMBRE_FORMATEURS',
+      'NOMBRE_SEANCES', 'VOLUME_HEURES',
+      'STATUT_ENVOI', 'MESSAGE_ERREUR',
+      'SESSION_ADMIN', 'DATE_CREATION'
+    ]
   }
 ];
 
@@ -152,6 +175,15 @@ const MIGRATIONS_SCHEMA_ = [
     executer: migration3CategoriesItemsReferentiel_,
     simulable: true,
     simuler: simulerMigration3CategoriesItemsReferentielModele_
+  },
+  {
+    version: 4,
+    versionSource: 3,
+    versionCible: 4,
+    nom: 'Envoi des demandes d’indemnisation par e-mail',
+    executer: migration4EnvoisIndemnisations_,
+    simulable: true,
+    simuler: simulerMigration4EnvoisIndemnisationsModele_
   }
 ];
 
@@ -527,6 +559,69 @@ function migration3CategoriesItemsReferentiel_(classeur) {
 
 
 /**
+ * Prépare l'envoi des demandes d'indemnisation sans écraser les paramètres
+ * éventuellement déjà renseignés par l'administrateur.
+ */
+function migration4EnvoisIndemnisations_(classeur) {
+  const feuille = classeur.getSheetByName('PARAMETRES');
+
+  if (!feuille || feuille.getLastRow() < 1) {
+    throw new Error('La feuille PARAMETRES est absente ou non initialisée.');
+  }
+
+  ajouterParametresEmailIndemnisationMigration_(feuille);
+}
+
+
+function ajouterParametresEmailIndemnisationMigration_(feuille) {
+  const donnees = feuille.getDataRange().getValues();
+  const index = creerIndexMigration_(donnees[0]);
+
+  if (!Number.isInteger(index.CLE) || !Number.isInteger(index.VALEUR)) {
+    throw new Error(
+      'PARAMETRES doit contenir les colonnes CLE et VALEUR.'
+    );
+  }
+
+  const clesExistantes = new Set(
+    donnees.slice(1).map(function (ligne) {
+      return normaliserMigration_(ligne[index.CLE]);
+    }).filter(Boolean)
+  );
+  const lignes = PARAMETRES_EMAIL_INDEMNISATION_DEFAUT_
+    .filter(function (parametre) {
+      return !clesExistantes.has(normaliserMigration_(parametre[0]));
+    })
+    .map(function (parametre) {
+      const ligne = new Array(feuille.getLastColumn()).fill('');
+      ligne[index.CLE] = parametre[0];
+      ligne[index.VALEUR] = parametre[1];
+
+      if (Number.isInteger(index.ORDRE)) {
+        ligne[index.ORDRE] = parametre[2];
+      }
+
+      if (Number.isInteger(index.ACTIF)) {
+        ligne[index.ACTIF] = parametre[3];
+      }
+
+      return ligne;
+    });
+
+  if (lignes.length) {
+    feuille
+      .getRange(
+        feuille.getLastRow() + 1,
+        1,
+        lignes.length,
+        feuille.getLastColumn()
+      )
+      .setValues(lignes);
+  }
+}
+
+
+/**
  * Simule en mémoire la chaîne de migrations sans utiliser SpreadsheetApp.
  * Le modèle reçu contient exclusivement les valeurs sérialisées du JSON.
  */
@@ -818,6 +913,52 @@ function simulerMigration3CategoriesItemsReferentielModele_(modele) {
     ligne[indexItems.ID_CATEGORIE] =
       categorieMigration.idCategorie;
   });
+}
+
+
+function simulerMigration4EnvoisIndemnisationsModele_(modele) {
+  assurerStructureModeleMigration_(modele);
+
+  const feuille = modele.sheets && modele.sheets.PARAMETRES;
+
+  if (!feuille || !feuille.exists) {
+    return;
+  }
+
+  const index = creerIndexMigration_(feuille.headers);
+
+  if (!Number.isInteger(index.CLE) || !Number.isInteger(index.VALEUR)) {
+    return;
+  }
+
+  const clesExistantes = new Set(
+    feuille.rows.map(function (ligne) {
+      return normaliserMigration_(ligne[index.CLE]);
+    }).filter(Boolean)
+  );
+
+  PARAMETRES_EMAIL_INDEMNISATION_DEFAUT_.forEach(
+    function (parametre) {
+      if (clesExistantes.has(normaliserMigration_(parametre[0]))) {
+        return;
+      }
+
+      const ligne = new Array(feuille.headers.length).fill('');
+      ligne[index.CLE] = parametre[0];
+      ligne[index.VALEUR] = parametre[1];
+
+      if (Number.isInteger(index.ORDRE)) {
+        ligne[index.ORDRE] = parametre[2];
+      }
+
+      if (Number.isInteger(index.ACTIF)) {
+        ligne[index.ACTIF] = parametre[3];
+      }
+
+      feuille.rows.push(ligne);
+      clesExistantes.add(normaliserMigration_(parametre[0]));
+    }
+  );
 }
 
 
@@ -1522,6 +1663,7 @@ function obtenirReglesReferencesMigration_() {
     ['ITEMS_SESSIONS', 'ID_SESSION', 'SESSIONS', 'ID_SESSION'],
     ['ITEMS_SESSIONS', 'ID_ITEM', 'REFERENTIEL', 'ID_ITEM'],
     ['HISTORIQUE_INDEMNISATIONS', 'ID_PRESTATION', 'PRESTATIONS_FORMATEURS', 'ID_PRESTATION'],
+    ['PRESTATIONS_FORMATEURS', 'ID_ENVOI', 'HISTORIQUE_ENVOIS_INDEMNISATIONS', 'ID_ENVOI'],
     ['STAGIAIRES', 'FORMATION', 'FORMATIONS', 'LIBELLE'],
     ['SESSIONS', 'FORMATION', 'FORMATIONS', 'LIBELLE'],
     ['CATEGORIES', 'FORMATION', 'FORMATIONS', 'LIBELLE'],

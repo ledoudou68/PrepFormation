@@ -5099,4 +5099,153 @@ button:disabled {
   }
 }
 
+/* Envoi des demandes d'indemnisation */
+.bloc-parametres-email-indemnisation,
+.bloc-historique-envois-indemnisations {
+  margin-top: 22px;
+}
+
+.grille-parametres-email-indemnisation,
+.grille-edition-email-indemnisation {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.actions-parametres-email-indemnisation {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+
+.modal-email-indemnisation {
+  width: min(1080px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+}
+
+.modal-email-indemnisation .modal-corps {
+  overflow-y: auto;
+}
+
+.destinataires-email-indemnisation {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  margin-bottom: 18px;
+  border: 1px solid var(--bordure, #dce4ea);
+  border-radius: 12px;
+  background: #f7fafc;
+}
+
+.destinataires-email-indemnisation > div {
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+}
+
+.destinataires-email-indemnisation span,
+.grille-resume-email-indemnisation span {
+  color: var(--texte-secondaire, #657786);
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.grille-resume-email-indemnisation {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 20px 0;
+}
+
+.grille-resume-email-indemnisation > div {
+  display: grid;
+  gap: 5px;
+  padding: 14px;
+  border-radius: 12px;
+  background: #eef5f9;
+}
+
+.grille-resume-email-indemnisation strong {
+  color: var(--couleur-principale, #17324d);
+  font-size: 1.2rem;
+}
+
+.apercu-calcule-email-indemnisation {
+  margin-top: 22px;
+}
+
+.groupe-apercu-email-indemnisation {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--bordure, #dce4ea);
+}
+
+.groupe-apercu-email-indemnisation > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: baseline;
+  margin-bottom: 10px;
+}
+
+.groupe-apercu-email-indemnisation h4 {
+  margin: 0;
+}
+
+.succes-email-indemnisation,
+.erreur-email-indemnisation,
+.avertissement-email-indemnisation {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+  border-radius: 12px;
+}
+
+.succes-email-indemnisation {
+  color: #155d35;
+  background: #eaf7ef;
+  border: 1px solid #b9e3c9;
+}
+
+.erreur-email-indemnisation {
+  color: #8a2630;
+  background: #fff0f1;
+  border: 1px solid #f1c3c7;
+}
+
+.avertissement-email-indemnisation {
+  margin-top: 14px;
+  color: #75510b;
+  background: #fff8e6;
+  border: 1px solid #efd99e;
+}
+
+.bouton-consulter-envoi-indemnisation {
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .grille-parametres-email-indemnisation,
+  .grille-edition-email-indemnisation,
+  .grille-resume-email-indemnisation {
+    grid-template-columns: 1fr;
+  }
+
+  .modal-email-indemnisation {
+    width: calc(100vw - 20px);
+    max-height: calc(100vh - 20px);
+  }
+
+  .destinataires-email-indemnisation > div {
+    grid-template-columns: 1fr;
+  }
+
+  .groupe-apercu-email-indemnisation > div:first-child {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
 </style>

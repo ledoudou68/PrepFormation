@@ -291,7 +291,8 @@ function getDonneesIndemnisations(jetonAdministrateur) {
     prestations: prestations,
     formateurs: formateurs,
     formations: formations,
-    statuts: STATUTS_INDEMNISATION.slice()
+    statuts: STATUTS_INDEMNISATION.slice(),
+    derniersEnvois: lireDerniersEnvoisIndemnisation_()
   };
 }
 

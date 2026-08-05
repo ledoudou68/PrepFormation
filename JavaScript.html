@@ -39,10 +39,15 @@ const etatApplication = {
   formationsIndemnisation: [],
   statutsIndemnisation: [],
   selectionPrestationsIndemnisation: {},
+  derniersEnvoisIndemnisation: [],
+  demandeEmailIndemnisationActive: null,
+  envoiEmailIndemnisationEnCours: false,
+  rafraichirIndemnisationsApresEmail: false,
   donneesAccueil: null,
   sessionAConsulterDepuisAccueil: '',
   stagiaireAConsulterDepuisAccueil: '',
   formationsAdministration: [],
+  parametresEmailIndemnisationAdministration: null,
   diagnosticAdministration: null,
   sauvegardesAdministration: null,
   restaurationAdministration: null,
@@ -6210,8 +6215,14 @@ function appliquerDonneesIndemnisations(donnees) {
       ? donnees.statuts
       : [];
 
+  etatApplication.derniersEnvoisIndemnisation =
+    Array.isArray(donnees.derniersEnvois)
+      ? donnees.derniersEnvois
+      : [];
+
   remplirFiltresIndemnisations();
   filtrerIndemnisations();
+  afficherHistoriqueEnvoisIndemnisations();
 }
 
 function remplirFiltresIndemnisations() {
@@ -7153,6 +7164,443 @@ function fermerEtatImprimableIndemnisations() {
   document.body.classList.remove('etat-impression-ouvert');
 }
 
+
+function afficherHistoriqueEnvoisIndemnisations() {
+  const corps = document.getElementById(
+    'corpsHistoriqueEnvoisIndemnisations'
+  );
+
+  if (!corps) {
+    return;
+  }
+
+  const envois = etatApplication.derniersEnvoisIndemnisation;
+
+  if (!envois.length) {
+    corps.innerHTML = `
+      <tr>
+        <td colspan="10" class="etat-vide">
+          Aucune demande envoyée ou tentée.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  corps.innerHTML = envois.map(function (envoi) {
+    return `
+      <tr>
+        <td>${echapperHtml(envoi.dateEnvoi || envoi.dateCreation || '—')}</td>
+        <td><strong>${echapperHtml(envoi.reference || '—')}</strong></td>
+        <td>${echapperHtml(envoi.destinataire || '—')}</td>
+        <td>${echapperHtml((envoi.copies || []).join(', ') || '—')}</td>
+        <td>${Number(envoi.nombrePrestations || 0)}</td>
+        <td>${Number(envoi.nombreFormateurs || 0)}</td>
+        <td>${Number(envoi.nombreSeances || 0)}</td>
+        <td>${echapperHtml(envoi.volumeHeuresLibelle || '0 h')}</td>
+        <td>
+          <span class="badge-statut ${obtenirClasseStatutEnvoiIndemnisation(envoi.statut)}">
+            ${echapperHtml(libelleStatutEnvoiIndemnisation(envoi.statut))}
+          </span>
+        </td>
+        <td>
+          <button
+            type="button"
+            class="bouton-secondaire bouton-consulter-envoi-indemnisation"
+            onclick="consulterHistoriqueEnvoiIndemnisation('${echapperHtml(envoi.idEnvoi)}')"
+          >Consulter</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+
+function libelleStatutEnvoiIndemnisation(statut) {
+  const libelles = {
+    EN_COURS_AVANT_ENVOI: 'Envoi à vérifier',
+    EMAIL_ENVOYE_MAJ_EN_COURS: 'E-mail envoyé · mise à jour en attente',
+    TERMINE: 'Envoyé',
+    ECHEC_ENVOI: 'Échec d’envoi',
+    REGULARISATION_REQUISE: 'Régularisation requise'
+  };
+  return libelles[statut] || statut || 'Inconnu';
+}
+
+
+function obtenirClasseStatutEnvoiIndemnisation(statut) {
+  if (statut === 'TERMINE') return 'badge-vert';
+  if (statut === 'ECHEC_ENVOI') return 'badge-rouge';
+  if (statut === 'REGULARISATION_REQUISE') return 'badge-rouge';
+  return 'badge-orange';
+}
+
+
+function ouvrirPreparationEmailIndemnisation() {
+  const prestations = obtenirPrestationsSelectionneesIndemnisation();
+
+  if (!prestations.length) {
+    afficherToast('Sélectionne au moins une prestation.', true);
+    return;
+  }
+
+  const modal = document.getElementById('modalEmailIndemnisation');
+  const contenu = document.getElementById('contenuModalEmailIndemnisation');
+  const boutonEnvoyer = document.getElementById(
+    'boutonEnvoyerEmailIndemnisation'
+  );
+  const boutonAnnuler = document.getElementById(
+    'boutonAnnulerEmailIndemnisation'
+  );
+
+  etatApplication.demandeEmailIndemnisationActive = null;
+  etatApplication.envoiEmailIndemnisationEnCours = false;
+  etatApplication.rafraichirIndemnisationsApresEmail = false;
+  document.getElementById('titreModalEmailIndemnisation').textContent =
+    'Préparer la demande par e-mail';
+  document.getElementById('sousTitreModalEmailIndemnisation').textContent =
+    'Vérification obligatoire avant envoi.';
+  contenu.innerHTML = '<div class="etat-vide">Préparation de la demande…</div>';
+  boutonEnvoyer.disabled = true;
+  boutonEnvoyer.textContent = 'Préparation…';
+  boutonEnvoyer.className = 'bouton-principal';
+  boutonEnvoyer.onclick = confirmerEnvoiEmailIndemnisation;
+  boutonAnnuler.textContent = 'Annuler';
+  boutonAnnuler.classList.remove('masque');
+  document.getElementById(
+    'boutonFermerModalEmailIndemnisation'
+  ).disabled = false;
+  modal.classList.remove('masque');
+  document.body.classList.add('modal-ouverte');
+
+  google.script.run
+    .withSuccessHandler(function (demande) {
+      etatApplication.demandeEmailIndemnisationActive = demande;
+      afficherPrevisualisationEmailIndemnisation(demande);
+    })
+    .withFailureHandler(function (erreur) {
+      afficherFinEmailIndemnisation(
+        extraireMessageErreur(erreur),
+        true
+      );
+    })
+    .preparerDemandeIndemnisationEmail(
+      {
+        idsPrestations: prestations.map(function (prestation) {
+          return prestation.idPrestation;
+        })
+      },
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+
+function afficherPrevisualisationEmailIndemnisation(demande) {
+  const contenu = document.getElementById('contenuModalEmailIndemnisation');
+  const bouton = document.getElementById('boutonEnvoyerEmailIndemnisation');
+  const groupes = Array.isArray(demande.groupes) ? demande.groupes : [];
+
+  contenu.innerHTML = `
+    <div class="destinataires-email-indemnisation">
+      <div><span>À</span><strong>${echapperHtml(demande.destinataire || '—')}</strong></div>
+      <div><span>CC</span><strong>${echapperHtml((demande.copies || []).join(', ') || 'Aucune copie')}</strong></div>
+    </div>
+
+    <div class="grille-edition-email-indemnisation">
+      <div class="groupe-champ">
+        <label for="referenceEmailIndemnisation">Référence commune *</label>
+        <input
+          type="text"
+          id="referenceEmailIndemnisation"
+          class="champ"
+          maxlength="250"
+          value="${echapperHtml(demande.reference || '')}"
+          placeholder="Ex. DEM-2026-042"
+        >
+      </div>
+      <div class="groupe-champ groupe-champ-large">
+        <label for="objetEmailIndemnisation">Objet *</label>
+        <input
+          type="text"
+          id="objetEmailIndemnisation"
+          class="champ"
+          maxlength="500"
+          value="${echapperHtml(demande.objet || '')}"
+        >
+      </div>
+      <div class="groupe-champ groupe-champ-large">
+        <label for="introductionEmailIndemnisation">Introduction</label>
+        <textarea
+          id="introductionEmailIndemnisation"
+          class="champ"
+          rows="3"
+          maxlength="2000"
+        >${echapperHtml(demande.introduction || '')}</textarea>
+      </div>
+      <div class="groupe-champ groupe-champ-large">
+        <label for="remarqueFinaleEmailIndemnisation">Remarque finale</label>
+        <textarea
+          id="remarqueFinaleEmailIndemnisation"
+          class="champ"
+          rows="3"
+          maxlength="2000"
+        >${echapperHtml(demande.remarqueFinale || '')}</textarea>
+      </div>
+    </div>
+
+    <div class="grille-resume-email-indemnisation">
+      <div><span>Prestations</span><strong>${Number(demande.nombrePrestations || 0)}</strong></div>
+      <div><span>Formateurs</span><strong>${Number(demande.nombreFormateurs || 0)}</strong></div>
+      <div><span>Séances distinctes</span><strong>${Number(demande.nombreSeances || 0)}</strong></div>
+      <div><span>Volume total</span><strong>${echapperHtml(demande.volumeHeuresLibelle || '0 h')}</strong></div>
+    </div>
+
+    <div class="apercu-calcule-email-indemnisation">
+      <h3>Détail calculé</h3>
+      ${groupes.map(creerGroupeApercuEmailIndemnisation).join('')}
+    </div>
+  `;
+
+  bouton.disabled = false;
+  bouton.textContent = 'Envoyer la demande';
+}
+
+
+function creerGroupeApercuEmailIndemnisation(groupe) {
+  const lignes = (groupe.prestations || []).map(function (prestation) {
+    return `
+      <tr>
+        <td>${echapperHtml(afficherDateFrancaise(prestation.dateSession) || '—')}</td>
+        <td>${echapperHtml(prestation.formation || '—')}</td>
+        <td>${echapperHtml(prestation.heureDebut || '—')}–${echapperHtml(prestation.heureFin || '—')}</td>
+        <td>${echapperHtml(formaterDureeEmailIndemnisation(prestation.dureeHeures))}</td>
+        <td>${Number(prestation.nombreStagiaires || 0)}</td>
+        <td>${echapperHtml(
+          prestation.referenceExistante ||
+          prestation.remarqueAdministrative ||
+          'Référence commune saisie ci-dessus'
+        )}</td>
+      </tr>
+    `;
+  }).join('');
+
+  return `
+    <section class="groupe-apercu-email-indemnisation">
+      <div>
+        <h4>${echapperHtml(groupe.nomComplet || 'Formateur')}</h4>
+        <strong>${Number(groupe.nombreSeances || 0)} séance(s) · ${echapperHtml(groupe.totalHeuresLibelle || '0 h')}</strong>
+      </div>
+      <div class="tableau-responsive">
+        <table class="tableau">
+          <thead><tr><th>Date</th><th>Formation</th><th>Horaires</th><th>Durée</th><th>Stagiaires</th><th>Référence / remarque</th></tr></thead>
+          <tbody>${lignes}</tbody>
+        </table>
+      </div>
+    </section>
+  `;
+}
+
+
+function formaterDureeEmailIndemnisation(heures) {
+  const minutes = Math.round(Math.max(0, Number(heures || 0)) * 60);
+  const entieres = Math.floor(minutes / 60);
+  const reste = minutes % 60;
+  if (!reste) return entieres + ' h';
+  if (!entieres) return reste + ' min';
+  return entieres + ' h ' + String(reste).padStart(2, '0');
+}
+
+
+function confirmerEnvoiEmailIndemnisation() {
+  const demande = etatApplication.demandeEmailIndemnisationActive;
+
+  if (!demande || etatApplication.envoiEmailIndemnisationEnCours) {
+    return;
+  }
+
+  const reference = String(
+    document.getElementById('referenceEmailIndemnisation')?.value || ''
+  ).trim();
+  const objet = String(
+    document.getElementById('objetEmailIndemnisation')?.value || ''
+  ).trim();
+
+  if (!reference) {
+    afficherToast('La référence commune est obligatoire.', true);
+    return;
+  }
+  if (!objet) {
+    afficherToast('L’objet du message est obligatoire.', true);
+    return;
+  }
+
+  if (!window.confirm(
+    'Envoyer définitivement cette demande à ' +
+    demande.destinataire + ' pour ' + demande.nombrePrestations +
+    ' prestation(s) ?'
+  )) {
+    return;
+  }
+
+  const bouton = document.getElementById('boutonEnvoyerEmailIndemnisation');
+  const boutonFermer = document.getElementById(
+    'boutonFermerModalEmailIndemnisation'
+  );
+  const boutonAnnuler = document.getElementById(
+    'boutonAnnulerEmailIndemnisation'
+  );
+
+  etatApplication.envoiEmailIndemnisationEnCours = true;
+  bouton.disabled = true;
+  bouton.textContent = 'Envoi en cours…';
+  boutonFermer.disabled = true;
+  boutonAnnuler.disabled = true;
+
+  google.script.run
+    .withSuccessHandler(function (resultat) {
+      etatApplication.envoiEmailIndemnisationEnCours = false;
+      etatApplication.rafraichirIndemnisationsApresEmail = true;
+      etatApplication.selectionPrestationsIndemnisation = {};
+      afficherFinEmailIndemnisation(
+        (resultat.rejouee
+          ? 'Aucun nouvel e-mail n’a été émis. '
+          : 'Demande envoyée avec succès. ') +
+        'Destinataire : ' + resultat.destinataire + ' · ' +
+        Number((resultat.copies || []).length) + ' formateur(s) en copie · ' +
+        'Référence : ' + resultat.reference + ' · ' +
+        resultat.nombrePrestations + ' prestation(s) · ' +
+        resultat.volumeHeuresLibelle + '.',
+        false
+      );
+    })
+    .withFailureHandler(function (erreur) {
+      etatApplication.envoiEmailIndemnisationEnCours = false;
+      etatApplication.rafraichirIndemnisationsApresEmail = true;
+      afficherFinEmailIndemnisation(
+        extraireMessageErreur(erreur),
+        true
+      );
+    })
+    .envoyerDemandeIndemnisationEmail(
+      {
+        idEnvoi: demande.idEnvoi,
+        idsPrestations: demande.idsPrestations,
+        reference: reference,
+        objet: objet,
+        introduction: document.getElementById(
+          'introductionEmailIndemnisation'
+        ).value,
+        remarqueFinale: document.getElementById(
+          'remarqueFinaleEmailIndemnisation'
+        ).value,
+        confirmationFinale: true
+      },
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+
+function afficherFinEmailIndemnisation(message, erreur) {
+  const contenu = document.getElementById('contenuModalEmailIndemnisation');
+  const bouton = document.getElementById('boutonEnvoyerEmailIndemnisation');
+  const boutonFermer = document.getElementById(
+    'boutonFermerModalEmailIndemnisation'
+  );
+  const boutonAnnuler = document.getElementById(
+    'boutonAnnulerEmailIndemnisation'
+  );
+
+  contenu.innerHTML = `
+    <div class="${erreur ? 'erreur-email-indemnisation' : 'succes-email-indemnisation'}">
+      <strong>${erreur ? 'Envoi non finalisé' : '✓ Opération terminée'}</strong>
+      <span>${echapperHtml(message)}</span>
+    </div>
+  `;
+  bouton.removeAttribute('disabled');
+  bouton.disabled = false;
+  bouton.textContent = 'Fermer';
+  bouton.className = 'bouton-principal';
+  bouton.onclick = fermerModalEmailIndemnisation;
+  boutonFermer.disabled = false;
+  boutonAnnuler.classList.add('masque');
+  boutonAnnuler.disabled = false;
+}
+
+
+function fermerModalEmailIndemnisation() {
+  if (etatApplication.envoiEmailIndemnisationEnCours) {
+    return;
+  }
+
+  document.getElementById('modalEmailIndemnisation')?.classList.add('masque');
+  document.body.classList.remove('modal-ouverte');
+  etatApplication.demandeEmailIndemnisationActive = null;
+
+  if (etatApplication.rafraichirIndemnisationsApresEmail) {
+    etatApplication.rafraichirIndemnisationsApresEmail = false;
+    rechargerIndemnisations();
+  }
+}
+
+
+function consulterHistoriqueEnvoiIndemnisation(idEnvoi) {
+  const modal = document.getElementById('modalEmailIndemnisation');
+  const contenu = document.getElementById('contenuModalEmailIndemnisation');
+  const bouton = document.getElementById('boutonEnvoyerEmailIndemnisation');
+  const annuler = document.getElementById('boutonAnnulerEmailIndemnisation');
+
+  document.getElementById('titreModalEmailIndemnisation').textContent =
+    'Historique de l’envoi';
+  document.getElementById('sousTitreModalEmailIndemnisation').textContent =
+    'Consultation uniquement · aucun renvoi automatique.';
+  contenu.innerHTML = '<div class="etat-vide">Chargement…</div>';
+  bouton.disabled = true;
+  bouton.textContent = 'Chargement…';
+  bouton.onclick = fermerModalEmailIndemnisation;
+  annuler.classList.add('masque');
+  modal.classList.remove('masque');
+  document.body.classList.add('modal-ouverte');
+
+  google.script.run
+    .withSuccessHandler(function (resultat) {
+      const historique = resultat.historique || {};
+      const demande = resultat.demande;
+      contenu.innerHTML = `
+        <div class="destinataires-email-indemnisation">
+          <div><span>À</span><strong>${echapperHtml(historique.destinataire || '—')}</strong></div>
+          <div><span>CC</span><strong>${echapperHtml((historique.copies || []).join(', ') || '—')}</strong></div>
+          <div><span>Objet</span><strong>${echapperHtml(historique.objet || '—')}</strong></div>
+          <div><span>Référence</span><strong>${echapperHtml(historique.reference || '—')}</strong></div>
+          <div><span>Statut</span><strong>${echapperHtml(libelleStatutEnvoiIndemnisation(historique.statut))}</strong></div>
+        </div>
+        <div class="grille-resume-email-indemnisation">
+          <div><span>Prestations</span><strong>${Number(historique.nombrePrestations || 0)}</strong></div>
+          <div><span>Formateurs</span><strong>${Number(historique.nombreFormateurs || 0)}</strong></div>
+          <div><span>Séances</span><strong>${Number(historique.nombreSeances || 0)}</strong></div>
+          <div><span>Volume</span><strong>${echapperHtml(historique.volumeHeuresLibelle || '0 h')}</strong></div>
+        </div>
+        ${historique.messageErreur
+          ? `<div class="erreur-email-indemnisation"><strong>Détail</strong><span>${echapperHtml(historique.messageErreur)}</span></div>`
+          : ''}
+        ${resultat.avertissement
+          ? `<div class="avertissement-email-indemnisation">${echapperHtml(resultat.avertissement)}</div>`
+          : ''}
+        ${demande
+          ? `<div class="apercu-calcule-email-indemnisation"><h3>Détail actuel</h3>${(demande.groupes || []).map(creerGroupeApercuEmailIndemnisation).join('')}</div>`
+          : ''}
+      `;
+      bouton.disabled = false;
+      bouton.textContent = 'Fermer';
+    })
+    .withFailureHandler(function (erreur) {
+      afficherFinEmailIndemnisation(extraireMessageErreur(erreur), true);
+    })
+    .consulterEnvoiIndemnisation(
+      idEnvoi,
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
 /* =====================================================
    ADMINISTRATION
 ===================================================== */
@@ -7171,6 +7619,8 @@ function initialiserPageAdministration() {
         Array.isArray(donnees.formations)
           ? donnees.formations
           : [];
+      etatApplication.parametresEmailIndemnisationAdministration =
+        donnees.parametresIndemnisation || {};
       etatApplication.diagnosticAdministration =
         donnees.diagnostic || null;
       etatApplication.sauvegardesAdministration =
@@ -7179,6 +7629,9 @@ function initialiserPageAdministration() {
         donnees.restauration || null;
 
       afficherDiagnosticAdministration(donnees.session || {});
+      afficherParametresEmailIndemnisationAdministration(
+        etatApplication.parametresEmailIndemnisationAdministration
+      );
       afficherDiagnosticBaseAdministration(
         etatApplication.diagnosticAdministration
       );
@@ -7201,6 +7654,72 @@ function initialiserPageAdministration() {
     })
     .withFailureHandler(gererErreurServeur)
     .getDonneesAdministration(
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+
+function afficherParametresEmailIndemnisationAdministration(parametres) {
+  parametres = parametres || {};
+  const valeurs = {
+    emailChefCentreAdministration:
+      parametres.emailChefCentre || '',
+    nomChefCentreAdministration:
+      parametres.nomChefCentre || '',
+    nomCentreAdministration:
+      parametres.nomCentre || '',
+    objetMailIndemnisationAdministration:
+      parametres.objetMailIndemnisation || ''
+  };
+
+  Object.keys(valeurs).forEach(function (identifiant) {
+    const champ = document.getElementById(identifiant);
+    if (champ) champ.value = valeurs[identifiant];
+  });
+}
+
+
+function enregistrerParametresEmailIndemnisationAdministration() {
+  const bouton = document.getElementById(
+    'boutonEnregistrerParametresEmailIndemnisation'
+  );
+
+  if (!bouton) return;
+
+  bouton.disabled = true;
+  bouton.textContent = 'Enregistrement…';
+
+  google.script.run
+    .withSuccessHandler(function (resultat) {
+      bouton.disabled = false;
+      bouton.textContent = 'Enregistrer les paramètres';
+      etatApplication.parametresEmailIndemnisationAdministration =
+        resultat.parametres || {};
+      afficherParametresEmailIndemnisationAdministration(
+        etatApplication.parametresEmailIndemnisationAdministration
+      );
+      afficherToast(resultat.message || 'Paramètres enregistrés.', false);
+    })
+    .withFailureHandler(function (erreur) {
+      bouton.disabled = false;
+      bouton.textContent = 'Enregistrer les paramètres';
+      afficherToast(extraireMessageErreur(erreur), true);
+    })
+    .enregistrerParametresEmailIndemnisationAdministration(
+      {
+        emailChefCentre: document.getElementById(
+          'emailChefCentreAdministration'
+        ).value,
+        nomChefCentre: document.getElementById(
+          'nomChefCentreAdministration'
+        ).value,
+        nomCentre: document.getElementById(
+          'nomCentreAdministration'
+        ).value,
+        objetMailIndemnisation: document.getElementById(
+          'objetMailIndemnisationAdministration'
+        ).value
+      },
       obtenirJetonAdministrateurApplication()
     );
 }
@@ -9104,7 +9623,7 @@ function afficherPrevisualisationRestaurationAdministration_(preview) {
     </section>
 
     <section class="section-previsualisation-restauration">
-      <h3>13 feuilles remplacées</h3>
+      <h3>${(preview.feuillesRemplacees || []).length} feuilles remplacées</h3>
       <div class="liste-feuilles-remplacees-restauration">
         ${(preview.feuillesRemplacees || []).map(function (feuille) {
           return `<span>${echapperHtml(feuille)}</span>`;
