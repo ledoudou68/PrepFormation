@@ -179,21 +179,66 @@
                 <span>Photo</span>
               </div>
 
-              <div class="groupe-champ">
+              <div class="actions-photo-stagiaire">
+                <input
+                  type="file"
+                  id="stagiairePhotoCamera"
+                  class="champ-fichier-photo-cache"
+                  accept="image/*"
+                  capture="environment"
+                  onchange="traiterFichierPhotoStagiaire(this)"
+                >
 
-                <label for="stagiairePhotoUrl">
-                  Lien de la photo
+                <label
+                  for="stagiairePhotoCamera"
+                  class="bouton-secondaire bouton-photo-stagiaire"
+                >
+                  📷 Prendre une photo
                 </label>
 
                 <input
-                  type="url"
-                  id="stagiairePhotoUrl"
-                  class="champ"
-                  placeholder="https://..."
-                  oninput="mettreAJourApercuPhotoStagiaire()"
+                  type="file"
+                  id="stagiairePhotoFichier"
+                  class="champ-fichier-photo-cache"
+                  accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif"
+                  onchange="traiterFichierPhotoStagiaire(this)"
                 >
 
+                <label
+                  for="stagiairePhotoFichier"
+                  class="bouton-secondaire bouton-photo-stagiaire"
+                >
+                  🖼 Choisir un fichier
+                </label>
+
+                <button
+                  type="button"
+                  id="boutonRemplacerPhotoStagiaire"
+                  class="bouton-secondaire bouton-photo-stagiaire masque"
+                  onclick="ouvrirChoixRemplacementPhotoStagiaire()"
+                >
+                  Remplacer
+                </button>
+
+                <button
+                  type="button"
+                  id="boutonSupprimerPhotoStagiaire"
+                  class="bouton-danger bouton-photo-stagiaire masque"
+                  onclick="demanderSuppressionPhotoStagiaire()"
+                >
+                  Supprimer
+                </button>
               </div>
+
+              <div
+                id="informationsPhotoStagiaire"
+                class="informations-photo-stagiaire"
+                aria-live="polite"
+              ></div>
+
+              <p class="mention-confidentialite-photo">
+                La photo est stockée dans le Drive privé du propriétaire de l’application.
+              </p>
 
             </div>
 

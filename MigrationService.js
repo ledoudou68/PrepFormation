@@ -35,7 +35,8 @@ const SCHEMA_BASE_ = [
       'NOTES_ADMINISTRATIVES', 'GRADE', 'TELEPHONE',
       'EMAIL', 'PHOTO_URL', 'FORMATEUR_REFERENT',
       'DATE_CHANGEMENT_STATUT_AUTO', 'DATE_CREATION',
-      'DATE_MODIFICATION'
+      'DATE_MODIFICATION', 'PHOTO_FILE_ID', 'PHOTO_NOM',
+      'PHOTO_DATE_MODIFICATION'
     ]
   },
   {
@@ -143,7 +144,8 @@ const SCHEMA_BASE_ = [
       'ID_PRESTATIONS', 'NOMBRE_FORMATEURS',
       'NOMBRE_SEANCES', 'VOLUME_HEURES',
       'STATUT_ENVOI', 'MESSAGE_ERREUR',
-      'SESSION_ADMIN', 'DATE_CREATION'
+      'SESSION_ADMIN', 'DATE_CREATION', 'PDF_FILE_ID',
+      'PDF_NOM', 'PDF_TAILLE', 'PDF_HASH'
     ]
   }
 ];
@@ -184,6 +186,15 @@ const MIGRATIONS_SCHEMA_ = [
     executer: migration4EnvoisIndemnisations_,
     simulable: true,
     simuler: simulerMigration4EnvoisIndemnisationsModele_
+  },
+  {
+    version: 5,
+    versionSource: 4,
+    versionCible: 5,
+    nom: 'PDF des indemnisations et photos privées des stagiaires',
+    executer: migration5PdfIndemnisationsPhotosStagiaires_,
+    simulable: true,
+    simuler: simulerMigration5PdfIndemnisationsPhotosStagiairesModele_
   }
 ];
 
@@ -573,6 +584,11 @@ function migration4EnvoisIndemnisations_(classeur) {
 }
 
 
+function migration5PdfIndemnisationsPhotosStagiaires_(classeur) {
+  assurerStructureBase_(classeur);
+}
+
+
 function ajouterParametresEmailIndemnisationMigration_(feuille) {
   const donnees = feuille.getDataRange().getValues();
   const index = creerIndexMigration_(donnees[0]);
@@ -959,6 +975,11 @@ function simulerMigration4EnvoisIndemnisationsModele_(modele) {
       clesExistantes.add(normaliserMigration_(parametre[0]));
     }
   );
+}
+
+
+function simulerMigration5PdfIndemnisationsPhotosStagiairesModele_(modele) {
+  assurerStructureModeleMigration_(modele);
 }
 
 

@@ -27,9 +27,12 @@ function creerContexte() {
     isNaN,
     Utilities: {
       getUuid: () => 'uuid-test',
-      formatDate: (date, zone, format) => format === 'yyyy'
-        ? '2026'
-        : '01/08/2026 12:00:00'
+      formatDate: (date, zone, format) => {
+        if (format === 'yyyy') return '2026';
+        if (format === 'yyyy-MM-dd') return '2026-08-01';
+        if (format === 'dd/MM/yyyy') return '01/08/2026';
+        return '01/08/2026 12:00:00';
+      }
     },
     Session: {
       getScriptTimeZone: () => 'Europe/Paris'
@@ -57,6 +60,13 @@ function creerContexte() {
   vm.createContext(contexte);
   vm.runInContext(source, contexte, {
     filename: 'EnvoiIndemnisationsService.js'
+  });
+  contexte.obtenirOuCreerPdfDemandeIndemnisation_ = () => ({
+    fileId: 'pdf-1',
+    nom: 'Demande_indemnisation__REF-1__2026-08-01.pdf',
+    taille: 512,
+    hash: 'hash-pdf',
+    blob: { type: 'application/pdf' }
   });
   return contexte;
 }
@@ -282,7 +292,9 @@ test('un envoi réussi met à jour l’historique puis les prestations', () => {
     ordre.push('MAIL');
   };
   c.mettreAJourHistoriqueEnvoiIndemnisation_ = (h, valeurs) => {
-    ordre.push(valeurs.STATUT_ENVOI);
+    if (valeurs.STATUT_ENVOI) {
+      ordre.push(valeurs.STATUT_ENVOI);
+    }
   };
   c.mettreAJourPrestationsApresEnvoi_ = () => ordre.push('PRESTATIONS');
   c.journaliserActionSensible_ = () => ordre.push('AUDIT');
@@ -296,6 +308,7 @@ test('un envoi réussi met à jour l’historique puis les prestations', () => {
   assert.strictEqual(optionsMail.cc, 'alice@example.fr');
   assert(optionsMail.htmlBody);
   assert(optionsMail.body);
+  assert.strictEqual(optionsMail.attachments.length, 1);
   assert.deepStrictEqual(ordre, [
     'EN_COURS_AVANT_ENVOI',
     'MAIL',
@@ -317,7 +330,9 @@ test('un échec MailApp ne modifie aucune prestation', () => {
   });
   c.MailApp.sendEmail = () => { throw new Error('SMTP indisponible'); };
   c.mettreAJourHistoriqueEnvoiIndemnisation_ = (h, valeurs) => {
-    statuts.push(valeurs.STATUT_ENVOI);
+    if (valeurs.STATUT_ENVOI) {
+      statuts.push(valeurs.STATUT_ENVOI);
+    }
   };
   c.mettreAJourPrestationsApresEnvoi_ = () => {
     prestationsModifiees = true;
@@ -332,6 +347,77 @@ test('un échec MailApp ne modifie aucune prestation', () => {
   );
   assert.strictEqual(prestationsModifiees, false);
   assert.deepStrictEqual(statuts, ['ECHEC_ENVOI']);
+});
+
+test('un échec PDF empêche le mail et toute modification de prestation', () => {
+  const c = creerContexte();
+  let appelsMail = 0;
+  let prestationsModifiees = false;
+  const statuts = [];
+  c.trouverHistoriqueEnvoiIndemnisation_ = () => null;
+  c.creerHistoriqueEnvoiIndemnisation_ = d => ({
+    idEnvoi: d.idEnvoi,
+    numeroLigne: 2
+  });
+  c.obtenirOuCreerPdfDemandeIndemnisation_ = () => {
+    throw new Error('conversion PDF impossible');
+  };
+  c.mettreAJourHistoriqueEnvoiIndemnisation_ = (h, valeurs) => {
+    if (valeurs.STATUT_ENVOI) {
+      statuts.push(valeurs.STATUT_ENVOI);
+    }
+  };
+  c.MailApp.sendEmail = () => { appelsMail++; };
+  c.mettreAJourPrestationsApresEnvoi_ = () => {
+    prestationsModifiees = true;
+  };
+  c.journaliserActionSensible_ = () => {};
+
+  assert.throws(
+    () => c.envoyerDemandeIndemnisationEmailInterne_(
+      demande(),
+      { identifiantHistorique: 'SESSION_ADMIN:test' }
+    ),
+    /Aucun courriel.*aucune prestation/
+  );
+  assert.strictEqual(appelsMail, 0);
+  assert.strictEqual(prestationsModifiees, false);
+  assert.deepStrictEqual(statuts, ['ECHEC_PDF']);
+});
+
+test('le PDF est vérifié avant MailApp et transmis en pièce jointe', () => {
+  const c = creerContexte();
+  const ordre = [];
+  const blob = { type: 'application/pdf' };
+  c.trouverHistoriqueEnvoiIndemnisation_ = () => null;
+  c.creerHistoriqueEnvoiIndemnisation_ = d => ({
+    idEnvoi: d.idEnvoi,
+    numeroLigne: 2
+  });
+  c.obtenirOuCreerPdfDemandeIndemnisation_ = () => {
+    ordre.push('PDF_VERIFIE');
+    return {
+      fileId: 'pdf-1', nom: 'demande.pdf', taille: 512,
+      hash: 'hash', blob
+    };
+  };
+  c.mettreAJourHistoriqueEnvoiIndemnisation_ = (h, valeurs) => {
+    if (valeurs.PDF_FILE_ID) ordre.push('PDF_TRACE');
+  };
+  c.MailApp.sendEmail = options => {
+    ordre.push('MAIL');
+    assert.strictEqual(options.attachments[0], blob);
+  };
+  c.mettreAJourPrestationsApresEnvoi_ = () => ordre.push('PRESTATIONS');
+  c.journaliserActionSensible_ = () => {};
+
+  c.envoyerDemandeIndemnisationEmailInterne_(
+    demande(),
+    { identifiantHistorique: 'SESSION_ADMIN:test' }
+  );
+  assert.deepStrictEqual(ordre.slice(0, 4), [
+    'PDF_VERIFIE', 'PDF_TRACE', 'MAIL', 'PRESTATIONS'
+  ]);
 });
 
 test('la réexécution du même ID n’envoie pas un second e-mail', () => {
@@ -383,7 +469,9 @@ test('un échec après l’envoi exige une régularisation sans renvoi', () => {
   });
   c.MailApp.sendEmail = () => { appelsMail++; };
   c.mettreAJourHistoriqueEnvoiIndemnisation_ = (h, valeurs) => {
-    statuts.push(valeurs.STATUT_ENVOI);
+    if (valeurs.STATUT_ENVOI) {
+      statuts.push(valeurs.STATUT_ENVOI);
+    }
   };
   c.mettreAJourPrestationsApresEnvoi_ = () => {
     throw new Error('écriture impossible');
@@ -444,7 +532,32 @@ test('le mail généré contient les tableaux, totaux et versions HTML/texte', (
   assert(rendu.texte.includes('1 h 30'));
 });
 
-test('la migration 4 est versionnée, complète et idempotente', () => {
+test('le PDF reprend les données de la demande et respecte le nom normalisé', () => {
+  const c = creerContexte();
+  const resume = c.construireResumePrestationsEnvoiIndemnisation_([
+    prestation({ remarque: 'Validation administrative' })
+  ]);
+  const html = c.construireHtmlPdfDemandeIndemnisation_({
+    nomCentre: 'Centre Test',
+    reference: 'IND/2026 0042',
+    destinataire: 'chef@example.fr',
+    groupes: resume.groupes,
+    nombreSeances: resume.nombreSeances,
+    nombrePrestations: resume.nombrePrestations,
+    volumeHeuresLibelle: resume.volumeHeuresLibelle,
+    remarqueFinale: 'Merci de traiter cette demande.'
+  });
+  const nom = c.construireNomPdfDemandeIndemnisation_('IND/2026 0042');
+
+  assert(html.includes('Centre Test'));
+  assert(html.includes('chef@example.fr'));
+  assert(html.includes('Alice Martin'));
+  assert(html.includes('Validation administrative'));
+  assert(html.includes('Merci de traiter cette demande.'));
+  assert(/^Demande_indemnisation__IND_2026_0042__\d{4}-\d{2}-\d{2}\.pdf$/.test(nom));
+});
+
+test('la migration 5 est versionnée, complète et idempotente', () => {
   const migrationSource = fs.readFileSync(
     path.join(__dirname, '..', 'MigrationService.js'),
     'utf8'
@@ -478,17 +591,17 @@ test('la migration 4 est versionnée, complète et idempotente', () => {
       }
     }
   };
-  const premier = contexte.simulerMigrationsModele_(modele, 3, 4);
+  const premier = contexte.simulerMigrationsModele_(modele, 3, 5);
   const second = contexte.simulerMigrationsModele_(
     premier.modele,
-    4,
-    4
+    5,
+    5
   );
   const parametres = second.modele.sheets.PARAMETRES;
   const cles = parametres.rows.map(ligne => ligne[0]);
 
   assert.strictEqual(premier.reussie, true);
-  assert.strictEqual(premier.versionFinale, 4);
+  assert.strictEqual(premier.versionFinale, 5);
   assert.strictEqual(
     cles.filter(cle => cle === 'EMAIL_CHEF_CENTRE').length,
     1
@@ -501,35 +614,23 @@ test('la migration 4 est versionnée, complète et idempotente', () => {
     second.modele.sheets.PRESTATIONS_FORMATEURS.headers
       .includes('ID_ENVOI')
   );
-  assert.deepStrictEqual(
-    Array.from(
-      second.modele.sheets.HISTORIQUE_ENVOIS_INDEMNISATIONS.headers
-    ),
-    [
-      'ID_ENVOI', 'DATE_ENVOI', 'DESTINATAIRE', 'COPIES',
-      'OBJET', 'REFERENCE_DEMANDE', 'ID_PRESTATIONS',
-      'NOMBRE_FORMATEURS', 'NOMBRE_SEANCES', 'VOLUME_HEURES',
-      'STATUT_ENVOI', 'MESSAGE_ERREUR', 'SESSION_ADMIN',
-      'DATE_CREATION'
-    ]
+  const entetesEnvois = Array.from(
+    second.modele.sheets.HISTORIQUE_ENVOIS_INDEMNISATIONS.headers
   );
+  assert(entetesEnvois.includes('PDF_FILE_ID'));
+  assert(entetesEnvois.includes('PDF_NOM'));
+  assert(entetesEnvois.includes('PDF_HASH'));
+  const entetesStagiaires = Array.from(
+    second.modele.sheets.STAGIAIRES.headers
+  );
+  assert(entetesStagiaires.includes('PHOTO_FILE_ID'));
+  assert(entetesStagiaires.includes('PHOTO_NOM'));
+  assert(entetesStagiaires.includes('PHOTO_DATE_MODIFICATION'));
 });
 
-test('l’autorisation MailApp demande uniquement le scope d’envoi sans envoyer', () => {
+test('la fonction temporaire d’autorisation MailApp a été supprimée', () => {
   const c = creerContexte();
-  let scopes = null;
-  let envois = 0;
-  c.ScriptApp.requireScopes = (mode, valeurs) => {
-    scopes = { mode, valeurs };
-  };
-  c.MailApp.sendEmail = () => { envois++; };
-  const quota = c.autoriserEnvoiEmails();
-  assert.strictEqual(quota, 100);
-  assert.strictEqual(envois, 0);
-  assert.strictEqual(scopes.mode, 'FULL');
-  assert.deepStrictEqual(Array.from(scopes.valeurs), [
-    'https://www.googleapis.com/auth/script.send_mail'
-  ]);
+  assert.strictEqual(typeof c.autoriserEnvoiEmails, 'undefined');
 });
 
 test('la première référence de l’année est IND-AAAA-0001', () => {

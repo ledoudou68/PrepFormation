@@ -46,6 +46,10 @@ const etatApplication = {
   donneesAccueil: null,
   sessionAConsulterDepuisAccueil: '',
   stagiaireAConsulterDepuisAccueil: '',
+  photoStagiaireEnCours: null,
+  photoStagiaireExistante: false,
+  generationChargementPhotos: 0,
+  generationPhotoFormulaire: 0,
   formationsAdministration: [],
   parametresEmailIndemnisationAdministration: null,
   diagnosticAdministration: null,
@@ -1150,6 +1154,8 @@ function afficherListeStagiaires() {
       return creerLigneStagiaire(stagiaire);
     })
     .join('');
+
+  initialiserMiniaturesStagiaires();
 }
 
 function obtenirStagiairesFiltres() {
@@ -1234,9 +1240,21 @@ function creerLigneStagiaire(stagiaire) {
   return `
     <tr>
       <td>
-        <div class="nom-principal">
-          ${echapperHtml(stagiaire.nom)}
-          ${echapperHtml(stagiaire.prenom)}
+        <div class="identite-liste-stagiaire">
+          <span
+            class="miniature-liste-stagiaire"
+            data-photo-uuid="${echapperHtml(stagiaire.uuid)}"
+            data-photo-disponible="${stagiaire.aUnePhoto ? 'true' : 'false'}"
+          >
+            ${echapperHtml(
+              (stagiaire.prenom || '').charAt(0) +
+              (stagiaire.nom || '').charAt(0)
+            )}
+          </span>
+          <div class="nom-principal">
+            ${echapperHtml(stagiaire.nom)}
+            ${echapperHtml(stagiaire.prenom)}
+          </div>
         </div>
       </td>
 
@@ -1276,6 +1294,129 @@ function creerLigneStagiaire(stagiaire) {
 }
 
 
+function initialiserMiniaturesStagiaires() {
+  const generation = ++etatApplication.generationChargementPhotos;
+  const elements = Array.from(document.querySelectorAll(
+    '.miniature-liste-stagiaire[data-photo-disponible="true"]'
+  ));
+
+  function charger(element) {
+    if (
+      !element ||
+      element.dataset.photoChargee === 'true' ||
+      generation !== etatApplication.generationChargementPhotos
+    ) {
+      return;
+    }
+
+    element.dataset.photoChargee = 'true';
+    const uuid = String(element.dataset.photoUuid || '');
+
+    google.script.run
+      .withSuccessHandler(function (photo) {
+        if (
+          generation !== etatApplication.generationChargementPhotos ||
+          !element.isConnected ||
+          !photo ||
+          !photo.disponible
+        ) {
+          return;
+        }
+
+        const image = document.createElement('img');
+        image.src = photo.dataUrl;
+        image.alt = '';
+        element.innerHTML = '';
+        element.appendChild(image);
+      })
+      .withFailureHandler(function () {
+        // Les initiales restent visibles si le fichier Drive manque.
+      })
+      .getPhotoStagiaire(uuid);
+  }
+
+  if (!('IntersectionObserver' in window)) {
+    elements.forEach(charger);
+    return;
+  }
+
+  const observateur = new IntersectionObserver(function (entrees) {
+    entrees.forEach(function (entree) {
+      if (!entree.isIntersecting) {
+        return;
+      }
+      observateur.unobserve(entree.target);
+      charger(entree.target);
+    });
+  }, { rootMargin: '120px' });
+
+  elements.forEach(function (element) {
+    observateur.observe(element);
+  });
+}
+
+
+function chargerPhotoFicheStagiaire(uuid, stagiaire) {
+  const zone = document.getElementById('photoFicheStagiaire');
+
+  if (!zone) {
+    return;
+  }
+
+  if (!stagiaire.aUnePhoto) {
+    if (stagiaire.photoUrl) {
+      afficherImagePhotoStagiaire_(
+        zone,
+        stagiaire.photoUrl,
+        'Photo historique du stagiaire'
+      );
+    }
+    return;
+  }
+
+  zone.classList.add('photo-en-chargement');
+
+  google.script.run
+    .withSuccessHandler(function (photo) {
+      const modal = document.getElementById('modalFicheStagiaire');
+
+      if (!modal || modal.dataset.uuid !== uuid) {
+        return;
+      }
+
+      zone.classList.remove('photo-en-chargement');
+
+      if (!photo || !photo.disponible) {
+        zone.innerHTML = '<span>Photo indisponible</span>';
+        return;
+      }
+
+      afficherImagePhotoStagiaire_(
+        zone,
+        photo.dataUrl,
+        'Photo du stagiaire'
+      );
+    })
+    .withFailureHandler(function () {
+      zone.classList.remove('photo-en-chargement');
+      zone.innerHTML = '<span>Photo indisponible</span>';
+    })
+    .getPhotoStagiaire(uuid);
+}
+
+
+function afficherImagePhotoStagiaire_(zone, source, texteAlternatif) {
+  const image = document.createElement('img');
+  image.src = source;
+  image.alt = texteAlternatif;
+  image.addEventListener('error', function () {
+    zone.innerHTML = '<span>Photo indisponible</span>';
+  });
+  zone.innerHTML = '';
+  zone.appendChild(image);
+}
+
+
 function consulterStagiaire(uuid) {
   const stagiaire = etatApplication.stagiaires.find(
     function (element) {
@@ -1302,22 +1443,14 @@ function consulterStagiaire(uuid) {
   );
   modal.dataset.uuid = uuid;
 
-  const photo = stagiaire.photoUrl
-    ? `
-      <img
-        src="${echapperHtml(stagiaire.photoUrl)}"
-        alt="Photo de ${echapperHtml(stagiaire.prenom)} ${echapperHtml(stagiaire.nom)}"
-        onerror="this.parentElement.innerHTML='<span>Photo indisponible</span>'"
-      >
-    `
-    : `
-      <span class="initiales-stagiaire">
-        ${echapperHtml(
-          (stagiaire.prenom || '').charAt(0) +
-          (stagiaire.nom || '').charAt(0)
-        )}
-      </span>
-    `;
+  const photo = `
+    <span class="initiales-stagiaire">
+      ${echapperHtml(
+        (stagiaire.prenom || '').charAt(0) +
+        (stagiaire.nom || '').charAt(0)
+      )}
+    </span>
+  `;
 
   modal.innerHTML = `
     <article class="fiche-consultation">
@@ -1349,7 +1482,10 @@ function consulterStagiaire(uuid) {
 
         <section class="fiche-profil">
 
-          <div class="fiche-consultation-photo">
+          <div
+            id="photoFicheStagiaire"
+            class="fiche-consultation-photo"
+          >
             ${photo}
           </div>
 
@@ -1696,6 +1832,8 @@ function consulterStagiaire(uuid) {
   modal
     .querySelector('.bouton-fermer-fiche')
     .focus();
+
+  chargerPhotoFicheStagiaire(uuid, stagiaire);
 
   google.script.run
     .withSuccessHandler(function (suivi) {
@@ -2411,7 +2549,7 @@ function nouveauStagiaire() {
   ).value = dateDuJourPourChamp();
 
   mettreAJourZoneCycleVieStagiaire();
-  mettreAJourApercuPhotoStagiaire();
+  initialiserEtatPhotoStagiaire();
   changerOngletStagiaire('informations');
   ouvrirModalStagiaire();
 
@@ -2484,15 +2622,11 @@ function modifierStagiaire(uuid) {
   ).value = stagiaire.email || '';
 
   document.getElementById(
-    'stagiairePhotoUrl'
-  ).value = stagiaire.photoUrl || '';
-
-  document.getElementById(
     'stagiaireFormateurReferent'
   ).value = stagiaire.formateurReferent || '';
 
   mettreAJourZoneCycleVieStagiaire(stagiaire);
-  mettreAJourApercuPhotoStagiaire();
+  initialiserEtatPhotoStagiaire(stagiaire);
   changerOngletStagiaire('informations');
   ouvrirModalStagiaire();
 }
@@ -2527,38 +2661,351 @@ function changerOngletStagiaire(nomOnglet) {
   }
 }
 
-function mettreAJourApercuPhotoStagiaire() {
-  const zone = document.getElementById(
-    'apercuPhotoStagiaire'
+function initialiserEtatPhotoStagiaire(stagiaire) {
+  const generation = ++etatApplication.generationPhotoFormulaire;
+  etatApplication.photoStagiaireEnCours = null;
+  etatApplication.photoStagiaireExistante = Boolean(
+    stagiaire && (stagiaire.aUnePhoto || stagiaire.photoUrl)
   );
 
-  const champ = document.getElementById(
-    'stagiairePhotoUrl'
+  ['stagiairePhotoCamera', 'stagiairePhotoFichier'].forEach(
+    function (identifiant) {
+      const champ = document.getElementById(identifiant);
+      if (champ) {
+        champ.value = '';
+      }
+    }
   );
 
-  if (!zone || !champ) {
-    return;
-  }
+  const zone = document.getElementById('apercuPhotoStagiaire');
+  const informations = document.getElementById(
+    'informationsPhotoStagiaire'
+  );
 
-  const url = champ.value.trim();
-
-  if (!url) {
+  if (zone) {
     zone.innerHTML = '<span>Photo</span>';
+  }
+
+  if (informations) {
+    informations.textContent = stagiaire && stagiaire.photoNom
+      ? stagiaire.photoNom + (
+        stagiaire.photoDateModification
+          ? ' · modifiée le ' + stagiaire.photoDateModification
+          : ''
+      )
+      : '';
+  }
+
+  mettreAJourActionsPhotoStagiaire_();
+
+  if (!stagiaire) {
     return;
   }
 
-  const image = document.createElement('img');
+  if (stagiaire.aUnePhoto) {
+    zone.innerHTML = '<span>Chargement…</span>';
+    google.script.run
+      .withSuccessHandler(function (photo) {
+        if (generation !== etatApplication.generationPhotoFormulaire) {
+          return;
+        }
+        if (!photo || !photo.disponible) {
+          zone.innerHTML = '<span>Photo indisponible</span>';
+          return;
+        }
+        afficherImagePhotoStagiaire_(
+          zone,
+          photo.dataUrl,
+          'Photo du stagiaire'
+        );
+      })
+      .withFailureHandler(function () {
+        if (generation !== etatApplication.generationPhotoFormulaire) {
+          return;
+        }
+        zone.innerHTML = '<span>Photo indisponible</span>';
+      })
+      .getPhotoStagiaire(stagiaire.uuid);
+    return;
+  }
 
-  image.src = url;
-  image.alt = 'Photo du stagiaire';
+  if (stagiaire.photoUrl) {
+    afficherImagePhotoStagiaire_(
+      zone,
+      stagiaire.photoUrl,
+      'Photo historique du stagiaire'
+    );
+  }
+}
 
-  image.addEventListener('error', function () {
-    zone.innerHTML =
-      '<span>Photo indisponible</span>';
+
+function mettreAJourActionsPhotoStagiaire_() {
+  const existe = Boolean(
+    etatApplication.photoStagiaireExistante ||
+    etatApplication.photoStagiaireEnCours
+  );
+  const boutonRemplacer = document.getElementById(
+    'boutonRemplacerPhotoStagiaire'
+  );
+  const boutonSupprimer = document.getElementById(
+    'boutonSupprimerPhotoStagiaire'
+  );
+
+  if (boutonRemplacer) {
+    boutonRemplacer.classList.toggle('masque', !existe);
+  }
+
+  if (boutonSupprimer) {
+    boutonSupprimer.classList.toggle('masque', !existe);
+  }
+}
+
+
+function ouvrirChoixRemplacementPhotoStagiaire() {
+  document.getElementById('stagiairePhotoFichier')?.click();
+}
+
+
+async function traiterFichierPhotoStagiaire(champ) {
+  const fichier = champ && champ.files && champ.files[0];
+  const generation = etatApplication.generationPhotoFormulaire;
+
+  if (!fichier) {
+    return;
+  }
+
+  try {
+    validerFichierPhotoStagiaireClient_(fichier);
+    const resultat = await compresserPhotoStagiaireClient_(fichier);
+
+    if (generation !== etatApplication.generationPhotoFormulaire) {
+      return;
+    }
+
+    etatApplication.photoStagiaireEnCours = {
+      contenuBase64: resultat.dataUrl.split(',')[1],
+      nomOriginal: String(fichier.name || 'photo'),
+      tailleInitiale: fichier.size,
+      tailleCompressee: resultat.taille,
+      largeur: resultat.largeur,
+      hauteur: resultat.hauteur
+    };
+
+    const zone = document.getElementById('apercuPhotoStagiaire');
+    afficherImagePhotoStagiaire_(
+      zone,
+      resultat.dataUrl,
+      'Aperçu de la photo sélectionnée'
+    );
+    document.getElementById(
+      'informationsPhotoStagiaire'
+    ).textContent = fichier.name + ' · ' +
+      formaterTailleFichierPhotoStagiaire_(fichier.size) +
+      ' initialement · ' + resultat.largeur + ' × ' +
+      resultat.hauteur + ' px après compression (' +
+      formaterTailleFichierPhotoStagiaire_(resultat.taille) + ')';
+    mettreAJourActionsPhotoStagiaire_();
+  } catch (erreur) {
+    if (generation !== etatApplication.generationPhotoFormulaire) {
+      return;
+    }
+    champ.value = '';
+    afficherToast(
+      String(erreur.message || erreur || 'Image illisible.'),
+      true
+    );
+  }
+}
+
+
+function validerFichierPhotoStagiaireClient_(fichier) {
+  const types = [
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'image/heic',
+    'image/heif'
+  ];
+  const extensionValide = /\.(jpe?g|png|webp|heic|heif)$/i.test(
+    String(fichier.name || '')
+  );
+  const type = String(fichier.type || '').toLowerCase();
+
+  if ((type && !types.includes(type)) || (!type && !extensionValide)) {
+    throw new Error(
+      'Formats acceptés : JPEG, PNG, WEBP et HEIC si le navigateur peut le lire.'
+    );
+  }
+
+  if (!Number(fichier.size) || fichier.size > 15 * 1024 * 1024) {
+    throw new Error('La photo doit peser au maximum 15 Mo.');
+  }
+}
+
+
+function calculerDimensionsPhotoStagiaire_(largeur, hauteur, maximum) {
+  const facteur = Math.min(
+    1,
+    Number(maximum || 1200) / Math.max(largeur, hauteur)
+  );
+  return {
+    largeur: Math.max(1, Math.round(largeur * facteur)),
+    hauteur: Math.max(1, Math.round(hauteur * facteur))
+  };
+}
+
+
+async function compresserPhotoStagiaireClient_(fichier) {
+  const image = await decoderPhotoStagiaireClient_(fichier);
+  const dimensions = calculerDimensionsPhotoStagiaire_(
+    image.largeur,
+    image.hauteur,
+    1200
+  );
+  const canvas = document.createElement('canvas');
+  canvas.width = dimensions.largeur;
+  canvas.height = dimensions.hauteur;
+  const contexte = canvas.getContext('2d', { alpha: false });
+  contexte.fillStyle = '#ffffff';
+  contexte.fillRect(0, 0, canvas.width, canvas.height);
+  contexte.drawImage(
+    image.source,
+    0,
+    0,
+    dimensions.largeur,
+    dimensions.hauteur
+  );
+  image.fermer();
+
+  const blob = await new Promise(function (resolve, reject) {
+    canvas.toBlob(function (resultat) {
+      if (resultat) {
+        resolve(resultat);
+      } else {
+        reject(new Error('Le navigateur ne peut pas convertir cette image.'));
+      }
+    }, 'image/jpeg', 0.8);
   });
 
-  zone.innerHTML = '';
-  zone.appendChild(image);
+  if (blob.size > 4 * 1024 * 1024) {
+    throw new Error(
+      'La photo reste trop volumineuse après redimensionnement.'
+    );
+  }
+
+  const dataUrl = await lireBlobCommeDataUrlPhotoStagiaire_(blob);
+  return {
+    dataUrl: dataUrl,
+    taille: blob.size,
+    largeur: dimensions.largeur,
+    hauteur: dimensions.hauteur
+  };
+}
+
+
+async function decoderPhotoStagiaireClient_(fichier) {
+  if ('createImageBitmap' in window) {
+    try {
+      const bitmap = await createImageBitmap(
+        fichier,
+        { imageOrientation: 'from-image' }
+      );
+      return {
+        source: bitmap,
+        largeur: bitmap.width,
+        hauteur: bitmap.height,
+        fermer: function () { bitmap.close(); }
+      };
+    } catch (erreurBitmap) {
+      // Le décodeur HTML ci-dessous couvre notamment Safari.
+    }
+  }
+
+  return new Promise(function (resolve, reject) {
+    const url = URL.createObjectURL(fichier);
+    const image = new Image();
+    image.onload = function () {
+      resolve({
+        source: image,
+        largeur: image.naturalWidth,
+        hauteur: image.naturalHeight,
+        fermer: function () { URL.revokeObjectURL(url); }
+      });
+    };
+    image.onerror = function () {
+      URL.revokeObjectURL(url);
+      reject(new Error(
+        'Image illisible. Le format HEIC dépend des capacités du navigateur.'
+      ));
+    };
+    image.src = url;
+  });
+}
+
+
+function lireBlobCommeDataUrlPhotoStagiaire_(blob) {
+  return new Promise(function (resolve, reject) {
+    const lecteur = new FileReader();
+    lecteur.onload = function () { resolve(String(lecteur.result || '')); };
+    lecteur.onerror = function () {
+      reject(new Error('Impossible de préparer la photo.'));
+    };
+    lecteur.readAsDataURL(blob);
+  });
+}
+
+
+function formaterTailleFichierPhotoStagiaire_(taille) {
+  const octets = Number(taille || 0);
+  if (octets < 1024) {
+    return octets + ' o';
+  }
+  if (octets < 1024 * 1024) {
+    return Math.round(octets / 1024) + ' Ko';
+  }
+  return (octets / 1024 / 1024).toFixed(1) + ' Mo';
+}
+
+
+function demanderSuppressionPhotoStagiaire() {
+  if (!window.confirm(
+    'Supprimer cette photo ? Le fichier sera placé dans la corbeille Drive.'
+  )) {
+    return;
+  }
+
+  const uuid = document.getElementById('stagiaireUuid').value;
+
+  if (!uuid || !etatApplication.photoStagiaireExistante) {
+    etatApplication.photoStagiaireEnCours = null;
+    document.getElementById('apercuPhotoStagiaire').innerHTML =
+      '<span>Photo</span>';
+    document.getElementById('informationsPhotoStagiaire').textContent = '';
+    mettreAJourActionsPhotoStagiaire_();
+    return;
+  }
+
+  afficherLoader();
+  google.script.run
+    .withSuccessHandler(function (resultat) {
+      masquerLoader();
+      etatApplication.photoStagiaireEnCours = null;
+      etatApplication.photoStagiaireExistante = false;
+      document.getElementById('apercuPhotoStagiaire').innerHTML =
+        '<span>Photo</span>';
+      document.getElementById('informationsPhotoStagiaire').textContent = '';
+      mettreAJourActionsPhotoStagiaire_();
+      afficherToast(resultat.message || 'Photo supprimée.', false);
+      rechargerStagiaires();
+    })
+    .withFailureHandler(function (erreur) {
+      masquerLoader();
+      afficherToast(extraireMessageErreur(erreur), true);
+    })
+    .supprimerPhotoStagiaire(
+      { uuid: uuid, confirmation: true },
+      obtenirJetonAdministrateurApplication()
+    );
 }
 
 function ouvrirModalStagiaire() {
@@ -2571,6 +3018,7 @@ function ouvrirModalStagiaire() {
 }
 
 function fermerModalStagiaire() {
+  etatApplication.generationPhotoFormulaire++;
   document
     .getElementById('modalStagiaire')
     .classList
@@ -2804,10 +3252,6 @@ function soumettreStagiaire(evenement) {
       'stagiaireEmail'
     ).value,
 
-    photoUrl: document.getElementById(
-      'stagiairePhotoUrl'
-    ).value,
-
     formateurReferent:
       document.getElementById(
         'stagiaireFormateurReferent'
@@ -2816,18 +3260,45 @@ function soumettreStagiaire(evenement) {
 
   google.script.run
     .withSuccessHandler(function (resultat) {
-      bouton.disabled = false;
-      bouton.textContent = 'Enregistrer';
+      document.getElementById('stagiaireUuid').value = resultat.uuid;
+      const photo = etatApplication.photoStagiaireEnCours;
 
-      fermerModalStagiaire();
+      if (!photo) {
+        finaliserEnregistrementStagiaire_(bouton, resultat);
+        return;
+      }
 
-      afficherToast(
-        resultat.message ||
-        'Stagiaire enregistré.',
-        false
-      );
+      bouton.textContent = 'Enregistrement de la photo…';
 
-      rechargerStagiaires();
+      google.script.run
+        .withSuccessHandler(function (resultatPhoto) {
+          etatApplication.photoStagiaireEnCours = null;
+          const message = resultatPhoto.avertissement ||
+            resultat.message || 'Stagiaire et photo enregistrés.';
+          finaliserEnregistrementStagiaire_(
+            bouton,
+            { message: message }
+          );
+        })
+        .withFailureHandler(function (erreurPhoto) {
+          bouton.disabled = false;
+          bouton.textContent = 'Enregistrer';
+          afficherToast(
+            'Le stagiaire est enregistré, mais pas la photo : ' +
+            extraireMessageErreur(erreurPhoto),
+            true
+          );
+          rechargerStagiaires();
+        })
+        .enregistrerPhotoStagiaire(
+          {
+            uuid: resultat.uuid,
+            contenuBase64: photo.contenuBase64,
+            nomOriginal: photo.nomOriginal,
+            tailleInitiale: photo.tailleInitiale
+          },
+          obtenirJetonAdministrateurApplication()
+        );
     })
     .withFailureHandler(function (erreur) {
       bouton.disabled = false;
@@ -2842,6 +3313,18 @@ function soumettreStagiaire(evenement) {
       donnees,
       obtenirJetonAdministrateurApplication()
     );
+}
+
+
+function finaliserEnregistrementStagiaire_(bouton, resultat) {
+  bouton.disabled = false;
+  bouton.textContent = 'Enregistrer';
+  fermerModalStagiaire();
+  afficherToast(
+    resultat.message || 'Stagiaire enregistré.',
+    false
+  );
+  rechargerStagiaires();
 }
 
 function rechargerStagiaires() {
@@ -7259,7 +7742,7 @@ function ouvrirPreparationEmailIndemnisation() {
   document.getElementById('titreModalEmailIndemnisation').textContent =
     'Préparer la demande par e-mail';
   document.getElementById('sousTitreModalEmailIndemnisation').textContent =
-    'Vérification obligatoire avant envoi.';
+    'Vérification obligatoire avant génération du PDF et envoi.';
   contenu.innerHTML = '<div class="etat-vide">Préparation de la demande…</div>';
   boutonEnvoyer.disabled = true;
   boutonEnvoyer.textContent = 'Préparation…';
@@ -7357,6 +7840,11 @@ function afficherPrevisualisationEmailIndemnisation(demande) {
       <div><span>Séances distinctes</span><strong>${Number(demande.nombreSeances || 0)}</strong></div>
       <div><span>Volume total</span><strong>${echapperHtml(demande.volumeHeuresLibelle || '0 h')}</strong></div>
     </div>
+
+    <p class="information-pdf-email-indemnisation">
+      Un PDF récapitulatif reprenant ces données sera créé, vérifié,
+      archivé dans le Drive privé puis joint au courriel.
+    </p>
 
     <div class="apercu-calcule-email-indemnisation">
       <h3>Détail calculé</h3>
@@ -7477,6 +7965,7 @@ function confirmerEnvoiEmailIndemnisation() {
         'Destinataire : ' + resultat.destinataire + ' · ' +
         Number((resultat.copies || []).length) + ' formateur(s) en copie · ' +
         'Référence : ' + resultat.reference + ' · ' +
+        (resultat.pdfNom ? 'PDF : ' + resultat.pdfNom + ' · ' : '') +
         resultat.nombrePrestations + ' prestation(s) · ' +
         resultat.volumeHeuresLibelle + '.',
         false

@@ -19,7 +19,10 @@ const CONFIG_STAGIAIRES = {
     'EMAIL',
     'PHOTO_URL',
     'FORMATEUR_REFERENT',
-    'DATE_CHANGEMENT_STATUT_AUTO'
+    'DATE_CHANGEMENT_STATUT_AUTO',
+    'PHOTO_FILE_ID',
+    'PHOTO_NOM',
+    'PHOTO_DATE_MODIFICATION'
   ],
 
   statuts: [
@@ -114,6 +117,19 @@ function lireStagiairesSansSynchronisation_() {
         photoUrl: String(
           ligne[index.PHOTO_URL] || ''
         ),
+
+        aUnePhoto: Boolean(
+          String(ligne[index.PHOTO_FILE_ID] || '').trim()
+        ),
+
+        photoNom: String(
+          ligne[index.PHOTO_NOM] || ''
+        ),
+
+        photoDateModification:
+          convertirDateHeureStatutPourInterface_(
+            ligne[index.PHOTO_DATE_MODIFICATION]
+          ),
 
         formateurReferent: String(
           ligne[index.FORMATEUR_REFERENT] || ''
@@ -1528,9 +1544,11 @@ function enregistrerStagiaireInterne_(donnees, sessionUtilisateur) {
     .trim()
     .toLowerCase();
 
-  ligne[index.PHOTO_URL] = String(
-    donnees.photoUrl || ''
-  ).trim();
+  if (!numeroLigne && donnees.photoUrl) {
+    ligne[index.PHOTO_URL] = String(
+      donnees.photoUrl
+    ).trim();
+  }
 
   ligne[index.FORMATEUR_REFERENT] = String(
     donnees.formateurReferent || ''

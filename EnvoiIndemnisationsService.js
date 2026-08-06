@@ -5,31 +5,18 @@ const COLONNES_HISTORIQUE_ENVOIS_INDEMNISATIONS_ = [
   'OBJET', 'REFERENCE_DEMANDE', 'ID_PRESTATIONS',
   'NOMBRE_FORMATEURS', 'NOMBRE_SEANCES', 'VOLUME_HEURES',
   'STATUT_ENVOI', 'MESSAGE_ERREUR', 'SESSION_ADMIN',
-  'DATE_CREATION'
+  'DATE_CREATION', 'PDF_FILE_ID', 'PDF_NOM', 'PDF_TAILLE',
+  'PDF_HASH'
 ];
 const STATUT_ENVOI_PREPARATION_ = 'EN_COURS_AVANT_ENVOI';
 const STATUT_ENVOI_MESSAGE_ENVOYE_ = 'EMAIL_ENVOYE_MAJ_EN_COURS';
 const STATUT_ENVOI_TERMINE_ = 'TERMINE';
 const STATUT_ENVOI_ECHEC_ = 'ECHEC_ENVOI';
+const STATUT_ENVOI_ECHEC_PDF_ = 'ECHEC_PDF';
 const STATUT_ENVOI_REGULARISATION_ = 'REGULARISATION_REQUISE';
 const PREFIXE_SEQUENCE_INDEMNISATION_ =
   'PREPFORMATION_INDEMNISATION_SEQUENCE_';
 const LONGUEUR_MAX_REFERENCE_INDEMNISATION_ = 100;
-
-
-/**
- * Fonction publique temporaire, exécutable uniquement depuis l'éditeur
- * Apps Script afin de déclencher le consentement OAuth de MailApp.
- * Elle n'est appelée par aucune interface et n'envoie aucun message.
- */
-function autoriserEnvoiEmails() {
-  ScriptApp.requireScopes(
-    ScriptApp.AuthMode.FULL,
-    ['https://www.googleapis.com/auth/script.send_mail']
-  );
-
-  return MailApp.getRemainingDailyQuota();
-}
 
 
 /**
@@ -184,13 +171,53 @@ function envoyerDemandeIndemnisationEmailInterne_(demande, session) {
     ''
   );
 
+  let pdf;
+
+  try {
+    pdf = obtenirOuCreerPdfDemandeIndemnisation_(
+      demande,
+      historique
+    );
+    mettreAJourHistoriqueEnvoiIndemnisation_(historique, {
+      PDF_FILE_ID: pdf.fileId,
+      PDF_NOM: pdf.nom,
+      PDF_TAILLE: pdf.taille,
+      PDF_HASH: pdf.hash
+    });
+  } catch (erreurPdf) {
+    mettreAJourHistoriqueEnvoiIndemnisation_(historique, {
+      STATUT_ENVOI: STATUT_ENVOI_ECHEC_PDF_,
+      MESSAGE_ERREUR: limiterMessageErreurEnvoiIndemnisation_(
+        erreurPdf
+      )
+    });
+
+    journaliserActionSensible_(
+      'INDEMNISATION_PDF_ECHEC',
+      'HISTORIQUE_ENVOIS_INDEMNISATIONS',
+      demande.idEnvoi,
+      {
+        nombrePrestations: demande.nombrePrestations,
+        statut: STATUT_ENVOI_ECHEC_PDF_
+      },
+      session.identifiantHistorique
+    );
+
+    throw new Error(
+      'Le PDF n’a pas pu être créé ou vérifié. Aucun courriel n’a été ' +
+      'envoyé et aucune prestation n’a été modifiée. ' +
+      limiterMessageErreurEnvoiIndemnisation_(erreurPdf)
+    );
+  }
+
   try {
     const optionsEnvoi = {
       to: demande.destinataire,
       subject: demande.objet,
       body: demande.corpsTexte,
       htmlBody: demande.corpsHtml,
-      name: demande.nomCentre || 'PrepFormation'
+      name: demande.nomCentre || 'PrepFormation',
+      attachments: [pdf.blob]
     };
 
     if (demande.copies.length) {
@@ -219,7 +246,8 @@ function envoyerDemandeIndemnisationEmailInterne_(demande, session) {
       demande.idEnvoi,
       {
         nombrePrestations: demande.nombrePrestations,
-        statut: STATUT_ENVOI_ECHEC_
+        statut: STATUT_ENVOI_ECHEC_,
+        pdfConserve: true
       },
       session.identifiantHistorique
     );
@@ -296,6 +324,7 @@ function envoyerDemandeIndemnisationEmailInterne_(demande, session) {
     volumeHeures: demande.volumeHeures,
     volumeHeuresLibelle: demande.volumeHeuresLibelle,
     reference: demande.reference,
+    pdfNom: pdf.nom,
     referenceProposeeAutomatique:
       demande.referenceProposeeAutomatique,
     referenceAjusteeAutomatiquement:
@@ -499,7 +528,11 @@ function construireEtatReferencesIndemnisation_(
     const statut = String(historique.statut || '').trim();
     const idEnvoi = String(historique.idEnvoi || '').trim();
 
-    if (!reference || statut === STATUT_ENVOI_ECHEC_) {
+    if (
+      !reference ||
+      statut === STATUT_ENVOI_ECHEC_ ||
+      statut === STATUT_ENVOI_ECHEC_PDF_
+    ) {
       return;
     }
 
@@ -1213,6 +1246,287 @@ function rendreCorpsDemandeIndemnisation_(resume, contenu) {
 }
 
 
+function obtenirOuCreerPdfDemandeIndemnisation_(demande, historique) {
+  const existant = trouverPdfDemandeIndemnisation_(
+    demande.idEnvoi,
+    historique
+  );
+
+  if (existant) {
+    return verifierPdfDemandeIndemnisation_(existant, demande.idEnvoi);
+  }
+
+  const dossier = obtenirSousDossierPrepFormation_(
+    'Demandes indemnisation',
+    PROPRIETE_DOSSIER_DEMANDES_INDEMNISATION_,
+    'PREPFORMATION_INDEMNISATIONS:',
+    true
+  );
+  const nom = construireNomPdfDemandeIndemnisation_(demande.reference);
+  const html = construireHtmlPdfDemandeIndemnisation_(demande);
+  const blob = HtmlService
+    .createHtmlOutput(html)
+    .getAs(MimeType.PDF)
+    .setName(nom);
+
+  verifierBlobPdfDemandeIndemnisation_(blob);
+  const octetsGeneres = blob.getBytes();
+  const tailleAttendue = octetsGeneres.length;
+  const hashAttendu = hacherOctetsDemandeIndemnisation_(
+    octetsGeneres
+  );
+
+  let fichier = null;
+
+  try {
+    fichier = dossier.createFile(blob);
+    fichier.setDescription(JSON.stringify({
+      type: 'PREPFORMATION_DEMANDE_INDEMNISATION',
+      idEnvoi: demande.idEnvoi,
+      reference: demande.reference,
+      dateCreation: new Date().toISOString()
+    }));
+
+    const verification = verifierPdfDemandeIndemnisation_(
+      fichier,
+      demande.idEnvoi,
+      dossier
+    );
+
+    if (
+      verification.taille !== tailleAttendue ||
+      verification.hash !== hashAttendu
+    ) {
+      throw new Error(
+        'Le PDF relu depuis Drive diffère du document généré.'
+      );
+    }
+
+    return verification;
+  } catch (erreur) {
+    if (fichier) {
+      try {
+        fichier.setTrashed(true);
+      } catch (erreurCorbeille) {
+        // Le document non vérifié n'est jamais utilisé pour l'envoi.
+      }
+    }
+    throw erreur;
+  }
+}
+
+
+function trouverPdfDemandeIndemnisation_(idEnvoi, historique) {
+  if (historique && historique.pdfFileId) {
+    try {
+      const fichier = DriveApp.getFileById(historique.pdfFileId);
+      if (!fichier.isTrashed()) {
+        return fichier;
+      }
+    } catch (erreur) {
+      // Recherche par marqueur ci-dessous.
+    }
+  }
+
+  const dossier = obtenirSousDossierPrepFormation_(
+    'Demandes indemnisation',
+    PROPRIETE_DOSSIER_DEMANDES_INDEMNISATION_,
+    'PREPFORMATION_INDEMNISATIONS:',
+    false
+  );
+
+  if (!dossier) {
+    return null;
+  }
+
+  const fichiers = dossier.getFiles();
+  let trouve = null;
+
+  while (fichiers.hasNext()) {
+    const fichier = fichiers.next();
+    if (fichier.isTrashed()) {
+      continue;
+    }
+
+    let description = null;
+    try {
+      description = JSON.parse(fichier.getDescription() || '{}');
+    } catch (erreurDescription) {
+      description = null;
+    }
+
+    if (description && description.idEnvoi === idEnvoi) {
+      if (trouve) {
+        throw new Error(
+          'Plusieurs PDF sont rattachés au même ID_ENVOI : ' + idEnvoi + '.'
+        );
+      }
+      trouve = fichier;
+    }
+  }
+
+  return trouve;
+}
+
+
+function verifierPdfDemandeIndemnisation_(fichier, idEnvoi, dossierOptionnel) {
+  const dossier = dossierOptionnel || obtenirSousDossierPrepFormation_(
+    'Demandes indemnisation',
+    PROPRIETE_DOSSIER_DEMANDES_INDEMNISATION_,
+    'PREPFORMATION_INDEMNISATIONS:',
+    false
+  );
+
+  if (!dossier || !dossierContientFichierPrepFormation_(dossier, fichier)) {
+    throw new Error('Le PDF archivé n’appartient pas au dossier attendu.');
+  }
+
+  if (!fichierDriveEstPrive_(fichier)) {
+    throw new Error('Le PDF archivé n’est pas privé.');
+  }
+
+  let description;
+  try {
+    description = JSON.parse(fichier.getDescription() || '{}');
+  } catch (erreur) {
+    throw new Error('Le marqueur du PDF archivé est illisible.');
+  }
+
+  if (description.idEnvoi !== idEnvoi) {
+    throw new Error('Le PDF archivé ne correspond pas à cet ID_ENVOI.');
+  }
+
+  const blob = fichier.getBlob();
+  verifierBlobPdfDemandeIndemnisation_(blob);
+  const octets = blob.getBytes();
+  const taille = octets.length;
+
+  if (Number(fichier.getSize()) !== taille) {
+    throw new Error('La taille relue du PDF archivé est incohérente.');
+  }
+
+  return {
+    fileId: fichier.getId(),
+    nom: fichier.getName(),
+    taille: taille,
+    hash: hacherOctetsDemandeIndemnisation_(octets),
+    blob: blob.setName(fichier.getName())
+  };
+}
+
+
+function verifierBlobPdfDemandeIndemnisation_(blob) {
+  if (!blob || blob.getContentType() !== MimeType.PDF) {
+    throw new Error('Le document généré n’est pas un PDF valide.');
+  }
+
+  const octets = blob.getBytes();
+  const signature = octets.slice(0, 5).map(function (octet) {
+    return String.fromCharCode((octet + 256) % 256);
+  }).join('');
+
+  if (octets.length < 100 || signature !== '%PDF-') {
+    throw new Error('Le contenu PDF généré est vide ou illisible.');
+  }
+}
+
+
+function hacherOctetsDemandeIndemnisation_(octets) {
+  return Utilities.base64EncodeWebSafe(
+    Utilities.computeDigest(
+      Utilities.DigestAlgorithm.SHA_256,
+      octets
+    )
+  ).replace(/=+$/g, '');
+}
+
+
+function construireNomPdfDemandeIndemnisation_(reference) {
+  const referenceNom = String(reference || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Za-z0-9._-]+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'SANS_REFERENCE';
+  const date = Utilities.formatDate(
+    new Date(),
+    Session.getScriptTimeZone(),
+    'yyyy-MM-dd'
+  );
+  return 'Demande_indemnisation__' + referenceNom + '__' + date + '.pdf';
+}
+
+
+function construireHtmlPdfDemandeIndemnisation_(demande) {
+  const lignes = demande.groupes.map(function (groupe) {
+    const prestations = groupe.prestations.map(function (prestation) {
+      return '<tr>' +
+        '<td>' + echapperHtmlEnvoiIndemnisation_(
+          afficherDateFrancaiseEnvoiIndemnisation_(prestation.dateSession)
+        ) + '</td>' +
+        '<td>' + echapperHtmlEnvoiIndemnisation_(prestation.formation || '—') + '</td>' +
+        '<td>' + echapperHtmlEnvoiIndemnisation_(
+          (prestation.heureDebut || '—') + ' – ' + (prestation.heureFin || '—')
+        ) + '</td>' +
+        '<td>' + echapperHtmlEnvoiIndemnisation_(
+          formaterDureeAmicaleEnvoiIndemnisation_(prestation.dureeHeures)
+        ) + '</td>' +
+        '<td>' + Number(prestation.nombreStagiaires || 0) + '</td>' +
+        '<td>' + echapperHtmlEnvoiIndemnisation_(
+          prestation.remarqueAdministrative || '—'
+        ) + '</td></tr>';
+    }).join('');
+
+    return '<section><h2>' +
+      echapperHtmlEnvoiIndemnisation_(groupe.nomComplet) +
+      '</h2><table><thead><tr><th>Date</th><th>Formation</th>' +
+      '<th>Horaires</th><th>Durée</th><th>Stagiaires</th>' +
+      '<th>Remarque</th></tr></thead><tbody>' + prestations +
+      '</tbody></table><p class="total"><strong>Total individuel :</strong> ' +
+      groupe.nombreSeances + ' séance(s) · ' +
+      echapperHtmlEnvoiIndemnisation_(groupe.totalHeuresLibelle) +
+      '</p></section>';
+  }).join('');
+  const date = Utilities.formatDate(
+    new Date(),
+    Session.getScriptTimeZone(),
+    'dd/MM/yyyy'
+  );
+
+  return '<!doctype html><html><head><meta charset="UTF-8"><style>' +
+    '@page{size:A4;margin:18mm 14mm}body{font-family:Arial,sans-serif;' +
+    'color:#243746;font-size:10.5pt;line-height:1.4}h1{color:#17324d;' +
+    'font-size:22pt;margin:0 0 4px}h2{font-size:14pt;color:#17324d;' +
+    'margin:20px 0 7px}header{border-bottom:3px solid #1b6ca8;' +
+    'padding-bottom:12px;margin-bottom:18px}.meta{display:grid;' +
+    'grid-template-columns:1fr 1fr;gap:5px 20px;background:#f2f6f9;' +
+    'padding:12px;border-radius:6px}table{width:100%;border-collapse:collapse;' +
+    'font-size:9pt}th{background:#17324d;color:white;text-align:left}' +
+    'th,td{border:1px solid #cbd8e1;padding:6px;vertical-align:top}' +
+    'tr:nth-child(even) td{background:#f7f9fb}.total{text-align:right}' +
+    '.resume{margin-top:20px;padding:12px;border-left:4px solid #1b6ca8;' +
+    'background:#eef4f8}.remarque{margin-top:18px;white-space:pre-wrap}' +
+    '</style></head><body><header><h1>Demande d’indemnisation</h1>' +
+    '<strong>' + echapperHtmlEnvoiIndemnisation_(
+      demande.nomCentre || 'PrepFormation'
+    ) + '</strong></header><div class="meta"><div><strong>Référence :</strong> ' +
+    echapperHtmlEnvoiIndemnisation_(demande.reference) +
+    '</div><div><strong>Date :</strong> ' + date +
+    '</div><div><strong>Destinataire :</strong> ' +
+    echapperHtmlEnvoiIndemnisation_(demande.destinataire) +
+    '</div><div><strong>Formateurs :</strong> ' +
+    echapperHtmlEnvoiIndemnisation_(demande.groupes.map(function (groupe) {
+      return groupe.nomComplet;
+    }).join(', ')) + '</div></div>' + lignes +
+    '<div class="resume"><strong>Récapitulatif général</strong><br>' +
+    demande.nombreSeances + ' séance(s) distincte(s) · ' +
+    demande.nombrePrestations + ' prestation(s) · ' +
+    echapperHtmlEnvoiIndemnisation_(demande.volumeHeuresLibelle) +
+    '</div><div class="remarque"><strong>Remarque finale</strong><br>' +
+    echapperHtmlEnvoiIndemnisation_(demande.remarqueFinale || '—') +
+    '</div></body></html>';
+}
+
+
 function mettreAJourPrestationsApresEnvoi_(demande, session) {
   const contexte = lireContextePrestationsEnvoiIndemnisation_(
     demande.idsPrestations,
@@ -1350,7 +1664,11 @@ function creerHistoriqueEnvoiIndemnisation_(
     STATUT_ENVOI: statut,
     MESSAGE_ERREUR: messageErreur || '',
     SESSION_ADMIN: session.identifiantHistorique,
-    DATE_CREATION: new Date()
+    DATE_CREATION: new Date(),
+    PDF_FILE_ID: '',
+    PDF_NOM: '',
+    PDF_TAILLE: '',
+    PDF_HASH: ''
   };
   COLONNES_HISTORIQUE_ENVOIS_INDEMNISATIONS_.forEach(
     function (colonne) {
@@ -1448,7 +1766,10 @@ function serialiserHistoriqueEnvoiIndemnisation_(envoi) {
     volumeHeuresLibelle: envoi.volumeHeuresLibelle,
     statut: envoi.statut,
     messageErreur: envoi.messageErreur,
-    sessionAdmin: envoi.sessionAdmin
+    sessionAdmin: envoi.sessionAdmin,
+    pdfNom: envoi.pdfNom,
+    pdfTaille: envoi.pdfTaille,
+    pdfHash: envoi.pdfHash
   };
 }
 
@@ -1503,6 +1824,10 @@ function lireHistoriqueEnvoiDepuisLigne_(ligne, index, numeroLigne) {
     statut: String(ligne[index.STATUT_ENVOI] || ''),
     messageErreur: String(ligne[index.MESSAGE_ERREUR] || ''),
     sessionAdmin: String(ligne[index.SESSION_ADMIN] || ''),
+    pdfFileId: String(ligne[index.PDF_FILE_ID] || '').trim(),
+    pdfNom: String(ligne[index.PDF_NOM] || '').trim(),
+    pdfTaille: Number(ligne[index.PDF_TAILLE] || 0),
+    pdfHash: String(ligne[index.PDF_HASH] || '').trim(),
     numeroLigne: numeroLigne
   };
 }
