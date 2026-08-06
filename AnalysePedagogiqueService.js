@@ -274,6 +274,26 @@ function calculerAnalysePedagogiqueDepuisTables_(
   const itemsActifs = items.filter(function (item) {
     return item.compteDansAnalyse;
   });
+  const agregatsParCategorie = calculerAgregatsCategoriesAnalysePedagogique_(
+    categories,
+    itemsActifs
+  );
+  const premieresAcquisitions = construirePremieresAcquisitionsAnalysePedagogique_(
+    itemsActifs,
+    historique,
+    sessions.parId
+  );
+  const progressionChronologique = calculerProgressionChronologiqueAnalysePedagogique_(
+    sessionsStagiaire,
+    premieresAcquisitions
+  );
+  const activiteMensuelle = calculerActiviteMensuelleAnalysePedagogique_(
+    aujourdHui,
+    itemsActifs,
+    historique,
+    sessions.parId,
+    premieresAcquisitions
+  );
   const itemsJamaisTravailles = itemsActifs.filter(function (item) {
     return item.nombreFoisTravaille === 0;
   });
@@ -330,6 +350,9 @@ function calculerAnalysePedagogiqueDepuisTables_(
         resumerItemAnalysePedagogique_
       )
     },
+    agregatsParCategorie: agregatsParCategorie,
+    progressionChronologique: progressionChronologique,
+    activiteMensuelle: activiteMensuelle,
     items: items,
     pointsForts: pointsForts,
     pointsFaibles: pointsFaibles,
@@ -362,6 +385,214 @@ function calculerAnalysePedagogiqueDepuisTables_(
     },
     avertissements: avertissements.slice(0, 100)
   };
+}
+
+
+/**
+ * Agrégats de présentation uniquement. Les catégories actives sans item actif
+ * sont conservées avec un pourcentage non calculable afin de ne pas produire
+ * une visualisation trompeuse.
+ */
+function calculerAgregatsCategoriesAnalysePedagogique_(
+  categories,
+  itemsActifs
+) {
+  const agregatsParId = {};
+
+  Object.keys(categories.parId).forEach(function (idCategorie) {
+    const categorie = categories.parId[idCategorie];
+
+    if (!categorie.actif || !categorie.appartientFormation) {
+      return;
+    }
+
+    agregatsParId[idCategorie] = {
+      idCategorie: idCategorie,
+      categorie: categorie.intitule,
+      ordre: categorie.ordre,
+      nombreItemsActifs: 0,
+      nombreItemsTravailles: 0,
+      nombreItemsAcquis: 0,
+      pourcentageAcquisition: null
+    };
+  });
+
+  itemsActifs.forEach(function (item) {
+    const agregat = agregatsParId[item.idCategorie];
+
+    if (!agregat) {
+      return;
+    }
+
+    agregat.nombreItemsActifs++;
+    if (item.nombreFoisTravaille > 0) {
+      agregat.nombreItemsTravailles++;
+    }
+    if (item.nombreFoisAcquis > 0) {
+      agregat.nombreItemsAcquis++;
+    }
+  });
+
+  return Object.keys(agregatsParId).map(function (idCategorie) {
+    const agregat = agregatsParId[idCategorie];
+    agregat.pourcentageAcquisition = agregat.nombreItemsActifs
+      ? arrondirAnalysePedagogique_(
+        agregat.nombreItemsAcquis / agregat.nombreItemsActifs * 100,
+        1
+      )
+      : null;
+    return agregat;
+  }).sort(function (a, b) {
+    return a.ordre - b.ordre ||
+      a.categorie.localeCompare(b.categorie) ||
+      a.idCategorie.localeCompare(b.idCategorie);
+  });
+}
+
+
+/**
+ * Identifie une seule date de première acquisition par item actif. Cet index
+ * est partagé par la progression et l'activité mensuelle.
+ */
+function construirePremieresAcquisitionsAnalysePedagogique_(
+  itemsActifs,
+  historique,
+  sessionsParId
+) {
+  const parItem = {};
+  const nombresParDate = {};
+
+  itemsActifs.forEach(function (item) {
+    const acquisitions = historique.acquisParItem[item.idItem] || new Set();
+    let premiereSession = null;
+
+    acquisitions.forEach(function (idSession) {
+      const session = sessionsParId[idSession];
+
+      if (!session) {
+        return;
+      }
+      if (
+        !premiereSession ||
+        comparerDatesAnalysePedagogique_(
+          session.date,
+          premiereSession.date
+        ) < 0 ||
+        (
+          comparerDatesAnalysePedagogique_(
+            session.date,
+            premiereSession.date
+          ) === 0 &&
+          session.idSession.localeCompare(premiereSession.idSession) < 0
+        )
+      ) {
+        premiereSession = session;
+      }
+    });
+
+    if (!premiereSession) {
+      return;
+    }
+
+    const date = convertirDateIsoAnalysePedagogique_(premiereSession.date);
+    parItem[item.idItem] = {
+      idSession: premiereSession.idSession,
+      date: date
+    };
+    nombresParDate[date] = (nombresParDate[date] || 0) + 1;
+  });
+
+  return {
+    parItem: parItem,
+    nombresParDate: nombresParDate
+  };
+}
+
+
+function calculerProgressionChronologiqueAnalysePedagogique_(
+  sessionsStagiaire,
+  premieresAcquisitions
+) {
+  const seancesParDate = {};
+
+  sessionsStagiaire.forEach(function (session) {
+    const date = convertirDateIsoAnalysePedagogique_(session.date);
+    seancesParDate[date] = (seancesParDate[date] || 0) + 1;
+  });
+
+  let cumulItemsAcquis = 0;
+  return Object.keys(seancesParDate).sort().map(function (date) {
+    const nouvellesAcquisitions =
+      premieresAcquisitions.nombresParDate[date] || 0;
+    cumulItemsAcquis += nouvellesAcquisitions;
+
+    return {
+      date: date,
+      nombreSeances: seancesParDate[date],
+      nouvellesAcquisitions: nouvellesAcquisitions,
+      cumulItemsAcquis: cumulItemsAcquis
+    };
+  });
+}
+
+
+function calculerActiviteMensuelleAnalysePedagogique_(
+  aujourdHui,
+  itemsActifs,
+  historique,
+  sessionsParId,
+  premieresAcquisitions
+) {
+  const mois = [];
+  const parCle = {};
+
+  for (let decalage = 11; decalage >= 0; decalage--) {
+    const date = new Date(
+      aujourdHui.getFullYear(),
+      aujourdHui.getMonth() - decalage,
+      1
+    );
+    const cle = date.getFullYear() + '-' +
+      String(date.getMonth() + 1).padStart(2, '0');
+    const agregat = {
+      mois: cle,
+      nombreItemsTravailles: 0,
+      nouvellesAcquisitions: 0
+    };
+
+    mois.push(agregat);
+    parCle[cle] = agregat;
+  }
+
+  itemsActifs.forEach(function (item) {
+    const travaux = historique.travauxParItem[item.idItem] || new Set();
+
+    travaux.forEach(function (idSession) {
+      const session = sessionsParId[idSession];
+
+      if (!session) {
+        return;
+      }
+
+      const cle = session.date.getFullYear() + '-' +
+        String(session.date.getMonth() + 1).padStart(2, '0');
+      if (parCle[cle]) {
+        // Une liaison item-séance ne compte qu'une fois dans le mois.
+        parCle[cle].nombreItemsTravailles++;
+      }
+    });
+  });
+
+  Object.keys(premieresAcquisitions.parItem).forEach(function (idItem) {
+    const date = premieresAcquisitions.parItem[idItem].date;
+    const cle = date.slice(0, 7);
+
+    if (parCle[cle]) {
+      parCle[cle].nouvellesAcquisitions++;
+    }
+  });
+
+  return mois;
 }
 
 

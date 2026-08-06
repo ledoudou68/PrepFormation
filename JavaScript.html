@@ -2035,7 +2035,24 @@ function creerOngletAnalysePedagogiqueFicheStagiaire_() {
       </section>
 
       <div id="contenuAnalysePedagogiqueFiche" class="masque">
-        <section class="bloc synthese-analyse-pedagogique-fiche">
+        <nav
+          class="navigation-rapide-analyse-pedagogique"
+          aria-label="Navigation rapide dans l’analyse pédagogique"
+        >
+          <button type="button" onclick="naviguerVersSectionAnalysePedagogique_('analyse-section-synthese')">Synthèse</button>
+          <button type="button" onclick="naviguerVersSectionAnalysePedagogique_('analyse-section-recommandations')">Recommandations</button>
+          <button type="button" onclick="naviguerVersSectionAnalysePedagogique_('analyse-section-radar')">Radar</button>
+          <button type="button" onclick="naviguerVersSectionAnalysePedagogique_('analyse-section-progression')">Progression</button>
+          <button type="button" onclick="naviguerVersSectionAnalysePedagogique_('analyse-section-points-forts')">Points forts</button>
+          <button type="button" onclick="naviguerVersSectionAnalysePedagogique_('analyse-section-points-faibles')">Points à renforcer</button>
+          <button type="button" onclick="naviguerVersSectionAnalysePedagogique_('analyse-section-oublies')">Items oubliés</button>
+          <button type="button" onclick="naviguerVersSectionAnalysePedagogique_('detailItemsAnalysePedagogiqueFiche')">Détail complet</button>
+        </nav>
+
+        <section
+          id="analyse-section-synthese"
+          class="bloc synthese-analyse-pedagogique-fiche ancre-analyse-pedagogique"
+        >
           <p
             id="phraseSyntheseAnalysePedagogiqueFiche"
             class="phrase-synthese-analyse-pedagogique-fiche"
@@ -2079,9 +2096,17 @@ function creerOngletAnalysePedagogiqueFicheStagiaire_() {
               'analyseItemsJamaisAcquis'
             )}
           </div>
+
+          <div
+            id="resumeVisuelAnalysePedagogiqueFiche"
+            class="resume-visuel-analyse-pedagogique"
+          ></div>
         </section>
 
-        <section class="bloc bloc-recommandations-analyse-pedagogique">
+        <section
+          id="analyse-section-recommandations"
+          class="bloc bloc-recommandations-analyse-pedagogique ancre-analyse-pedagogique"
+        >
           <div class="fiche-bloc-entete">
             <div>
               <p class="fiche-sur-titre">Prochaine séance</p>
@@ -2092,8 +2117,59 @@ function creerOngletAnalysePedagogiqueFicheStagiaire_() {
           <div id="recommandationsAnalysePedagogiqueFiche"></div>
         </section>
 
+        <section
+          id="analyse-section-radar"
+          class="bloc bloc-visualisation-analyse-pedagogique ancre-analyse-pedagogique"
+        >
+          <div class="fiche-bloc-entete">
+            <div>
+              <p class="fiche-sur-titre">Acquisitions</p>
+              <h2>Progression par catégorie</h2>
+              <p>
+                Pourcentage d’items actifs acquis dans chaque catégorie active.
+              </p>
+            </div>
+          </div>
+          <div id="visualisationCategoriesAnalysePedagogiqueFiche"></div>
+        </section>
+
+        <section
+          id="analyse-section-progression"
+          class="bloc bloc-visualisation-analyse-pedagogique ancre-analyse-pedagogique"
+        >
+          <div class="fiche-bloc-entete">
+            <div>
+              <p class="fiche-sur-titre">Évolution</p>
+              <h2>Progression chronologique</h2>
+              <p>
+                Cumul des items acquis, comptés uniquement lors de leur première acquisition.
+              </p>
+            </div>
+          </div>
+          <div id="progressionChronologiqueAnalysePedagogiqueFiche"></div>
+        </section>
+
+        <section
+          id="analyse-section-activite"
+          class="bloc bloc-visualisation-analyse-pedagogique ancre-analyse-pedagogique"
+        >
+          <div class="fiche-bloc-entete">
+            <div>
+              <p class="fiche-sur-titre">12 derniers mois</p>
+              <h2>Activité pédagogique</h2>
+              <p>
+                Travaux item-séance et nouvelles acquisitions, présentés sur deux échelles séparées.
+              </p>
+            </div>
+          </div>
+          <div id="activiteMensuelleAnalysePedagogiqueFiche"></div>
+        </section>
+
         <div class="grille-forces-faiblesses-analyse-pedagogique">
-          <section class="bloc">
+          <section
+            id="analyse-section-points-forts"
+            class="bloc ancre-analyse-pedagogique"
+          >
             <div class="fiche-bloc-entete">
               <div>
                 <h2>Points forts</h2>
@@ -2103,7 +2179,10 @@ function creerOngletAnalysePedagogiqueFicheStagiaire_() {
             <div id="pointsFortsAnalysePedagogiqueFiche"></div>
           </section>
 
-          <section class="bloc">
+          <section
+            id="analyse-section-points-faibles"
+            class="bloc ancre-analyse-pedagogique"
+          >
             <div class="fiche-bloc-entete">
               <div>
                 <h2>Points à renforcer</h2>
@@ -2114,7 +2193,10 @@ function creerOngletAnalysePedagogiqueFicheStagiaire_() {
           </section>
         </div>
 
-        <section class="bloc">
+        <section
+          id="analyse-section-oublies"
+          class="bloc ancre-analyse-pedagogique"
+        >
           <div class="fiche-bloc-entete">
             <div>
               <h2>Items non revus récemment</h2>
@@ -2128,7 +2210,7 @@ function creerOngletAnalysePedagogiqueFicheStagiaire_() {
 
         <details
           id="detailItemsAnalysePedagogiqueFiche"
-          class="bloc detail-items-analyse-pedagogique"
+          class="bloc detail-items-analyse-pedagogique ancre-analyse-pedagogique"
         >
           <summary>
             <span>
@@ -2422,6 +2504,10 @@ function afficherAnalysePedagogiqueFicheStagiaire(donnees) {
       : 0
   );
 
+  afficherResumeVisuelAnalysePedagogiqueFiche_(donnees);
+  afficherVisualisationCategoriesAnalysePedagogiqueFiche_(donnees);
+  afficherProgressionChronologiqueAnalysePedagogiqueFiche_(donnees);
+  afficherActiviteMensuelleAnalysePedagogiqueFiche_(donnees);
   afficherRecommandationsAnalysePedagogiqueFiche_(donnees);
   afficherPointsFortsAnalysePedagogiqueFiche_(
     Array.isArray(donnees.pointsForts) ? donnees.pointsForts : []
@@ -2431,6 +2517,639 @@ function afficherAnalysePedagogiqueFicheStagiaire(donnees) {
   );
   afficherItemsOubliesAnalysePedagogiqueFiche_(donnees);
   appliquerFiltreDetailAnalysePedagogique('TOUS');
+}
+
+
+function naviguerVersSectionAnalysePedagogique_(identifiant) {
+  const section = document.getElementById(identifiant);
+
+  if (section && typeof section.scrollIntoView === 'function') {
+    section.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start'
+    });
+  }
+}
+
+
+function afficherResumeVisuelAnalysePedagogiqueFiche_(donnees) {
+  const zone = document.getElementById(
+    'resumeVisuelAnalysePedagogiqueFiche'
+  );
+  if (!zone) {
+    return;
+  }
+
+  const synthese = donnees && donnees.synthese
+    ? donnees.synthese
+    : {};
+  const total = Math.max(
+    0,
+    Number(synthese.nombreItemsReferentielActifs) || 0
+  );
+  const valeurs = [
+    {
+      libelle: 'Items travaillés',
+      valeur: Number(synthese.nombreItemsTravailles) || 0,
+      classe: 'jauge-travail-analyse'
+    },
+    {
+      libelle: 'Items acquis',
+      valeur: Number(synthese.nombreItemsAcquis) || 0,
+      classe: 'jauge-acquis-analyse'
+    },
+    {
+      libelle: 'Items prioritaires',
+      valeur: Array.isArray(donnees.itemsPrioritaires)
+        ? donnees.itemsPrioritaires.length
+        : 0,
+      classe: 'jauge-priorite-analyse'
+    },
+    {
+      libelle: 'Items oubliés',
+      valeur: Array.isArray(donnees.itemsOublies)
+        ? donnees.itemsOublies.length
+        : 0,
+      classe: 'jauge-oubli-analyse'
+    }
+  ];
+
+  zone.innerHTML = `
+    <div class="grille-jauges-analyse-pedagogique">
+      ${valeurs.map(function (indicateur) {
+        return creerJaugeAnalysePedagogique_(
+          indicateur.libelle,
+          indicateur.valeur,
+          total,
+          indicateur.classe
+        );
+      }).join('')}
+    </div>
+  `;
+}
+
+
+function creerJaugeAnalysePedagogique_(libelle, valeur, total, classe) {
+  const nombre = Math.max(0, Number(valeur) || 0);
+  const pourcentage = total > 0
+    ? Math.min(100, Math.round(nombre / total * 1000) / 10)
+    : null;
+  const textePourcentage = pourcentage === null
+    ? 'Non calculable'
+    : formaterTauxAnalysePedagogique_(pourcentage);
+
+  return `
+    <article class="jauge-analyse-pedagogique ${classe}">
+      <header>
+        <span>${echapperHtml(libelle)}</span>
+        <strong>${nombre} / ${total} · ${echapperHtml(textePourcentage)}</strong>
+      </header>
+      <div
+        class="piste-jauge-analyse-pedagogique"
+        role="progressbar"
+        aria-label="${echapperHtml(libelle)}"
+        aria-valuemin="0"
+        aria-valuemax="100"
+        aria-valuenow="${pourcentage === null ? 0 : pourcentage}"
+        aria-valuetext="${nombre} sur ${total}, ${echapperHtml(textePourcentage)}"
+      >
+        <span style="width: ${pourcentage === null ? 0 : pourcentage}%"></span>
+      </div>
+    </article>
+  `;
+}
+
+
+function afficherVisualisationCategoriesAnalysePedagogiqueFiche_(donnees) {
+  const zone = document.getElementById(
+    'visualisationCategoriesAnalysePedagogiqueFiche'
+  );
+  if (!zone) {
+    return;
+  }
+
+  const agregats = Array.isArray(donnees.agregatsParCategorie)
+    ? donnees.agregatsParCategorie.map(function (agregat) {
+      const valeurBrute = agregat.pourcentageAcquisition;
+      return Object.assign({}, agregat, {
+        pourcentageAcquisition:
+          valeurBrute === null || valeurBrute === undefined
+            ? null
+            : Math.max(0, Math.min(100, Number(valeurBrute) || 0))
+      });
+    })
+    : [];
+
+  if (!agregats.length) {
+    zone.innerHTML = creerEtatVideAnalysePedagogique_(
+      'Aucune catégorie active n’est disponible pour cette formation.'
+    );
+    return;
+  }
+
+  const valeursExploitables = agregats.filter(function (agregat) {
+    return agregat.pourcentageAcquisition !== null;
+  });
+  const afficherRadar = agregats.length >= 3 &&
+    agregats.length <= 10 &&
+    valeursExploitables.length > 0;
+  const graphique = afficherRadar
+    ? creerRadarCategoriesAnalysePedagogique_(agregats)
+    : creerBarresCategoriesAnalysePedagogique_(agregats);
+  const explication = agregats.length > 10
+    ? '<p class="note-visualisation-analyse">Les barres sont utilisées pour préserver la lisibilité des nombreuses catégories.</p>'
+    : agregats.length < 3
+      ? '<p class="note-visualisation-analyse">Moins de trois catégories : présentation en barres horizontales.</p>'
+      : !valeursExploitables.length
+        ? '<p class="note-visualisation-analyse">Aucun pourcentage calculable : le radar n’est pas affiché.</p>'
+        : '';
+
+  zone.innerHTML = `
+    ${explication}
+    ${graphique}
+    ${creerTableauCategoriesAnalysePedagogique_(agregats)}
+  `;
+}
+
+
+function creerRadarCategoriesAnalysePedagogique_(agregats) {
+  const largeur = 720;
+  const hauteur = 520;
+  const centreX = 360;
+  const centreY = 250;
+  const rayon = 170;
+
+  function point(position, proportion, marge) {
+    const angle = -Math.PI / 2 +
+      position * Math.PI * 2 / agregats.length;
+    const distance = rayon * proportion + (marge || 0);
+    return {
+      x: centreX + Math.cos(angle) * distance,
+      y: centreY + Math.sin(angle) * distance,
+      cosinus: Math.cos(angle)
+    };
+  }
+
+  const niveaux = [25, 50, 75, 100].map(function (niveau) {
+    const points = agregats.map(function (_agregat, position) {
+      const coordonnees = point(position, niveau / 100, 0);
+      return coordonnees.x.toFixed(1) + ',' +
+        coordonnees.y.toFixed(1);
+    }).join(' ');
+    return `<polygon points="${points}" class="grille-radar-analyse"></polygon>`;
+  }).join('');
+  const axes = agregats.map(function (_agregat, position) {
+    const extremite = point(position, 1, 0);
+    return `<line x1="${centreX}" y1="${centreY}" x2="${extremite.x.toFixed(1)}" y2="${extremite.y.toFixed(1)}" class="axe-radar-analyse"></line>`;
+  }).join('');
+  const pointsValeurs = agregats.map(function (agregat, position) {
+    const pourcentage = agregat.pourcentageAcquisition === null
+      ? 0
+      : agregat.pourcentageAcquisition;
+    const coordonnees = point(position, pourcentage / 100, 0);
+    return coordonnees.x.toFixed(1) + ',' +
+      coordonnees.y.toFixed(1);
+  }).join(' ');
+  const marqueurs = agregats.map(function (agregat, position) {
+    const pourcentage = agregat.pourcentageAcquisition === null
+      ? 0
+      : agregat.pourcentageAcquisition;
+    const coordonnees = point(position, pourcentage / 100, 0);
+    const titre = agregat.categorie + ' : ' +
+      (agregat.pourcentageAcquisition === null
+        ? 'non calculable'
+        : formaterTauxAnalysePedagogique_(pourcentage)) +
+      ', ' + agregat.nombreItemsAcquis + ' acquis sur ' +
+      agregat.nombreItemsActifs + ' items actifs';
+    return `
+      <circle
+        cx="${coordonnees.x.toFixed(1)}"
+        cy="${coordonnees.y.toFixed(1)}"
+        r="6"
+        class="point-radar-analyse"
+        tabindex="0"
+        aria-label="${echapperHtml(titre)}"
+      ><title>${echapperHtml(titre)}</title></circle>
+    `;
+  }).join('');
+  const libelles = agregats.map(function (agregat, position) {
+    const coordonnees = point(position, 1, 34);
+    const ancrage = coordonnees.cosinus > 0.2
+      ? 'start'
+      : coordonnees.cosinus < -0.2
+        ? 'end'
+        : 'middle';
+    const libelle = String(agregat.categorie || 'Catégorie');
+    const libelleCourt = libelle.length > 24
+      ? libelle.slice(0, 22) + '…'
+      : libelle;
+    return `
+      <text
+        x="${coordonnees.x.toFixed(1)}"
+        y="${coordonnees.y.toFixed(1)}"
+        text-anchor="${ancrage}"
+        class="libelle-radar-analyse"
+      ><title>${echapperHtml(libelle)}</title>${echapperHtml(libelleCourt)}</text>
+    `;
+  }).join('');
+
+  return `
+    <div class="conteneur-svg-analyse conteneur-radar-analyse">
+      <svg
+        class="svg-radar-analyse"
+        viewBox="0 0 ${largeur} ${hauteur}"
+        role="img"
+        aria-label="Radar du pourcentage d’acquisition par catégorie"
+        data-visualisation-analyse="radar"
+      >
+        <title>Pourcentage d’items actifs acquis par catégorie</title>
+        ${niveaux}
+        ${axes}
+        <polygon points="${pointsValeurs}" class="surface-radar-analyse"></polygon>
+        ${marqueurs}
+        ${libelles}
+        <text x="${centreX + 8}" y="${centreY - rayon * 0.25}" class="niveau-radar-analyse">25 %</text>
+        <text x="${centreX + 8}" y="${centreY - rayon * 0.5}" class="niveau-radar-analyse">50 %</text>
+        <text x="${centreX + 8}" y="${centreY - rayon * 0.75}" class="niveau-radar-analyse">75 %</text>
+        <text x="${centreX + 8}" y="${centreY - rayon}" class="niveau-radar-analyse">100 %</text>
+      </svg>
+    </div>
+    <div class="legende-visualisation-analyse">
+      <span><i class="legende-acquis-analyse"></i>Items acquis / items actifs</span>
+      <span>Échelle fixe : 0 à 100 %</span>
+    </div>
+  `;
+}
+
+
+function creerBarresCategoriesAnalysePedagogique_(agregats) {
+  return `
+    <div
+      class="barres-categories-analyse-pedagogique"
+      data-visualisation-analyse="barres-categories"
+    >
+      ${agregats.map(function (agregat) {
+        const pourcentage = agregat.pourcentageAcquisition;
+        const largeur = pourcentage === null ? 0 : pourcentage;
+        const texte = pourcentage === null
+          ? 'Non calculable'
+          : formaterTauxAnalysePedagogique_(pourcentage);
+        const titre = agregat.categorie + ' : ' + texte + ', ' +
+          agregat.nombreItemsAcquis + ' acquis sur ' +
+          agregat.nombreItemsActifs + ' items actifs';
+        return `
+          <div class="barre-categorie-analyse">
+            <header>
+              <strong>${echapperHtml(agregat.categorie)}</strong>
+              <span>${agregat.nombreItemsAcquis} / ${agregat.nombreItemsActifs} · ${echapperHtml(texte)}</span>
+            </header>
+            <div
+              class="piste-barre-categorie-analyse"
+              role="progressbar"
+              tabindex="0"
+              aria-label="${echapperHtml(titre)}"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow="${pourcentage === null ? 0 : pourcentage}"
+              title="${echapperHtml(titre)}"
+            ><span style="width: ${largeur}%"></span></div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+
+function creerTableauCategoriesAnalysePedagogique_(agregats) {
+  return `
+    <div class="tableau-responsive tableau-reference-visualisation-analyse">
+      <table class="tableau tableau-compact-analyse-pedagogique">
+        <caption class="texte-visuellement-cache">
+          Données du graphique de progression par catégorie
+        </caption>
+        <thead><tr>
+          <th>Catégorie</th>
+          <th>Items actifs</th>
+          <th>Travaillés</th>
+          <th>Acquis</th>
+          <th>Acquisition</th>
+        </tr></thead>
+        <tbody>
+          ${agregats.map(function (agregat) {
+            return `<tr>
+              <td><strong>${echapperHtml(agregat.categorie)}</strong></td>
+              <td>${Number(agregat.nombreItemsActifs) || 0}</td>
+              <td>${Number(agregat.nombreItemsTravailles) || 0}</td>
+              <td>${Number(agregat.nombreItemsAcquis) || 0}</td>
+              <td>${echapperHtml(formaterTauxAnalysePedagogique_(agregat.pourcentageAcquisition))}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+
+function afficherProgressionChronologiqueAnalysePedagogiqueFiche_(donnees) {
+  const zone = document.getElementById(
+    'progressionChronologiqueAnalysePedagogiqueFiche'
+  );
+  if (!zone) {
+    return;
+  }
+
+  const progression = Array.isArray(donnees.progressionChronologique)
+    ? donnees.progressionChronologique
+    : [];
+  const tableau = creerTableauProgressionAnalysePedagogique_(progression);
+
+  if (progression.length < 2) {
+    zone.innerHTML = creerEtatVideAnalysePedagogique_(
+      progression.length
+        ? 'Une deuxième date de séance est nécessaire pour tracer une évolution.'
+        : 'Aucune date de séance exploitable pour tracer la progression.'
+    ) + tableau;
+    return;
+  }
+
+  zone.innerHTML = `
+    ${creerCourbeProgressionAnalysePedagogique_(progression)}
+    <div class="legende-visualisation-analyse">
+      <span><i class="legende-progression-analyse"></i>Items acquis pour la première fois, en cumul</span>
+    </div>
+    ${tableau}
+  `;
+}
+
+
+function creerCourbeProgressionAnalysePedagogique_(progression) {
+  const largeur = 860;
+  const hauteur = 330;
+  const marge = { gauche: 58, droite: 26, haut: 24, bas: 58 };
+  const largeurUtile = largeur - marge.gauche - marge.droite;
+  const hauteurUtile = hauteur - marge.haut - marge.bas;
+  const maximum = Math.max(
+    1,
+    ...progression.map(function (point) {
+      return Number(point.cumulItemsAcquis) || 0;
+    })
+  );
+
+  function coordonneeX(position) {
+    return marge.gauche +
+      position * largeurUtile / Math.max(1, progression.length - 1);
+  }
+
+  function coordonneeY(valeur) {
+    return marge.haut + hauteurUtile -
+      (Number(valeur) || 0) / maximum * hauteurUtile;
+  }
+
+  const niveaux = [0, 0.25, 0.5, 0.75, 1].map(function (ratio) {
+    const valeur = Math.round(maximum * ratio);
+    const y = coordonneeY(valeur);
+    return `
+      <line x1="${marge.gauche}" y1="${y.toFixed(1)}" x2="${largeur - marge.droite}" y2="${y.toFixed(1)}" class="grille-courbe-analyse"></line>
+      <text x="${marge.gauche - 10}" y="${(y + 4).toFixed(1)}" text-anchor="end" class="libelle-axe-analyse">${valeur}</text>
+    `;
+  }).join('');
+  const points = progression.map(function (point, position) {
+    return coordonneeX(position).toFixed(1) + ',' +
+      coordonneeY(point.cumulItemsAcquis).toFixed(1);
+  }).join(' ');
+  const pasLibelle = Math.max(1, Math.ceil(progression.length / 8));
+  const marqueurs = progression.map(function (point, position) {
+    const x = coordonneeX(position);
+    const y = coordonneeY(point.cumulItemsAcquis);
+    const titre = afficherDateFrancaise(point.date) + ' : ' +
+      Number(point.cumulItemsAcquis || 0) + ' item(s) acquis au total, ' +
+      Number(point.nouvellesAcquisitions || 0) + ' nouvelle(s) acquisition(s)';
+    const libelle = position % pasLibelle === 0 ||
+      position === progression.length - 1
+      ? `<text x="${x.toFixed(1)}" y="${hauteur - 25}" text-anchor="middle" class="libelle-axe-analyse">${echapperHtml(afficherDateFrancaise(point.date))}</text>`
+      : '';
+    return `
+      <circle
+        cx="${x.toFixed(1)}"
+        cy="${y.toFixed(1)}"
+        r="5"
+        class="point-courbe-analyse"
+        tabindex="0"
+        aria-label="${echapperHtml(titre)}"
+      ><title>${echapperHtml(titre)}</title></circle>
+      ${libelle}
+    `;
+  }).join('');
+
+  return `
+    <div class="conteneur-svg-analyse conteneur-courbe-analyse">
+      <svg
+        viewBox="0 0 ${largeur} ${hauteur}"
+        role="img"
+        aria-label="Évolution chronologique du cumul d’items acquis"
+        data-visualisation-analyse="courbe-progression"
+      >
+        <title>Cumul des premières acquisitions à chaque date de séance</title>
+        ${niveaux}
+        <polyline points="${points}" class="ligne-progression-analyse"></polyline>
+        ${marqueurs}
+      </svg>
+    </div>
+  `;
+}
+
+
+function creerTableauProgressionAnalysePedagogique_(progression) {
+  if (!progression.length) {
+    return '';
+  }
+
+  return `
+    <div class="tableau-responsive tableau-reference-visualisation-analyse">
+      <table class="tableau tableau-compact-analyse-pedagogique">
+        <caption class="texte-visuellement-cache">
+          Données de la courbe de progression chronologique
+        </caption>
+        <thead><tr>
+          <th>Date</th>
+          <th>Séances ce jour</th>
+          <th>Nouvelles acquisitions</th>
+          <th>Cumul acquis</th>
+        </tr></thead>
+        <tbody>
+          ${progression.map(function (point) {
+            return `<tr>
+              <td>${echapperHtml(afficherDateFrancaise(point.date) || '—')}</td>
+              <td>${Number(point.nombreSeances) || 0}</td>
+              <td>${Number(point.nouvellesAcquisitions) || 0}</td>
+              <td><strong>${Number(point.cumulItemsAcquis) || 0}</strong></td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+
+function afficherActiviteMensuelleAnalysePedagogiqueFiche_(donnees) {
+  const zone = document.getElementById(
+    'activiteMensuelleAnalysePedagogiqueFiche'
+  );
+  if (!zone) {
+    return;
+  }
+
+  const activite = Array.isArray(donnees.activiteMensuelle)
+    ? donnees.activiteMensuelle
+    : [];
+  if (!activite.length) {
+    zone.innerHTML = creerEtatVideAnalysePedagogique_(
+      'Aucune activité mensuelle exploitable.'
+    );
+    return;
+  }
+
+  zone.innerHTML = `
+    <div class="grille-activite-mensuelle-analyse">
+      <article>
+        <h3>Items travaillés par mois</h3>
+        <p>Nombre de liaisons distinctes item-séance.</p>
+        ${creerGraphiqueBarresMensuellesAnalysePedagogique_(
+          activite,
+          'nombreItemsTravailles',
+          'Items travaillés',
+          'travail'
+        )}
+      </article>
+      <article>
+        <h3>Nouvelles acquisitions par mois</h3>
+        <p>Chaque item est compté uniquement lors de sa première acquisition.</p>
+        ${creerGraphiqueBarresMensuellesAnalysePedagogique_(
+          activite,
+          'nouvellesAcquisitions',
+          'Nouvelles acquisitions',
+          'acquis'
+        )}
+      </article>
+    </div>
+    ${creerTableauActiviteMensuelleAnalysePedagogique_(activite)}
+  `;
+}
+
+
+function creerGraphiqueBarresMensuellesAnalysePedagogique_(
+  activite,
+  champ,
+  libelle,
+  variante
+) {
+  const largeur = 860;
+  const hauteur = 290;
+  const marge = { gauche: 50, droite: 18, haut: 20, bas: 52 };
+  const largeurUtile = largeur - marge.gauche - marge.droite;
+  const hauteurUtile = hauteur - marge.haut - marge.bas;
+  const valeurs = activite.map(function (mois) {
+    return Math.max(0, Number(mois[champ]) || 0);
+  });
+  const maximum = Math.max(1, ...valeurs);
+  const largeurGroupe = largeurUtile / Math.max(1, activite.length);
+  const largeurBarre = Math.max(8, Math.min(38, largeurGroupe * 0.58));
+  const grille = [0, 0.5, 1].map(function (ratio) {
+    const valeur = Math.round(maximum * ratio);
+    const y = marge.haut + hauteurUtile - valeur / maximum * hauteurUtile;
+    return `
+      <line x1="${marge.gauche}" y1="${y.toFixed(1)}" x2="${largeur - marge.droite}" y2="${y.toFixed(1)}" class="grille-courbe-analyse"></line>
+      <text x="${marge.gauche - 9}" y="${(y + 4).toFixed(1)}" text-anchor="end" class="libelle-axe-analyse">${valeur}</text>
+    `;
+  }).join('');
+  const barres = activite.map(function (mois, position) {
+    const valeur = valeurs[position];
+    const hauteurBarre = valeur / maximum * hauteurUtile;
+    const x = marge.gauche + position * largeurGroupe +
+      (largeurGroupe - largeurBarre) / 2;
+    const y = marge.haut + hauteurUtile - hauteurBarre;
+    const moisLisible = formaterMoisAnalysePedagogique_(mois.mois, false);
+    const moisCourt = formaterMoisAnalysePedagogique_(mois.mois, true);
+    const titre = moisLisible + ' : ' + valeur + ' ' +
+      libelle.toLowerCase();
+    return `
+      <rect
+        x="${x.toFixed(1)}"
+        y="${y.toFixed(1)}"
+        width="${largeurBarre.toFixed(1)}"
+        height="${hauteurBarre.toFixed(1)}"
+        class="barre-mensuelle-analyse barre-mensuelle-${variante}-analyse"
+        tabindex="0"
+        aria-label="${echapperHtml(titre)}"
+      ><title>${echapperHtml(titre)}</title></rect>
+      <text x="${(x + largeurBarre / 2).toFixed(1)}" y="${hauteur - 24}" text-anchor="middle" class="libelle-axe-analyse">${echapperHtml(moisCourt)}</text>
+    `;
+  }).join('');
+
+  return `
+    <div class="conteneur-svg-analyse conteneur-activite-analyse">
+      <svg
+        viewBox="0 0 ${largeur} ${hauteur}"
+        role="img"
+        aria-label="${echapperHtml(libelle)} sur les douze derniers mois"
+        data-visualisation-analyse="activite-${variante}"
+      >
+        <title>${echapperHtml(libelle)} sur les douze derniers mois</title>
+        ${grille}
+        ${barres}
+      </svg>
+    </div>
+  `;
+}
+
+
+function creerTableauActiviteMensuelleAnalysePedagogique_(activite) {
+  return `
+    <div class="tableau-responsive tableau-reference-visualisation-analyse">
+      <table class="tableau tableau-compact-analyse-pedagogique">
+        <caption class="texte-visuellement-cache">
+          Données des graphiques d’activité pédagogique mensuelle
+        </caption>
+        <thead><tr>
+          <th>Mois</th>
+          <th>Items travaillés</th>
+          <th>Nouvelles acquisitions</th>
+        </tr></thead>
+        <tbody>
+          ${activite.map(function (mois) {
+            return `<tr>
+              <td>${echapperHtml(formaterMoisAnalysePedagogique_(mois.mois, false))}</td>
+              <td>${Number(mois.nombreItemsTravailles) || 0}</td>
+              <td>${Number(mois.nouvellesAcquisitions) || 0}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+
+function formaterMoisAnalysePedagogique_(cleMois, court) {
+  const correspondance = /^([0-9]{4})-([0-9]{2})$/.exec(
+    String(cleMois || '')
+  );
+  const noms = [
+    'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+    'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'
+  ];
+
+  if (!correspondance) {
+    return String(cleMois || 'Mois inconnu');
+  }
+
+  const mois = noms[Number(correspondance[2]) - 1];
+  return court
+    ? mois.slice(0, 3) + '. ' + correspondance[1].slice(2)
+    : mois.charAt(0).toUpperCase() + mois.slice(1) + ' ' + correspondance[1];
 }
 
 

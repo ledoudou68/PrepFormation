@@ -206,6 +206,126 @@ test('les compteurs portent sur les items actifs de la formation', () => {
   );
 });
 
+test('les agrégats par catégorie reprennent uniquement le périmètre actif', () => {
+  const resultat = calculer();
+  assert.strictEqual(resultat.agregatsParCategorie.length, 1);
+  assert.deepStrictEqual(
+    JSON.parse(JSON.stringify(resultat.agregatsParCategorie[0])),
+    {
+      idCategorie: 'C1',
+      categorie: 'Gestes',
+      ordre: 1,
+      nombreItemsActifs: 5,
+      nombreItemsTravailles: 4,
+      nombreItemsAcquis: 3,
+      pourcentageAcquisition: 60
+    }
+  );
+});
+
+test('une catégorie active sans item actif conserve un taux non calculable', () => {
+  const tables = donneesBase();
+  tables.CATEGORIES.lignes.push([
+    'C4', 'F1', 'Catégorie vide', 2, true
+  ]);
+  const resultat = calculer(tables);
+  const categorie = resultat.agregatsParCategorie.find(
+    agregat => agregat.idCategorie === 'C4'
+  );
+  assert(categorie);
+  assert.strictEqual(categorie.nombreItemsActifs, 0);
+  assert.strictEqual(categorie.pourcentageAcquisition, null);
+});
+
+test('la progression ne compte un item qu’à sa première acquisition', () => {
+  const resultat = calculer();
+  assert.deepStrictEqual(
+    JSON.parse(JSON.stringify(resultat.progressionChronologique)),
+    [
+      {
+        date: '2026-01-10', nombreSeances: 1,
+        nouvellesAcquisitions: 1, cumulItemsAcquis: 1
+      },
+      {
+        date: '2026-03-10', nombreSeances: 1,
+        nouvellesAcquisitions: 0, cumulItemsAcquis: 1
+      },
+      {
+        date: '2026-07-01', nombreSeances: 1,
+        nouvellesAcquisitions: 1, cumulItemsAcquis: 2
+      },
+      {
+        date: '2026-07-20', nombreSeances: 1,
+        nouvellesAcquisitions: 1, cumulItemsAcquis: 3
+      }
+    ]
+  );
+});
+
+test('plusieurs séances et acquisitions le même jour sont regroupées', () => {
+  const tables = donneesBase();
+  tables.SESSIONS.lignes.push(['S5', '2026-07-01']);
+  tables.PRESENCES_STAGIAIRES.lignes.push(['S5', 'T1']);
+  tables.ITEMS_SESSIONS.lignes.push(['S5', 'I7']);
+  tables.EVALUATIONS.lignes.push([
+    'S5', 'T1', 'I7', 'Acquis', '', true
+  ]);
+  const resultat = calculer(tables);
+  const point = resultat.progressionChronologique.find(
+    valeur => valeur.date === '2026-07-01'
+  );
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(point)), {
+    date: '2026-07-01',
+    nombreSeances: 2,
+    nouvellesAcquisitions: 2,
+    cumulItemsAcquis: 3
+  });
+});
+
+test('les acquisitions et séances futures sont absentes des agrégats visuels', () => {
+  const resultat = calculer();
+  assert(!resultat.progressionChronologique.some(
+    point => point.date === '2026-12-01'
+  ));
+  assert(!resultat.activiteMensuelle.some(
+    mois => mois.mois === '2026-12'
+  ));
+  assert.strictEqual(
+    resultat.progressionChronologique[
+      resultat.progressionChronologique.length - 1
+    ].cumulItemsAcquis,
+    3
+  );
+});
+
+test('l’activité mensuelle couvre douze mois et déduplique item-séance', () => {
+  const resultat = calculer();
+  assert.strictEqual(resultat.activiteMensuelle.length, 12);
+  assert.strictEqual(resultat.activiteMensuelle[0].mois, '2025-09');
+  assert.strictEqual(resultat.activiteMensuelle[11].mois, '2026-08');
+  const janvier = resultat.activiteMensuelle.find(
+    mois => mois.mois === '2026-01'
+  );
+  const mars = resultat.activiteMensuelle.find(
+    mois => mois.mois === '2026-03'
+  );
+  const juillet = resultat.activiteMensuelle.find(
+    mois => mois.mois === '2026-07'
+  );
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(janvier)), {
+    mois: '2026-01',
+    nombreItemsTravailles: 2,
+    nouvellesAcquisitions: 1
+  });
+  assert.strictEqual(mars.nombreItemsTravailles, 2);
+  assert.strictEqual(mars.nouvellesAcquisitions, 0);
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(juillet)), {
+    mois: '2026-07',
+    nombreItemsTravailles: 3,
+    nouvellesAcquisitions: 2
+  });
+});
+
 test('le nombre de travaux est dédupliqué par séance et par item', () => {
   const resultat = calculer();
   assert.strictEqual(trouverItem(resultat, 'I1').nombreFoisTravaille, 2);
@@ -446,6 +566,13 @@ test('chaque feuille est lue une fois et aucune migration n’est déclenchée',
   assert(!source.includes('executerMigrations'));
 });
 
+test('les nouveaux agrégats n’altèrent aucune table injectée', () => {
+  const tables = donneesBase();
+  const avant = JSON.stringify(tables);
+  calculer(tables);
+  assert.strictEqual(JSON.stringify(tables), avant);
+});
+
 test('le cache court évite une seconde lecture complète', () => {
   const tables = donneesBase();
   const configurations = [];
@@ -553,9 +680,9 @@ test('le calcul reste rapide avec plusieurs milliers de séances', () => {
   );
 });
 
-test('la version applicative est centralisée à 1.6.1', () => {
+test('la version applicative est centralisée à 1.6.2', () => {
   assert(metadonnees.includes(
-    "VERSION_APPLICATION_PREPFORMATION_ = '1.6.1'"
+    "VERSION_APPLICATION_PREPFORMATION_ = '1.6.2'"
   ));
 });
 

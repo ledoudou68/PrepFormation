@@ -6166,6 +6166,324 @@ button:disabled {
   color: #6b5300;
 }
 
+.navigation-rapide-analyse-pedagogique {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  margin: 0 0 18px;
+  padding: 9px;
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  border: 1px solid var(--bordure);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 5px 16px rgba(25, 45, 62, 0.08);
+  scrollbar-width: thin;
+}
+
+.navigation-rapide-analyse-pedagogique button {
+  min-height: 38px;
+  padding: 8px 12px;
+  flex: 0 0 auto;
+  border: 1px solid #d6e2ed;
+  border-radius: 999px;
+  background: #f4f8fb;
+  color: var(--bleu-fonce);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.navigation-rapide-analyse-pedagogique button:hover,
+.navigation-rapide-analyse-pedagogique button:focus-visible {
+  border-color: var(--bleu);
+  background: #e7f1fb;
+  outline: none;
+}
+
+.ancre-analyse-pedagogique {
+  scroll-margin-top: 72px;
+}
+
+.resume-visuel-analyse-pedagogique {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--bordure);
+}
+
+.grille-jauges-analyse-pedagogique {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.jauge-analyse-pedagogique {
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid var(--bordure);
+  border-radius: 9px;
+  background: #fbfcfd;
+}
+
+.jauge-analyse-pedagogique header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.jauge-analyse-pedagogique header span {
+  color: var(--texte-secondaire);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.jauge-analyse-pedagogique header strong {
+  color: var(--texte-principal);
+  font-size: 12px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.piste-jauge-analyse-pedagogique,
+.piste-barre-categorie-analyse {
+  height: 10px;
+  margin-top: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e6ebef;
+}
+
+.piste-jauge-analyse-pedagogique > span,
+.piste-barre-categorie-analyse > span {
+  height: 100%;
+  display: block;
+  border-radius: inherit;
+  background: var(--bleu);
+}
+
+.jauge-acquis-analyse .piste-jauge-analyse-pedagogique > span {
+  background: #2e7d32;
+}
+
+.jauge-priorite-analyse .piste-jauge-analyse-pedagogique > span {
+  background: #d46b08;
+}
+
+.jauge-oubli-analyse .piste-jauge-analyse-pedagogique > span {
+  background: #8b6a12;
+}
+
+.bloc-visualisation-analyse-pedagogique {
+  min-width: 0;
+}
+
+.note-visualisation-analyse {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-left: 3px solid #93a7b8;
+  background: #f5f8fa;
+  color: var(--texte-secondaire);
+  font-size: 12px;
+}
+
+.legende-visualisation-analyse {
+  margin: 8px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 9px 18px;
+  color: var(--texte-secondaire);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.legende-visualisation-analyse span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.legende-visualisation-analyse i {
+  width: 22px;
+  height: 4px;
+  display: inline-block;
+  border-radius: 999px;
+  background: var(--bleu);
+}
+
+.conteneur-svg-analyse {
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.conteneur-svg-analyse svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.conteneur-radar-analyse {
+  max-width: 780px;
+  margin: 0 auto;
+}
+
+.grille-radar-analyse {
+  fill: none;
+  stroke: #dce4ea;
+  stroke-width: 1;
+}
+
+.axe-radar-analyse,
+.grille-courbe-analyse {
+  stroke: #d6dfe6;
+  stroke-width: 1;
+}
+
+.surface-radar-analyse {
+  fill: rgba(21, 101, 192, 0.2);
+  stroke: var(--bleu);
+  stroke-width: 3;
+  stroke-linejoin: round;
+}
+
+.point-radar-analyse,
+.point-courbe-analyse {
+  fill: var(--blanc);
+  stroke: var(--bleu);
+  stroke-width: 3;
+  cursor: help;
+}
+
+.point-radar-analyse:focus,
+.point-courbe-analyse:focus,
+.barre-mensuelle-analyse:focus {
+  outline: none;
+  stroke: #111f2a;
+  stroke-width: 5;
+}
+
+.libelle-radar-analyse {
+  fill: var(--texte-principal);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.niveau-radar-analyse,
+.libelle-axe-analyse {
+  fill: var(--texte-secondaire);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.barres-categories-analyse-pedagogique {
+  max-width: 920px;
+  margin: 0 auto;
+  display: grid;
+  gap: 14px;
+}
+
+.barre-categorie-analyse {
+  min-width: 0;
+}
+
+.barre-categorie-analyse header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 15px;
+}
+
+.barre-categorie-analyse header strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.barre-categorie-analyse header span {
+  color: var(--texte-secondaire);
+  font-size: 12px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.piste-barre-categorie-analyse {
+  height: 13px;
+  cursor: help;
+}
+
+.piste-barre-categorie-analyse:focus-visible {
+  outline: 3px solid rgba(21, 101, 192, 0.25);
+  outline-offset: 3px;
+}
+
+.tableau-reference-visualisation-analyse {
+  margin-top: 18px;
+}
+
+.tableau-reference-visualisation-analyse .tableau {
+  min-width: 680px;
+}
+
+.texte-visuellement-cache {
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  position: absolute;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.ligne-progression-analyse {
+  fill: none;
+  stroke: var(--bleu);
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.grille-activite-mensuelle-analyse {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.grille-activite-mensuelle-analyse > article {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--bordure);
+  border-radius: 10px;
+  background: #fbfcfd;
+}
+
+.grille-activite-mensuelle-analyse h3 {
+  margin: 0 0 5px;
+  font-size: 16px;
+}
+
+.grille-activite-mensuelle-analyse p {
+  min-height: 36px;
+  margin: 0 0 8px;
+  color: var(--texte-secondaire);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.barre-mensuelle-analyse {
+  fill: var(--bleu);
+  cursor: help;
+}
+
+.barre-mensuelle-acquis-analyse {
+  fill: #2e7d32;
+}
+
 @media (max-width: 1150px) {
   .grille-indicateurs-analyse-pedagogique {
     grid-template-columns: repeat(3, minmax(145px, 1fr));
@@ -6181,6 +6499,14 @@ button:disabled {
 
   .grille-items-oublies-analyse {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .grille-jauges-analyse-pedagogique {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .grille-activite-mensuelle-analyse {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -6238,11 +6564,62 @@ button:disabled {
     min-height: 44px;
   }
 
+  .navigation-rapide-analyse-pedagogique {
+    margin-inline: -4px;
+    padding: 8px;
+  }
+
+  .navigation-rapide-analyse-pedagogique button {
+    min-height: 44px;
+  }
+
+  .grille-jauges-analyse-pedagogique {
+    grid-template-columns: 1fr;
+  }
+
+  .jauge-analyse-pedagogique header {
+    flex-wrap: wrap;
+  }
+
+  .conteneur-radar-analyse svg {
+    min-width: 0;
+  }
+
+  .conteneur-courbe-analyse,
+  .conteneur-activite-analyse {
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+  }
+
+  .conteneur-courbe-analyse svg,
+  .conteneur-activite-analyse svg {
+    min-width: 650px;
+  }
+
+  .barre-categorie-analyse header {
+    flex-direction: column;
+    gap: 4px;
+  }
+
   .etat-vide-analyse-pedagogique-fiche {
     padding: 24px 18px;
     align-items: flex-start;
     flex-direction: column;
     text-align: left;
+  }
+}
+
+@media (max-height: 520px) and (orientation: landscape) {
+  .navigation-rapide-analyse-pedagogique {
+    position: static;
+  }
+
+  .entete-analyse-pedagogique-fiche {
+    padding: 14px 18px;
+  }
+
+  .conteneur-radar-analyse {
+    max-width: 620px;
   }
 }
 

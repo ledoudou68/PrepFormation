@@ -172,6 +172,42 @@ function donneesInterface(options) {
       derniereDateTravail: ''
     }],
     itemsPrioritaires: [{ idItem: 'I3' }, { idItem: 'I2' }],
+    agregatsParCategorie: [
+      {
+        idCategorie: 'C1', categorie: 'Gestes', ordre: 1,
+        nombreItemsActifs: 3, nombreItemsTravailles: 2,
+        nombreItemsAcquis: 1, pourcentageAcquisition: 33.3
+      },
+      {
+        idCategorie: 'C2', categorie: 'Sécurité', ordre: 2,
+        nombreItemsActifs: 2, nombreItemsTravailles: 2,
+        nombreItemsAcquis: 2, pourcentageAcquisition: 100
+      },
+      {
+        idCategorie: 'C3', categorie: 'Communication', ordre: 3,
+        nombreItemsActifs: 1, nombreItemsTravailles: 0,
+        nombreItemsAcquis: 0, pourcentageAcquisition: 0
+      }
+    ],
+    progressionChronologique: [
+      {
+        date: '2026-01-10', nombreSeances: 1,
+        nouvellesAcquisitions: 1, cumulItemsAcquis: 1
+      },
+      {
+        date: '2026-03-10', nombreSeances: 1,
+        nouvellesAcquisitions: 0, cumulItemsAcquis: 1
+      },
+      {
+        date: '2026-07-20', nombreSeances: 1,
+        nouvellesAcquisitions: 1, cumulItemsAcquis: 2
+      }
+    ],
+    activiteMensuelle: Array.from({ length: 12 }, (_, index) => ({
+      mois: '2026-' + String(index + 1).padStart(2, '0'),
+      nombreItemsTravailles: index % 4,
+      nouvellesAcquisitions: index % 3 === 0 ? 1 : 0
+    })),
     recommandationsProchaineSeance: [
       {
         rang: 1, idItem: 'I3', intitule: 'Relevage',
@@ -199,6 +235,7 @@ function donneesInterface(options) {
 }
 
 const tests = [];
+let dureeRenduVisuelMs = null;
 function test(nom, traitement) {
   tests.push({ nom, traitement });
 }
@@ -341,6 +378,129 @@ test('null, zéro et cent pour cent restent distincts', () => {
   assert.strictEqual(c.formaterTauxAnalysePedagogique_(100), '100 %');
 });
 
+test('le résumé visuel affiche quatre rapports absolus et leurs pourcentages', () => {
+  const zone = creerElement();
+  const c = creerContexte({
+    resumeVisuelAnalysePedagogiqueFiche: zone
+  });
+  c.afficherResumeVisuelAnalysePedagogiqueFiche_(donneesInterface());
+  assert.strictEqual(
+    (zone.innerHTML.match(/<article class="jauge-analyse/g) || []).length,
+    4
+  );
+  assert(zone.innerHTML.includes('2 / 3 · 66,7 %'));
+  assert(zone.innerHTML.includes('1 / 3 · 33,3 %'));
+  assert(zone.innerHTML.includes('role="progressbar"'));
+});
+
+test('moins de trois catégories déclenche le fallback en barres', () => {
+  const zone = creerElement();
+  const c = creerContexte({
+    visualisationCategoriesAnalysePedagogiqueFiche: zone
+  });
+  const donnees = donneesInterface();
+  donnees.agregatsParCategorie = donnees.agregatsParCategorie.slice(0, 2);
+  c.afficherVisualisationCategoriesAnalysePedagogiqueFiche_(donnees);
+  assert(zone.innerHTML.includes(
+    'data-visualisation-analyse="barres-categories"'
+  ));
+  assert(!zone.innerHTML.includes('data-visualisation-analyse="radar"'));
+  assert(zone.innerHTML.includes('Moins de trois catégories'));
+});
+
+test('au moins trois catégories exploitables produisent un radar accessible', () => {
+  const zone = creerElement();
+  const c = creerContexte({
+    visualisationCategoriesAnalysePedagogiqueFiche: zone
+  });
+  c.afficherVisualisationCategoriesAnalysePedagogiqueFiche_(
+    donneesInterface()
+  );
+  assert(zone.innerHTML.includes('data-visualisation-analyse="radar"'));
+  assert(zone.innerHTML.includes('Échelle fixe : 0 à 100 %'));
+  assert(zone.innerHTML.includes('tabindex="0"'));
+  assert(zone.innerHTML.includes('<caption'));
+  assert(zone.innerHTML.includes('Communication'));
+  assert(
+    zone.innerHTML.indexOf('conteneur-radar-analyse') <
+    zone.innerHTML.indexOf('legende-visualisation-analyse')
+  );
+});
+
+test('des catégories toutes non calculables ne produisent aucun radar', () => {
+  const zone = creerElement();
+  const c = creerContexte({
+    visualisationCategoriesAnalysePedagogiqueFiche: zone
+  });
+  const donnees = donneesInterface();
+  donnees.agregatsParCategorie.forEach(agregat => {
+    agregat.nombreItemsActifs = 0;
+    agregat.pourcentageAcquisition = null;
+  });
+  c.afficherVisualisationCategoriesAnalysePedagogiqueFiche_(donnees);
+  assert(!zone.innerHTML.includes('data-visualisation-analyse="radar"'));
+  assert(zone.innerHTML.includes('Aucun pourcentage calculable'));
+});
+
+test('la courbe exige deux dates et conserve toujours son tableau accessible', () => {
+  const zone = creerElement();
+  const c = creerContexte({
+    progressionChronologiqueAnalysePedagogiqueFiche: zone
+  });
+  const donnees = donneesInterface();
+  donnees.progressionChronologique = [donnees.progressionChronologique[0]];
+  c.afficherProgressionChronologiqueAnalysePedagogiqueFiche_(donnees);
+  assert(zone.innerHTML.includes('Une deuxième date de séance'));
+  assert(!zone.innerHTML.includes(
+    'data-visualisation-analyse="courbe-progression"'
+  ));
+  assert(zone.innerHTML.includes('<table'));
+
+  donnees.progressionChronologique.push({
+    date: '2026-02-10', nombreSeances: 2,
+    nouvellesAcquisitions: 2, cumulItemsAcquis: 3
+  });
+  c.afficherProgressionChronologiqueAnalysePedagogiqueFiche_(donnees);
+  assert(zone.innerHTML.includes(
+    'data-visualisation-analyse="courbe-progression"'
+  ));
+  assert(zone.innerHTML.includes('Séances ce jour'));
+});
+
+test('l’activité mensuelle utilise deux graphiques et une seule table', () => {
+  const zone = creerElement();
+  const c = creerContexte({
+    activiteMensuelleAnalysePedagogiqueFiche: zone
+  });
+  c.afficherActiviteMensuelleAnalysePedagogiqueFiche_(donneesInterface());
+  assert(zone.innerHTML.includes('data-visualisation-analyse="activite-travail"'));
+  assert(zone.innerHTML.includes('data-visualisation-analyse="activite-acquis"'));
+  assert.strictEqual((zone.innerHTML.match(/<svg/g) || []).length, 2);
+  assert.strictEqual((zone.innerHTML.match(/<table/g) || []).length, 1);
+  assert(!zone.innerHTML.includes('double'));
+});
+
+test('le rendu visuel normal reste rapide et ne modifie pas la réponse', () => {
+  const elements = {
+    resumeVisuelAnalysePedagogiqueFiche: creerElement(),
+    visualisationCategoriesAnalysePedagogiqueFiche: creerElement(),
+    progressionChronologiqueAnalysePedagogiqueFiche: creerElement(),
+    activiteMensuelleAnalysePedagogiqueFiche: creerElement()
+  };
+  const c = creerContexte(elements);
+  const donnees = donneesInterface();
+  const avant = JSON.stringify(donnees);
+  const debut = Date.now();
+  c.afficherResumeVisuelAnalysePedagogiqueFiche_(donnees);
+  c.afficherVisualisationCategoriesAnalysePedagogiqueFiche_(donnees);
+  c.afficherProgressionChronologiqueAnalysePedagogiqueFiche_(donnees);
+  c.afficherActiviteMensuelleAnalysePedagogiqueFiche_(donnees);
+  const duree = Date.now() - debut;
+  dureeRenduVisuelMs = duree;
+  assert.strictEqual(JSON.stringify(donnees), avant);
+  assert(duree < 1000, 'Rendu visuel trop lent : ' + duree + ' ms');
+});
+
 test('les filtres locaux utilisent uniquement les agrégats reçus', () => {
   const c = creerContexte();
   const donnees = donneesInterface();
@@ -443,8 +603,29 @@ test('l’onglet est responsive sans hauteur fixe ni débordement imposé', () =
   assert(!section.includes(
     '.contenu-onglet-fiche-consultation {\n  height:'
   ));
-  assert(!section.includes('max-height:'));
+  assert(!/\n\s+max-height\s*:/.test(section));
   assert(section.includes('.tableau-detail-analyse-pedagogique'));
+  assert(section.includes('.navigation-rapide-analyse-pedagogique'));
+  assert(section.includes('overflow-x: auto'));
+  assert(section.includes('.conteneur-radar-analyse svg'));
+  assert(section.includes('.conteneur-courbe-analyse'));
+  assert(section.includes('@media (max-width: 1150px)'));
+  assert(section.includes('(orientation: landscape)'));
+});
+
+test('le redimensionnement est natif et ne relance aucun calcul', () => {
+  const c = creerContexte();
+  const radar = c.creerRadarCategoriesAnalysePedagogique_(
+    donneesInterface().agregatsParCategorie
+  );
+  const courbe = c.creerCourbeProgressionAnalysePedagogique_(
+    donneesInterface().progressionChronologique
+  );
+  assert(radar.includes('viewBox="0 0'));
+  assert(courbe.includes('viewBox="0 0'));
+  assert(!sourceInterface.includes(
+    "addEventListener('resize', afficherVisualisationCategories"
+  ));
 });
 
 test('l’interface d’analyse ne contient aucune mutation métier', () => {
@@ -487,5 +668,6 @@ tests.forEach(({ nom, traitement }) => {
 
 process.stdout.write(
   '\n' + reussis + '/' + tests.length +
-  ' tests de l’interface d’analyse pédagogique réussis.\n'
+  ' tests de l’interface d’analyse pédagogique réussis.\n' +
+  'Rendu visuel simulé en ' + dureeRenduVisuelMs + ' ms.\n'
 );
