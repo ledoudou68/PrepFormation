@@ -1029,7 +1029,32 @@ function calculerPointsFaiblesAnalysePedagogique_(items) {
       b.nombreEchecsExplicites - a.nombreEchecsExplicites ||
       (a.tauxAcquisition || 0) - (b.tauxAcquisition || 0) ||
       comparerOrdreItemsAnalysePedagogique_(a, b);
-  }).map(resumerItemAnalysePedagogique_);
+  }).map(function (item) {
+    const resume = resumerItemAnalysePedagogique_(item);
+    const motifs = [];
+
+    if (!item.nombreFoisAcquis) {
+      motifs.push('Aucune acquisition validée');
+    }
+    if (item.nombreEchecsExplicites >= 2) {
+      motifs.push(
+        item.nombreEchecsExplicites +
+        ' échecs explicites distincts'
+      );
+    }
+    if (
+      item.tauxAcquisition !== null &&
+      item.tauxAcquisition < 50
+    ) {
+      motifs.push(
+        'Taux d’acquisition inférieur à 50 %'
+      );
+    }
+
+    resume.motifsClassement = motifs;
+    resume.motifClassement = motifs.join(' · ');
+    return resume;
+  });
 }
 
 

@@ -300,6 +300,10 @@ test('les points faibles détectent les non-acquis répétés', () => {
   const resultat = calculer();
   assert.strictEqual(resultat.pointsFaibles[0].idItem, 'I2');
   assert.strictEqual(resultat.pointsFaibles[0].nombreEchecsExplicites, 3);
+  assert(resultat.pointsFaibles[0].motifClassement.includes(
+    'Aucune acquisition validée'
+  ));
+  assert(resultat.pointsFaibles[0].motifsClassement.length >= 2);
 });
 
 test('les items oubliés regroupent jamais travaillés et anciens', () => {
@@ -549,9 +553,9 @@ test('le calcul reste rapide avec plusieurs milliers de séances', () => {
   );
 });
 
-test('la version applicative est centralisée à 1.6.0', () => {
+test('la version applicative est centralisée à 1.6.1', () => {
   assert(metadonnees.includes(
-    "VERSION_APPLICATION_PREPFORMATION_ = '1.6.0'"
+    "VERSION_APPLICATION_PREPFORMATION_ = '1.6.1'"
   ));
 });
 

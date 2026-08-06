@@ -5619,4 +5619,631 @@ button:disabled {
   }
 }
 
+/* =====================================================
+   PROFIL D’ANALYSE PÉDAGOGIQUE DU STAGIAIRE
+===================================================== */
+
+.onglets-fiche-consultation {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 6px;
+  padding: 0 26px;
+  overflow-x: auto;
+  background: var(--blanc);
+  border-bottom: 1px solid var(--bordure);
+  scrollbar-width: thin;
+}
+
+.onglet-fiche-consultation {
+  min-height: 48px;
+  padding: 11px 17px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: var(--texte-secondaire);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.onglet-fiche-consultation:hover,
+.onglet-fiche-consultation:focus-visible {
+  color: var(--bleu);
+  background: #f6f8fa;
+}
+
+.onglet-fiche-consultation.actif {
+  color: var(--bleu-fonce);
+  border-bottom-color: var(--bleu);
+}
+
+.contenu-onglet-fiche-consultation {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+.entete-analyse-pedagogique-fiche {
+  margin-bottom: 20px;
+  padding: 22px 24px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  border: 1px solid var(--bordure);
+  border-radius: var(--rayon);
+  background:
+    radial-gradient(
+      circle at 100% 0,
+      rgba(21, 101, 192, 0.12),
+      transparent 42%
+    ),
+    var(--blanc);
+  box-shadow: var(--ombre);
+}
+
+.entete-analyse-pedagogique-fiche h1 {
+  margin: 0 0 7px;
+  color: var(--bleu-fonce);
+  font-size: 28px;
+}
+
+.mention-analyse-pedagogique-fiche {
+  max-width: 760px;
+  margin: 0 0 9px;
+  color: var(--texte-secondaire);
+  line-height: 1.5;
+}
+
+.entete-analyse-pedagogique-fiche small {
+  color: var(--texte-secondaire);
+}
+
+.chargement-analyse-pedagogique-fiche {
+  min-height: 90px;
+  margin: 20px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  border: 1px dashed var(--bordure);
+  border-radius: 12px;
+  background: #f8fafc;
+  color: var(--texte-secondaire);
+  font-weight: 800;
+}
+
+.erreur-analyse-pedagogique-fiche,
+.avertissements-analyse-pedagogique-fiche {
+  margin: 16px 0;
+  padding: 16px 18px;
+  border-radius: 10px;
+}
+
+.erreur-analyse-pedagogique-fiche {
+  border: 1px solid #efb4b4;
+  background: #fff1f1;
+  color: #8f2424;
+}
+
+.erreur-analyse-pedagogique-fiche p {
+  margin: 6px 0 12px;
+}
+
+.avertissements-analyse-pedagogique-fiche {
+  border: 1px solid #efd49b;
+  background: #fff8e8;
+  color: #6f4a08;
+}
+
+.avertissements-analyse-pedagogique-fiche ul {
+  margin: 8px 0 0 20px;
+  padding: 0;
+}
+
+.etat-vide-analyse-pedagogique-fiche {
+  min-height: 250px;
+  padding: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  border: 1px dashed #bdc8d1;
+  border-radius: 14px;
+  background: var(--blanc);
+  color: var(--texte-secondaire);
+  text-align: left;
+}
+
+.etat-vide-analyse-pedagogique-fiche > span {
+  width: 52px;
+  height: 52px;
+  flex: 0 0 52px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #edf1f4;
+  color: #77838e;
+  font-size: 30px;
+}
+
+.etat-vide-analyse-pedagogique-fiche h2 {
+  margin: 0 0 6px;
+  color: var(--texte-principal);
+}
+
+.etat-vide-analyse-pedagogique-fiche p {
+  margin: 0;
+}
+
+.synthese-analyse-pedagogique-fiche {
+  margin-top: 0;
+}
+
+.phrase-synthese-analyse-pedagogique-fiche {
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  border-left: 4px solid var(--bleu);
+  border-radius: 0 9px 9px 0;
+  background: #eef5fc;
+  color: var(--bleu-fonce);
+  font-size: 16px;
+  font-weight: 750;
+  line-height: 1.5;
+}
+
+.grille-indicateurs-analyse-pedagogique {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(145px, 1fr));
+  gap: 12px;
+}
+
+.carte-indicateur-analyse-pedagogique {
+  min-width: 0;
+  min-height: 92px;
+  padding: 14px 15px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border: 1px solid var(--bordure);
+  border-top: 4px solid var(--bleu);
+  border-radius: 10px;
+  background: #fbfcfd;
+}
+
+.carte-indicateur-analyse-pedagogique span {
+  color: var(--texte-secondaire);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.carte-indicateur-analyse-pedagogique strong {
+  margin-top: 8px;
+  color: var(--bleu-fonce);
+  font-size: 23px;
+  overflow-wrap: anywhere;
+}
+
+.bloc-recommandations-analyse-pedagogique {
+  margin-top: 20px;
+  border-top: 5px solid var(--bleu);
+}
+
+.liste-recommandations-analyse-pedagogique {
+  display: grid;
+  gap: 13px;
+}
+
+.recommandation-analyse-pedagogique {
+  padding: 16px;
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 15px;
+  border: 1px solid var(--bordure);
+  border-left: 5px solid #87939e;
+  border-radius: 10px;
+  background: #fbfcfd;
+}
+
+.recommandation-analyse-pedagogique.priorite-tres-elevee {
+  border-left-color: #b42318;
+  background: #fff6f5;
+}
+
+.recommandation-analyse-pedagogique.priorite-elevee {
+  border-left-color: #d46b08;
+  background: #fff9f0;
+}
+
+.recommandation-analyse-pedagogique.priorite-moyenne {
+  border-left-color: #b38a00;
+  background: #fffcec;
+}
+
+.recommandation-analyse-pedagogique.priorite-faible {
+  border-left-color: #667582;
+}
+
+.rang-recommandation-analyse {
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--bleu-fonce);
+  color: var(--blanc);
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.contenu-recommandation-analyse {
+  min-width: 0;
+}
+
+.contenu-recommandation-analyse > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.contenu-recommandation-analyse > header > div:first-child > span {
+  color: var(--texte-secondaire);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.contenu-recommandation-analyse h3 {
+  margin: 4px 0 0;
+  font-size: 18px;
+}
+
+.badges-priorite-analyse {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.badge-niveau-priorite-analyse,
+.score-priorite-analyse {
+  padding: 6px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.badge-niveau-priorite-analyse.priorite-tres-elevee {
+  background: #f9d8d5;
+  color: #8f1f17;
+}
+
+.badge-niveau-priorite-analyse.priorite-elevee {
+  background: #ffe2bf;
+  color: #8a4300;
+}
+
+.badge-niveau-priorite-analyse.priorite-moyenne {
+  background: #f7eab1;
+  color: #6b5300;
+}
+
+.badge-niveau-priorite-analyse.priorite-faible {
+  background: #e7ecef;
+  color: #485661;
+}
+
+.score-priorite-analyse {
+  background: #e8eef3;
+  color: var(--bleu-fonce);
+}
+
+.mesures-recommandation-analyse {
+  margin: 14px 0 0;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(95px, 1fr));
+  gap: 8px;
+}
+
+.mesures-recommandation-analyse > div {
+  min-width: 0;
+  padding: 9px 10px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.mesures-recommandation-analyse dt {
+  color: var(--texte-secondaire);
+  font-size: 10px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.mesures-recommandation-analyse dd {
+  margin: 4px 0 0;
+  font-size: 13px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.motifs-recommandation-analyse {
+  margin-top: 12px;
+  padding-top: 11px;
+  border-top: 1px solid rgba(100, 115, 128, 0.18);
+  font-size: 12px;
+}
+
+.motifs-recommandation-analyse ul,
+.motifs-recommandation-analyse p {
+  margin: 6px 0 0 18px;
+  padding: 0;
+  color: var(--texte-secondaire);
+}
+
+.grille-forces-faiblesses-analyse-pedagogique {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.grille-forces-faiblesses-analyse-pedagogique > .bloc {
+  min-width: 0;
+}
+
+.tableau-compact-analyse-pedagogique {
+  min-width: 720px;
+}
+
+.tableau-compact-analyse-pedagogique td > small {
+  margin-top: 3px;
+  display: block;
+  color: var(--texte-secondaire);
+}
+
+.etat-vide-bloc-analyse-pedagogique {
+  min-height: 110px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--bordure);
+  border-radius: 9px;
+  background: #fafbfc;
+}
+
+.grille-items-oublies-analyse {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.item-oublie-analyse {
+  min-width: 0;
+  padding: 14px;
+  display: grid;
+  gap: 8px;
+  border: 1px solid #efd49b;
+  border-left: 4px solid #c48a0b;
+  border-radius: 9px;
+  background: #fffaf0;
+}
+
+.item-jamais-travaille-analyse {
+  border-color: #d3d9de;
+  border-left-color: #7d8994;
+  background: #f7f9fa;
+}
+
+.item-oublie-analyse span {
+  color: var(--texte-secondaire);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.item-oublie-analyse h3 {
+  margin: 3px 0 0;
+  font-size: 15px;
+}
+
+.item-oublie-analyse > strong {
+  color: #745000;
+  font-size: 13px;
+}
+
+.item-jamais-travaille-analyse > strong {
+  color: #4f5b66;
+}
+
+.item-oublie-analyse small {
+  color: var(--texte-secondaire);
+}
+
+.detail-items-analyse-pedagogique {
+  padding: 0;
+  overflow: hidden;
+}
+
+.detail-items-analyse-pedagogique > summary {
+  min-height: 64px;
+  padding: 16px 19px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  list-style-position: inside;
+}
+
+.detail-items-analyse-pedagogique > summary:hover {
+  background: #f8fafc;
+}
+
+.detail-items-analyse-pedagogique > summary span {
+  margin-left: 8px;
+  display: inline-flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.detail-items-analyse-pedagogique > summary small {
+  color: var(--texte-secondaire);
+  font-weight: 400;
+}
+
+.contenu-detail-items-analyse-pedagogique {
+  padding: 0 19px 19px;
+  border-top: 1px solid var(--bordure);
+}
+
+.filtres-detail-analyse-pedagogique {
+  padding: 14px 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.filtres-detail-analyse-pedagogique button {
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--bordure);
+  border-radius: 999px;
+  background: var(--blanc);
+  color: var(--texte-secondaire);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.filtres-detail-analyse-pedagogique button:hover,
+.filtres-detail-analyse-pedagogique button.actif {
+  border-color: var(--bleu);
+  background: #eef5fc;
+  color: var(--bleu-fonce);
+}
+
+.tableau-detail-analyse-pedagogique {
+  min-width: 1320px;
+}
+
+.classifications-item-analyse {
+  min-width: 180px;
+}
+
+.badge-classification-analyse {
+  margin: 2px 3px 2px 0;
+  padding: 4px 7px;
+  display: inline-block;
+  border-radius: 999px;
+  background: #edf0f2;
+  color: #596671;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.badge-classification-prioritaire {
+  background: #ffe1c2;
+  color: #884200;
+}
+
+.badge-classification-fort {
+  background: #dff3e5;
+  color: #1e6537;
+}
+
+.badge-classification-faible {
+  background: #f9d8d5;
+  color: #8f1f17;
+}
+
+.badge-classification-oublie {
+  background: #f7eab1;
+  color: #6b5300;
+}
+
+@media (max-width: 1150px) {
+  .grille-indicateurs-analyse-pedagogique {
+    grid-template-columns: repeat(3, minmax(145px, 1fr));
+  }
+
+  .mesures-recommandation-analyse {
+    grid-template-columns: repeat(3, minmax(95px, 1fr));
+  }
+
+  .grille-forces-faiblesses-analyse-pedagogique {
+    grid-template-columns: 1fr;
+  }
+
+  .grille-items-oublies-analyse {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .onglets-fiche-consultation {
+    padding: 0 10px;
+  }
+
+  .onglet-fiche-consultation {
+    min-height: 46px;
+    padding: 10px 12px;
+  }
+
+  .entete-analyse-pedagogique-fiche {
+    padding: 18px;
+    flex-direction: column;
+  }
+
+  .entete-analyse-pedagogique-fiche h1 {
+    font-size: 24px;
+  }
+
+  .entete-analyse-pedagogique-fiche .bouton-principal {
+    width: 100%;
+    min-height: 46px;
+  }
+
+  .grille-indicateurs-analyse-pedagogique,
+  .mesures-recommandation-analyse,
+  .grille-items-oublies-analyse {
+    grid-template-columns: 1fr;
+  }
+
+  .recommandation-analyse-pedagogique {
+    grid-template-columns: 38px minmax(0, 1fr);
+    gap: 10px;
+    padding: 13px;
+  }
+
+  .rang-recommandation-analyse {
+    width: 36px;
+    height: 36px;
+    font-size: 15px;
+  }
+
+  .contenu-recommandation-analyse > header {
+    flex-direction: column;
+  }
+
+  .badges-priorite-analyse {
+    justify-content: flex-start;
+  }
+
+  .filtres-detail-analyse-pedagogique button {
+    min-height: 44px;
+  }
+
+  .etat-vide-analyse-pedagogique-fiche {
+    padding: 24px 18px;
+    align-items: flex-start;
+    flex-direction: column;
+    text-align: left;
+  }
+}
+
 </style>

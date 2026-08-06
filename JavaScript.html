@@ -51,6 +51,7 @@ const etatApplication = {
   stagiaireAConsulterDepuisAccueil: '',
   photoStagiaireEnCours: null,
   photoStagiaireExistante: false,
+  analysePedagogiqueFicheStagiaire: null,
   generationChargementPhotos: 0,
   generationPhotoFormulaire: 0,
   formationsAdministration: [],
@@ -1486,7 +1487,41 @@ function consulterStagiaire(uuid) {
 
       </header>
 
-      <main class="fiche-consultation-corps">
+      <nav
+        class="onglets-fiche-consultation"
+        aria-label="Sections de la fiche stagiaire"
+        role="tablist"
+      >
+        <button
+          type="button"
+          class="onglet-fiche-consultation actif"
+          data-onglet-fiche-stagiaire="parcours"
+          onclick="changerOngletFicheStagiaire('parcours')"
+          role="tab"
+          aria-selected="true"
+          aria-controls="ongletFicheStagiaireParcours"
+        >
+          Parcours
+        </button>
+        <button
+          type="button"
+          class="onglet-fiche-consultation"
+          data-onglet-fiche-stagiaire="analyse"
+          onclick="changerOngletFicheStagiaire('analyse')"
+          role="tab"
+          aria-selected="false"
+          aria-controls="ongletFicheStagiaireAnalyse"
+        >
+          Analyse pédagogique
+        </button>
+      </nav>
+
+      <main
+        id="ongletFicheStagiaireParcours"
+        class="fiche-consultation-corps contenu-onglet-fiche-consultation"
+        data-contenu-onglet-fiche-stagiaire="parcours"
+        role="tabpanel"
+      >
 
         <section class="fiche-profil">
 
@@ -1826,11 +1861,22 @@ function consulterStagiaire(uuid) {
 
       </main>
 
+      ${creerOngletAnalysePedagogiqueFicheStagiaire_()}
+
     </article>
   `;
 
   document.body.appendChild(modal);
   document.body.classList.add('modal-ouverte');
+
+  etatApplication.analysePedagogiqueFicheStagiaire = {
+    uuid: uuid,
+    chargee: false,
+    chargement: false,
+    donnees: null,
+    filtreDetail: 'TOUS',
+    generation: 0
+  };
 
   document.addEventListener(
     'keydown',
@@ -1909,6 +1955,1049 @@ function creerIndicateurPedagogiqueStagiaire(
     </div>
   `;
 }
+
+
+function creerCarteIndicateurAnalysePedagogique_(
+  libelle,
+  identifiant
+) {
+  return `
+    <article class="carte-indicateur-analyse-pedagogique">
+      <span>${echapperHtml(libelle)}</span>
+      <strong id="${identifiant}">—</strong>
+    </article>
+  `;
+}
+
+
+function creerOngletAnalysePedagogiqueFicheStagiaire_() {
+  return `
+    <main
+      id="ongletFicheStagiaireAnalyse"
+      class="fiche-consultation-corps contenu-onglet-fiche-consultation masque"
+      data-contenu-onglet-fiche-stagiaire="analyse"
+      role="tabpanel"
+    >
+      <header class="entete-analyse-pedagogique-fiche">
+        <div>
+          <p class="fiche-sur-titre">Profil pédagogique</p>
+          <h1>Analyse pédagogique</h1>
+          <p class="mention-analyse-pedagogique-fiche">
+            Analyse calculée automatiquement à partir des séances,
+            items travaillés et évaluations enregistrées.
+          </p>
+          <small id="metadonneesAnalysePedagogiqueFiche">
+            L’analyse sera chargée à l’ouverture de cet onglet.
+          </small>
+        </div>
+        <button
+          type="button"
+          id="boutonActualiserAnalysePedagogiqueFiche"
+          class="bouton-principal"
+          onclick="actualiserAnalysePedagogiqueFicheStagiaire()"
+        >
+          Actualiser l’analyse
+        </button>
+      </header>
+
+      <div
+        id="chargementAnalysePedagogiqueFiche"
+        class="chargement-analyse-pedagogique-fiche masque"
+        role="status"
+        aria-live="polite"
+      >
+        <span class="spinner-statistiques"></span>
+        Calcul de l’analyse pédagogique…
+      </div>
+
+      <div
+        id="erreurAnalysePedagogiqueFiche"
+        class="erreur-analyse-pedagogique-fiche masque"
+        role="alert"
+      ></div>
+
+      <div
+        id="avertissementsAnalysePedagogiqueFiche"
+        class="avertissements-analyse-pedagogique-fiche masque"
+      ></div>
+
+      <section
+        id="etatVideAnalysePedagogiqueFiche"
+        class="etat-vide-analyse-pedagogique-fiche masque"
+      >
+        <span aria-hidden="true">○</span>
+        <div>
+          <h2>Aucune donnée pédagogique exploitable</h2>
+          <p>
+            Aucune séance pédagogique exploitable n’est encore enregistrée.
+          </p>
+        </div>
+      </section>
+
+      <div id="contenuAnalysePedagogiqueFiche" class="masque">
+        <section class="bloc synthese-analyse-pedagogique-fiche">
+          <p
+            id="phraseSyntheseAnalysePedagogiqueFiche"
+            class="phrase-synthese-analyse-pedagogique-fiche"
+          ></p>
+
+          <div class="grille-indicateurs-analyse-pedagogique">
+            ${creerCarteIndicateurAnalysePedagogique_(
+              'Séances réalisées',
+              'analyseNombreSeances'
+            )}
+            ${creerCarteIndicateurAnalysePedagogique_(
+              'Première séance',
+              'analysePremiereSeance'
+            )}
+            ${creerCarteIndicateurAnalysePedagogique_(
+              'Dernière séance',
+              'analyseDerniereSeance'
+            )}
+            ${creerCarteIndicateurAnalysePedagogique_(
+              'Depuis la dernière séance',
+              'analyseJoursDerniereSeance'
+            )}
+            ${creerCarteIndicateurAnalysePedagogique_(
+              'Items actifs',
+              'analyseItemsActifs'
+            )}
+            ${creerCarteIndicateurAnalysePedagogique_(
+              'Items travaillés',
+              'analyseItemsTravailles'
+            )}
+            ${creerCarteIndicateurAnalysePedagogique_(
+              'Items acquis',
+              'analyseItemsAcquis'
+            )}
+            ${creerCarteIndicateurAnalysePedagogique_(
+              'Jamais travaillés',
+              'analyseItemsJamaisTravailles'
+            )}
+            ${creerCarteIndicateurAnalysePedagogique_(
+              'Jamais acquis',
+              'analyseItemsJamaisAcquis'
+            )}
+          </div>
+        </section>
+
+        <section class="bloc bloc-recommandations-analyse-pedagogique">
+          <div class="fiche-bloc-entete">
+            <div>
+              <p class="fiche-sur-titre">Prochaine séance</p>
+              <h2>Recommandations pour la prochaine séance</h2>
+              <p>Classement produit par le moteur d’analyse pédagogique.</p>
+            </div>
+          </div>
+          <div id="recommandationsAnalysePedagogiqueFiche"></div>
+        </section>
+
+        <div class="grille-forces-faiblesses-analyse-pedagogique">
+          <section class="bloc">
+            <div class="fiche-bloc-entete">
+              <div>
+                <h2>Points forts</h2>
+                <p>Acquisitions suffisamment consolidées.</p>
+              </div>
+            </div>
+            <div id="pointsFortsAnalysePedagogiqueFiche"></div>
+          </section>
+
+          <section class="bloc">
+            <div class="fiche-bloc-entete">
+              <div>
+                <h2>Points à renforcer</h2>
+                <p>Items classés comme fragiles par le moteur.</p>
+              </div>
+            </div>
+            <div id="pointsFaiblesAnalysePedagogiqueFiche"></div>
+          </section>
+        </div>
+
+        <section class="bloc">
+          <div class="fiche-bloc-entete">
+            <div>
+              <h2>Items non revus récemment</h2>
+              <p id="seuilOubliAnalysePedagogiqueFiche">
+                Seuil d’oubli communiqué par le moteur.
+              </p>
+            </div>
+          </div>
+          <div id="itemsOubliesAnalysePedagogiqueFiche"></div>
+        </section>
+
+        <details
+          id="detailItemsAnalysePedagogiqueFiche"
+          class="bloc detail-items-analyse-pedagogique"
+        >
+          <summary>
+            <span>
+              <strong>Détail complet par item</strong>
+              <small>Déplier pour consulter et filtrer tous les agrégats.</small>
+            </span>
+          </summary>
+
+          <div class="contenu-detail-items-analyse-pedagogique">
+            <div
+              class="filtres-detail-analyse-pedagogique"
+              role="group"
+              aria-label="Filtrer le détail des items"
+            >
+              <button type="button" class="actif" data-filtre-analyse="TOUS" onclick="appliquerFiltreDetailAnalysePedagogique('TOUS')">Tous</button>
+              <button type="button" data-filtre-analyse="PRIORITAIRES" onclick="appliquerFiltreDetailAnalysePedagogique('PRIORITAIRES')">Prioritaires</button>
+              <button type="button" data-filtre-analyse="FORTS" onclick="appliquerFiltreDetailAnalysePedagogique('FORTS')">Points forts</button>
+              <button type="button" data-filtre-analyse="FAIBLES" onclick="appliquerFiltreDetailAnalysePedagogique('FAIBLES')">Points à renforcer</button>
+              <button type="button" data-filtre-analyse="JAMAIS_TRAVAILLES" onclick="appliquerFiltreDetailAnalysePedagogique('JAMAIS_TRAVAILLES')">Jamais travaillés</button>
+              <button type="button" data-filtre-analyse="HISTORIQUES" onclick="appliquerFiltreDetailAnalysePedagogique('HISTORIQUES')">Historiques</button>
+            </div>
+
+            <div class="tableau-responsive">
+              <table class="tableau tableau-detail-analyse-pedagogique">
+                <thead>
+                  <tr>
+                    <th>Catégorie</th>
+                    <th>Item</th>
+                    <th>Statut</th>
+                    <th>Travaux</th>
+                    <th>Acquisitions</th>
+                    <th>Échecs</th>
+                    <th>Taux</th>
+                    <th>Dernier travail</th>
+                    <th>Jours</th>
+                    <th>Score</th>
+                    <th>Classification</th>
+                  </tr>
+                </thead>
+                <tbody id="corpsDetailAnalysePedagogiqueFiche"></tbody>
+              </table>
+            </div>
+          </div>
+        </details>
+      </div>
+    </main>
+  `;
+}
+
+function changerOngletFicheStagiaire(nomOnglet) {
+  const modal = document.getElementById('modalFicheStagiaire');
+  const onglet = nomOnglet === 'analyse' ? 'analyse' : 'parcours';
+
+  if (!modal) {
+    return;
+  }
+
+  modal
+    .querySelectorAll('[data-onglet-fiche-stagiaire]')
+    .forEach(function (bouton) {
+      const actif = bouton.dataset.ongletFicheStagiaire === onglet;
+      bouton.classList.toggle('actif', actif);
+      bouton.setAttribute('aria-selected', actif ? 'true' : 'false');
+    });
+
+  modal
+    .querySelectorAll('[data-contenu-onglet-fiche-stagiaire]')
+    .forEach(function (contenu) {
+      contenu.classList.toggle(
+        'masque',
+        contenu.dataset.contenuOngletFicheStagiaire !== onglet
+      );
+    });
+
+  if (onglet === 'analyse') {
+    chargerAnalysePedagogiqueFicheStagiaire(false);
+  }
+}
+
+
+function actualiserAnalysePedagogiqueFicheStagiaire() {
+  chargerAnalysePedagogiqueFicheStagiaire(true);
+}
+
+
+function chargerAnalysePedagogiqueFicheStagiaire(
+  forcerActualisation
+) {
+  const modal = document.getElementById('modalFicheStagiaire');
+  const etat = etatApplication.analysePedagogiqueFicheStagiaire;
+
+  if (
+    !modal ||
+    !etat ||
+    modal.dataset.uuid !== etat.uuid ||
+    etat.chargement ||
+    (etat.chargee && !forcerActualisation)
+  ) {
+    return;
+  }
+
+  const generation = ++etat.generation;
+  etat.chargement = true;
+  basculerChargementAnalysePedagogiqueFicheStagiaire_(true);
+  masquerErreurAnalysePedagogiqueFicheStagiaire_();
+
+  google.script.run
+    .withSuccessHandler(function (donnees) {
+      const modalCourante = document.getElementById(
+        'modalFicheStagiaire'
+      );
+      const etatCourant =
+        etatApplication.analysePedagogiqueFicheStagiaire;
+
+      if (
+        !modalCourante ||
+        !etatCourant ||
+        etatCourant !== etat ||
+        modalCourante.dataset.uuid !== etat.uuid ||
+        generation !== etat.generation
+      ) {
+        return;
+      }
+
+      etat.chargement = false;
+      etat.chargee = true;
+      etat.donnees = donnees || {};
+      etat.filtreDetail = 'TOUS';
+      basculerChargementAnalysePedagogiqueFicheStagiaire_(false);
+      afficherAnalysePedagogiqueFicheStagiaire(etat.donnees);
+    })
+    .withFailureHandler(function (erreur) {
+      const modalCourante = document.getElementById(
+        'modalFicheStagiaire'
+      );
+      const etatCourant =
+        etatApplication.analysePedagogiqueFicheStagiaire;
+
+      if (
+        !modalCourante ||
+        !etatCourant ||
+        etatCourant !== etat ||
+        generation !== etat.generation
+      ) {
+        return;
+      }
+
+      etat.chargement = false;
+      basculerChargementAnalysePedagogiqueFicheStagiaire_(false);
+      afficherErreurAnalysePedagogiqueFicheStagiaire_(erreur);
+    })
+    .getAnalysePedagogiqueStagiaire(
+      etat.uuid,
+      {
+        forcerActualisation: Boolean(forcerActualisation)
+      }
+    );
+}
+
+
+function basculerChargementAnalysePedagogiqueFicheStagiaire_(actif) {
+  const chargement = document.getElementById(
+    'chargementAnalysePedagogiqueFiche'
+  );
+  const bouton = document.getElementById(
+    'boutonActualiserAnalysePedagogiqueFiche'
+  );
+
+  chargement?.classList.toggle('masque', !actif);
+  if (bouton) {
+    bouton.disabled = actif;
+    bouton.textContent = actif
+      ? 'Calcul en cours…'
+      : 'Actualiser l’analyse';
+  }
+}
+
+
+function masquerErreurAnalysePedagogiqueFicheStagiaire_() {
+  const zone = document.getElementById(
+    'erreurAnalysePedagogiqueFiche'
+  );
+  if (zone) {
+    zone.classList.add('masque');
+    zone.innerHTML = '';
+  }
+}
+
+
+function afficherErreurAnalysePedagogiqueFicheStagiaire_(erreur) {
+  const zone = document.getElementById(
+    'erreurAnalysePedagogiqueFiche'
+  );
+  const contenu = document.getElementById(
+    'contenuAnalysePedagogiqueFiche'
+  );
+  const etatVide = document.getElementById(
+    'etatVideAnalysePedagogiqueFiche'
+  );
+  const etat = etatApplication.analysePedagogiqueFicheStagiaire;
+  const message = extraireMessageErreur(erreur);
+
+  if (zone) {
+    zone.classList.remove('masque');
+    zone.innerHTML = `
+      <strong>Analyse pédagogique indisponible</strong>
+      <p>${echapperHtml(message)}</p>
+      <button
+        type="button"
+        class="bouton-secondaire"
+        onclick="actualiserAnalysePedagogiqueFicheStagiaire()"
+      >
+        Réessayer
+      </button>
+    `;
+  }
+
+  if (!etat || !etat.chargee || !etat.donnees) {
+    contenu?.classList.add('masque');
+    etatVide?.classList.add('masque');
+  }
+}
+
+
+function afficherAnalysePedagogiqueFicheStagiaire(donnees) {
+  const synthese = donnees && donnees.synthese
+    ? donnees.synthese
+    : {};
+  const sansDonnees = analysePedagogiqueSansDonnees_(donnees);
+  const contenu = document.getElementById(
+    'contenuAnalysePedagogiqueFiche'
+  );
+  const etatVide = document.getElementById(
+    'etatVideAnalysePedagogiqueFiche'
+  );
+
+  afficherMetadonneesAnalysePedagogiqueFiche_(donnees.meta || {});
+  afficherAvertissementsAnalysePedagogiqueFiche_(donnees);
+  masquerErreurAnalysePedagogiqueFicheStagiaire_();
+  contenu?.classList.toggle('masque', sansDonnees);
+  etatVide?.classList.toggle('masque', !sansDonnees);
+
+  if (sansDonnees) {
+    return;
+  }
+
+  definirTexteAnalysePedagogique_(
+    'phraseSyntheseAnalysePedagogiqueFiche',
+    construirePhraseSyntheseAnalysePedagogique_(donnees)
+  );
+  definirTexteAnalysePedagogique_(
+    'analyseNombreSeances',
+    Number(synthese.nombreSeances) || 0
+  );
+  definirTexteAnalysePedagogique_(
+    'analysePremiereSeance',
+    afficherDateFrancaise(synthese.premiereSeance) || '—'
+  );
+  definirTexteAnalysePedagogique_(
+    'analyseDerniereSeance',
+    afficherDateFrancaise(synthese.derniereSeance) || '—'
+  );
+  definirTexteAnalysePedagogique_(
+    'analyseJoursDerniereSeance',
+    formaterJoursAnalysePedagogique_(
+      synthese.joursDepuisDerniereSeance
+    )
+  );
+  definirTexteAnalysePedagogique_(
+    'analyseItemsActifs',
+    Number(synthese.nombreItemsReferentielActifs) || 0
+  );
+  definirTexteAnalysePedagogique_(
+    'analyseItemsTravailles',
+    Number(synthese.nombreItemsTravailles) || 0
+  );
+  definirTexteAnalysePedagogique_(
+    'analyseItemsAcquis',
+    Number(synthese.nombreItemsAcquis) || 0
+  );
+  definirTexteAnalysePedagogique_(
+    'analyseItemsJamaisTravailles',
+    Array.isArray(synthese.itemsJamaisTravailles)
+      ? synthese.itemsJamaisTravailles.length
+      : 0
+  );
+  definirTexteAnalysePedagogique_(
+    'analyseItemsJamaisAcquis',
+    Array.isArray(synthese.itemsJamaisAcquis)
+      ? synthese.itemsJamaisAcquis.length
+      : 0
+  );
+
+  afficherRecommandationsAnalysePedagogiqueFiche_(donnees);
+  afficherPointsFortsAnalysePedagogiqueFiche_(
+    Array.isArray(donnees.pointsForts) ? donnees.pointsForts : []
+  );
+  afficherPointsFaiblesAnalysePedagogiqueFiche_(
+    Array.isArray(donnees.pointsFaibles) ? donnees.pointsFaibles : []
+  );
+  afficherItemsOubliesAnalysePedagogiqueFiche_(donnees);
+  appliquerFiltreDetailAnalysePedagogique('TOUS');
+}
+
+
+function analysePedagogiqueSansDonnees_(donnees) {
+  return !donnees ||
+    !donnees.synthese ||
+    Number(donnees.synthese.nombreSeances || 0) === 0;
+}
+
+
+function construirePhraseSyntheseAnalysePedagogique_(donnees) {
+  const synthese = donnees && donnees.synthese
+    ? donnees.synthese
+    : {};
+  const pointsFaibles = Array.isArray(donnees && donnees.pointsFaibles)
+    ? donnees.pointsFaibles
+    : [];
+  const jamaisTravailles = Array.isArray(
+    synthese.itemsJamaisTravailles
+  )
+    ? synthese.itemsJamaisTravailles.length
+    : 0;
+
+  if (!Number(synthese.nombreSeances || 0)) {
+    return 'Aucune séance pédagogique exploitable n’est encore enregistrée.';
+  }
+  if (jamaisTravailles || pointsFaibles.length) {
+    return 'Plusieurs items restent à travailler ou à consolider.';
+  }
+  if (Number(synthese.nombreItemsAcquis || 0) > 0) {
+    return 'Le stagiaire dispose d’acquisitions enregistrées sur les items travaillés.';
+  }
+  return 'Des séances sont enregistrées, mais aucune acquisition n’est encore validée.';
+}
+
+
+function afficherMetadonneesAnalysePedagogiqueFiche_(meta) {
+  const zone = document.getElementById(
+    'metadonneesAnalysePedagogiqueFiche'
+  );
+  if (!zone) {
+    return;
+  }
+
+  const date = meta.calculeA ? new Date(meta.calculeA) : null;
+  const dateLisible = date && !isNaN(date.getTime())
+    ? date.toLocaleString('fr-FR')
+    : 'date inconnue';
+  const cache = meta.cacheUtilise
+    ? ' · résultat en cache depuis ' +
+      Number(meta.ageCacheSecondes || 0) + ' s'
+    : '';
+
+  zone.textContent = 'Dernier calcul : ' + dateLisible +
+    ' · ' + Number(meta.dureeCalculMs || 0) + ' ms' + cache;
+}
+
+
+function afficherAvertissementsAnalysePedagogiqueFiche_(donnees) {
+  const zone = document.getElementById(
+    'avertissementsAnalysePedagogiqueFiche'
+  );
+  if (!zone) {
+    return;
+  }
+
+  const avertissements = Array.isArray(
+    donnees && donnees.avertissements
+  )
+    ? donnees.avertissements
+    : [];
+
+  if (!avertissements.length) {
+    zone.classList.add('masque');
+    zone.innerHTML = '';
+    return;
+  }
+
+  zone.classList.remove('masque');
+  zone.innerHTML = `
+    <strong>Données partielles ou historiques</strong>
+    <ul>
+      ${avertissements.slice(0, 6).map(function (message) {
+        return `<li>${echapperHtml(message)}</li>`;
+      }).join('')}
+    </ul>
+  `;
+}
+
+
+function afficherRecommandationsAnalysePedagogiqueFiche_(donnees) {
+  const zone = document.getElementById(
+    'recommandationsAnalysePedagogiqueFiche'
+  );
+  if (!zone) {
+    return;
+  }
+
+  const recommandations = Array.isArray(
+    donnees.recommandationsProchaineSeance
+  )
+    ? donnees.recommandationsProchaineSeance.slice(0, 10)
+    : [];
+  const itemsParId = indexerItemsAnalysePedagogique_(donnees.items);
+
+  if (!recommandations.length) {
+    zone.innerHTML = creerEtatVideAnalysePedagogique_(
+      donnees.messageRecommandations ||
+        'Aucune recommandation prioritaire pour le moment.'
+    );
+    return;
+  }
+
+  zone.innerHTML = `
+    <div class="liste-recommandations-analyse-pedagogique">
+      ${recommandations.map(function (recommandation) {
+        const item = itemsParId[recommandation.idItem] || {};
+        const niveau = obtenirPresentationNiveauPrioriteAnalysePedagogique_(
+          recommandation.niveauPriorite
+        );
+        const motifs = Array.isArray(recommandation.motifs)
+          ? recommandation.motifs
+          : [];
+
+        return `
+          <article class="recommandation-analyse-pedagogique ${niveau.classe}">
+            <div class="rang-recommandation-analyse" aria-label="Rang ${Number(recommandation.rang) || 0}">
+              ${Number(recommandation.rang) || 0}
+            </div>
+            <div class="contenu-recommandation-analyse">
+              <header>
+                <div>
+                  <span>${echapperHtml(recommandation.categorie || item.categorie || 'Sans catégorie')}</span>
+                  <h3>${echapperHtml(recommandation.intitule || item.intitule || 'Item')}</h3>
+                </div>
+                <div class="badges-priorite-analyse">
+                  <span class="badge-niveau-priorite-analyse ${niveau.classe}">
+                    ${niveau.symbole} ${echapperHtml(niveau.libelle)}
+                  </span>
+                  <span class="score-priorite-analyse">
+                    Score ${Number(recommandation.scorePriorite) || 0}/100
+                  </span>
+                </div>
+              </header>
+
+              <dl class="mesures-recommandation-analyse">
+                <div><dt>Dernier travail</dt><dd>${echapperHtml(afficherDateFrancaise(item.derniereDateTravail) || 'Jamais')}</dd></div>
+                <div><dt>Ancienneté</dt><dd>${echapperHtml(formaterJoursAnalysePedagogique_(item.joursDepuisDernierTravail))}</dd></div>
+                <div><dt>Travaux</dt><dd>${Number(item.nombreFoisTravaille) || 0}</dd></div>
+                <div><dt>Acquisitions</dt><dd>${Number(item.nombreFoisAcquis) || 0}</dd></div>
+                <div><dt>Taux</dt><dd>${echapperHtml(formaterTauxAnalysePedagogique_(item.tauxAcquisition))}</dd></div>
+              </dl>
+
+              <div class="motifs-recommandation-analyse">
+                <strong>Pourquoi cet item ?</strong>
+                ${motifs.length
+                  ? `<ul>${motifs.map(function (motif) {
+                    return `<li>${echapperHtml(motif)}</li>`;
+                  }).join('')}</ul>`
+                  : `<p>${echapperHtml(recommandation.motif || 'Motif communiqué par le moteur.')}</p>`}
+              </div>
+            </div>
+          </article>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+
+function afficherPointsFortsAnalysePedagogiqueFiche_(items) {
+  const zone = document.getElementById(
+    'pointsFortsAnalysePedagogiqueFiche'
+  );
+  if (!zone) {
+    return;
+  }
+  if (!items.length) {
+    zone.innerHTML = creerEtatVideAnalysePedagogique_(
+      'Aucun point fort suffisamment consolidé pour le moment.'
+    );
+    return;
+  }
+
+  zone.innerHTML = creerTableauCompactAnalysePedagogique_(
+    ['Item', 'Travaux', 'Acquis', 'Taux', 'Dernier travail'],
+    items.map(function (item) {
+      return [
+        `<strong>${echapperHtml(item.intitule)}</strong><small>${echapperHtml(item.categorie || 'Sans catégorie')}</small>`,
+        Number(item.nombreFoisTravaille) || 0,
+        Number(item.nombreFoisAcquis) || 0,
+        echapperHtml(formaterTauxAnalysePedagogique_(item.tauxAcquisition)),
+        echapperHtml(afficherDateFrancaise(item.derniereDateTravail) || '—')
+      ];
+    })
+  );
+}
+
+
+function afficherPointsFaiblesAnalysePedagogiqueFiche_(items) {
+  const zone = document.getElementById(
+    'pointsFaiblesAnalysePedagogiqueFiche'
+  );
+  if (!zone) {
+    return;
+  }
+  if (!items.length) {
+    zone.innerHTML = creerEtatVideAnalysePedagogique_(
+      'Aucun point faible majeur détecté.'
+    );
+    return;
+  }
+
+  zone.innerHTML = creerTableauCompactAnalysePedagogique_(
+    ['Item', 'Travaux', 'Échecs', 'Taux', 'Dernier travail', 'Motif'],
+    items.map(function (item) {
+      return [
+        `<strong>${echapperHtml(item.intitule)}</strong><small>${echapperHtml(item.categorie || 'Sans catégorie')}</small>`,
+        Number(item.nombreFoisTravaille) || 0,
+        Number(item.nombreEchecsExplicites) || 0,
+        echapperHtml(formaterTauxAnalysePedagogique_(item.tauxAcquisition)),
+        echapperHtml(afficherDateFrancaise(item.derniereDateTravail) || '—'),
+        echapperHtml(
+          item.motifClassement ||
+          'Classé par le moteur parmi les points à renforcer.'
+        )
+      ];
+    })
+  );
+}
+
+
+function creerTableauCompactAnalysePedagogique_(entetes, lignes) {
+  return `
+    <div class="tableau-responsive">
+      <table class="tableau tableau-compact-analyse-pedagogique">
+        <thead>
+          <tr>${entetes.map(function (entete) {
+            return `<th>${echapperHtml(entete)}</th>`;
+          }).join('')}</tr>
+        </thead>
+        <tbody>
+          ${lignes.map(function (cellules) {
+            return `<tr>${cellules.map(function (cellule) {
+              return `<td>${cellule}</td>`;
+            }).join('')}</tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+
+function afficherItemsOubliesAnalysePedagogiqueFiche_(donnees) {
+  const zone = document.getElementById(
+    'itemsOubliesAnalysePedagogiqueFiche'
+  );
+  const seuil = document.getElementById(
+    'seuilOubliAnalysePedagogiqueFiche'
+  );
+  const items = Array.isArray(donnees.itemsOublies)
+    ? donnees.itemsOublies
+    : [];
+  const seuilJours = donnees.regles &&
+    Number(donnees.regles.seuilOubliJours);
+
+  if (seuil) {
+    seuil.textContent = seuilJours
+      ? 'Le moteur considère un item comme non revu après ' +
+        seuilJours + ' jours.'
+      : 'Seuil d’oubli non communiqué par le moteur.';
+  }
+  if (!zone) {
+    return;
+  }
+  if (!items.length) {
+    zone.innerHTML = creerEtatVideAnalysePedagogique_(
+      'Aucun item oublié ou insuffisamment revu.'
+    );
+    return;
+  }
+
+  zone.innerHTML = `
+    <div class="grille-items-oublies-analyse">
+      ${items.map(function (item) {
+        const jamais = Number(item.nombreFoisTravaille || 0) === 0;
+        return `
+          <article class="item-oublie-analyse ${jamais ? 'item-jamais-travaille-analyse' : ''}">
+            <div>
+              <span>${echapperHtml(item.categorie || 'Sans catégorie')}</span>
+              <h3>${echapperHtml(item.intitule)}</h3>
+            </div>
+            <strong>
+              ${jamais
+                ? 'Jamais travaillé'
+                : 'Non revu depuis ' +
+                  Number(item.joursDepuisDernierTravail || 0) +
+                  ' jours'}
+            </strong>
+            <small>
+              Dernier travail :
+              ${echapperHtml(afficherDateFrancaise(item.derniereDateTravail) || '—')}
+            </small>
+          </article>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+
+function appliquerFiltreDetailAnalysePedagogique(filtre) {
+  const etat = etatApplication.analysePedagogiqueFicheStagiaire;
+  if (!etat || !etat.donnees) {
+    return;
+  }
+
+  const filtreValide = [
+    'TOUS',
+    'PRIORITAIRES',
+    'FORTS',
+    'FAIBLES',
+    'JAMAIS_TRAVAILLES',
+    'HISTORIQUES'
+  ].includes(filtre)
+    ? filtre
+    : 'TOUS';
+  etat.filtreDetail = filtreValide;
+
+  const modal = document.getElementById('modalFicheStagiaire');
+  modal?.querySelectorAll('[data-filtre-analyse]').forEach(
+    function (bouton) {
+      const actif = bouton.dataset.filtreAnalyse === filtreValide;
+      bouton.classList.toggle('actif', actif);
+      bouton.setAttribute('aria-pressed', actif ? 'true' : 'false');
+    }
+  );
+
+  afficherDetailItemsAnalysePedagogiqueFiche_(
+    etat.donnees,
+    filtreValide
+  );
+}
+
+
+function afficherDetailItemsAnalysePedagogiqueFiche_(donnees, filtre) {
+  const corps = document.getElementById(
+    'corpsDetailAnalysePedagogiqueFiche'
+  );
+  if (!corps) {
+    return;
+  }
+
+  const classifications =
+    construireIndexClassificationsAnalysePedagogique_(donnees);
+  const items = filtrerItemsDetailAnalysePedagogique_(
+    donnees,
+    filtre,
+    classifications
+  );
+
+  if (!items.length) {
+    corps.innerHTML = `
+      <tr>
+        <td colspan="11" class="etat-vide">
+          Aucun item ne correspond à ce filtre.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  corps.innerHTML = items.map(function (item) {
+    const classes = obtenirClassificationsItemAnalysePedagogique_(
+      item.idItem,
+      classifications
+    );
+    return `
+      <tr data-item-analyse="${echapperHtml(item.idItem)}">
+        <td>${echapperHtml(item.categorie || 'Sans catégorie')}</td>
+        <td><strong>${echapperHtml(item.intitule)}</strong></td>
+        <td>
+          <span class="badge-statut ${item.historique ? 'badge-gris' : 'badge-vert'}">
+            ${item.historique ? 'Historique' : 'Actif'}
+          </span>
+        </td>
+        <td>${Number(item.nombreFoisTravaille) || 0}</td>
+        <td>${Number(item.nombreFoisAcquis) || 0}</td>
+        <td>${Number(item.nombreEchecsExplicites) || 0}</td>
+        <td>${echapperHtml(formaterTauxAnalysePedagogique_(item.tauxAcquisition))}</td>
+        <td>${echapperHtml(afficherDateFrancaise(item.derniereDateTravail) || '—')}</td>
+        <td>${echapperHtml(formaterJoursAnalysePedagogique_(item.joursDepuisDernierTravail))}</td>
+        <td><strong>${Number(item.scorePriorite) || 0}</strong>/100</td>
+        <td class="classifications-item-analyse">
+          ${classes.map(function (classification) {
+            return `<span class="badge-classification-analyse badge-classification-${classification}">${echapperHtml(obtenirLibelleClassificationAnalysePedagogique_(classification))}</span>`;
+          }).join('')}
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+
+function construireIndexClassificationsAnalysePedagogique_(donnees) {
+  const index = {};
+  const correspondances = [
+    ['pointsForts', 'fort'],
+    ['pointsFaibles', 'faible'],
+    ['itemsOublies', 'oublie'],
+    ['itemsPrioritaires', 'prioritaire']
+  ];
+
+  correspondances.forEach(function (correspondance) {
+    const liste = Array.isArray(donnees && donnees[correspondance[0]])
+      ? donnees[correspondance[0]]
+      : [];
+    liste.forEach(function (item) {
+      if (!item || !item.idItem) {
+        return;
+      }
+      index[item.idItem] = index[item.idItem] || {};
+      index[item.idItem][correspondance[1]] = true;
+    });
+  });
+  return index;
+}
+
+
+function obtenirClassificationsItemAnalysePedagogique_(
+  idItem,
+  index
+) {
+  const valeur = index[idItem] || {};
+  const ordre = ['prioritaire', 'faible', 'oublie', 'fort'];
+  const classes = ordre.filter(function (classification) {
+    return Boolean(valeur[classification]);
+  });
+  return classes.length ? classes : ['neutre'];
+}
+
+
+function filtrerItemsDetailAnalysePedagogique_(
+  donnees,
+  filtre,
+  classificationsOptionnelles
+) {
+  const items = Array.isArray(donnees && donnees.items)
+    ? donnees.items
+    : [];
+  const classifications = classificationsOptionnelles ||
+    construireIndexClassificationsAnalysePedagogique_(donnees);
+
+  return items.filter(function (item) {
+    const valeur = classifications[item.idItem] || {};
+    if (filtre === 'PRIORITAIRES') {
+      return Boolean(valeur.prioritaire);
+    }
+    if (filtre === 'FORTS') {
+      return Boolean(valeur.fort);
+    }
+    if (filtre === 'FAIBLES') {
+      return Boolean(valeur.faible);
+    }
+    if (filtre === 'JAMAIS_TRAVAILLES') {
+      return Number(item.nombreFoisTravaille || 0) === 0;
+    }
+    if (filtre === 'HISTORIQUES') {
+      return Boolean(item.historique);
+    }
+    return true;
+  });
+}
+
+
+function obtenirPresentationNiveauPrioriteAnalysePedagogique_(niveau) {
+  const presentations = {
+    CRITIQUE: {
+      libelle: 'Priorité très élevée',
+      classe: 'priorite-tres-elevee',
+      symbole: '!!'
+    },
+    ELEVEE: {
+      libelle: 'Priorité élevée',
+      classe: 'priorite-elevee',
+      symbole: '!'
+    },
+    MODEREE: {
+      libelle: 'Priorité moyenne',
+      classe: 'priorite-moyenne',
+      symbole: '•'
+    },
+    FAIBLE: {
+      libelle: 'Priorité faible',
+      classe: 'priorite-faible',
+      symbole: '○'
+    }
+  };
+  return presentations[String(niveau || '').toUpperCase()] ||
+    presentations.FAIBLE;
+}
+
+
+function obtenirLibelleClassificationAnalysePedagogique_(classification) {
+  return {
+    prioritaire: 'Prioritaire',
+    fort: 'Fort',
+    faible: 'À renforcer',
+    oublie: 'Oublié',
+    neutre: 'Neutre'
+  }[classification] || 'Neutre';
+}
+
+
+function indexerItemsAnalysePedagogique_(items) {
+  const index = {};
+  (Array.isArray(items) ? items : []).forEach(function (item) {
+    if (item && item.idItem) {
+      index[item.idItem] = item;
+    }
+  });
+  return index;
+}
+
+
+function formaterTauxAnalysePedagogique_(valeur) {
+  if (valeur === null || valeur === undefined || valeur === '') {
+    return 'Non calculable';
+  }
+  const nombre = Number(valeur);
+  return Number.isFinite(nombre)
+    ? nombre.toLocaleString('fr-FR', {
+      maximumFractionDigits: 1
+    }) + ' %'
+    : 'Non calculable';
+}
+
+
+function formaterJoursAnalysePedagogique_(valeur) {
+  if (valeur === null || valeur === undefined || valeur === '') {
+    return 'Jamais';
+  }
+  const nombre = Math.max(0, Math.round(Number(valeur) || 0));
+  if (nombre === 0) {
+    return 'Aujourd’hui';
+  }
+  return nombre + (nombre > 1 ? ' jours' : ' jour');
+}
+
+
+function creerEtatVideAnalysePedagogique_(message) {
+  return `
+    <div class="etat-vide etat-vide-bloc-analyse-pedagogique">
+      ${echapperHtml(message)}
+    </div>
+  `;
+}
+
+
+function definirTexteAnalysePedagogique_(identifiant, valeur) {
+  const element = document.getElementById(identifiant);
+  if (element) {
+    element.textContent = String(valeur);
+  }
+}
+
 
 function mettreAJourSuiviFicheStagiaire(
   uuid,
@@ -2481,6 +3570,12 @@ function fermerFicheStagiaire() {
   const modal = document.getElementById(
     'modalFicheStagiaire'
   );
+
+  const analyse = etatApplication.analysePedagogiqueFicheStagiaire;
+  if (analyse) {
+    analyse.generation++;
+  }
+  etatApplication.analysePedagogiqueFicheStagiaire = null;
 
   if (modal) {
     modal.remove();
