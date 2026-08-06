@@ -18,6 +18,9 @@ const etatApplication = {
   stagiairesSession: [],
   formateursSession: [],
   formationsSession: [],
+  statistiques: null,
+  chargementStatistiquesEnCours: false,
+  generationStatistiques: 0,
   referentielSession: [],
   formationReferentielSession: '',
   itemsTravaillesSession: {},
@@ -173,6 +176,10 @@ function initialiserPageActive(nomPage) {
 
   if (nomPage === 'Sessions') {
     initialiserPageSessions();
+  }
+
+  if (nomPage === 'Statistiques') {
+    initialiserPageStatistiques();
   }
 
   if (nomPage === 'Referentiel') {
@@ -391,6 +398,7 @@ function verrouillerAdministrationLocale() {
       consulterSuiviPedagogique: true,
       gererSessions: true,
       consulterFormateurs: true,
+      consulterStatistiques: true,
       consulterMonRecapitulatifHeures: Boolean(
         etatApplication.sessionUtilisateur?.email
       )
@@ -10924,6 +10932,649 @@ function supprimerFormationAdministration(idFormation) {
       idFormation,
       obtenirJetonAdministrateurApplication()
     );
+}
+
+/* =====================================================
+   STATISTIQUES
+===================================================== */
+
+function initialiserPageStatistiques() {
+  etatApplication.statistiques = null;
+  etatApplication.chargementStatistiquesEnCours = false;
+  definirDatesPeriodeStatistiques_('ANNEE_EN_COURS');
+  chargerStatistiques(false);
+}
+
+
+function changerPeriodeStatistiques() {
+  const periode = document.getElementById('periodeStatistiques')?.value ||
+    'ANNEE_EN_COURS';
+  definirDatesPeriodeStatistiques_(periode);
+}
+
+
+function definirDatesPeriodeStatistiques_(periode) {
+  const debut = document.getElementById('dateDebutStatistiques');
+  const fin = document.getElementById('dateFinStatistiques');
+
+  if (!debut || !fin) {
+    return;
+  }
+
+  const aujourdHui = new Date();
+  let dateDebut;
+  let dateFin;
+
+  if (periode === 'MOIS_EN_COURS') {
+    dateDebut = new Date(
+      aujourdHui.getFullYear(),
+      aujourdHui.getMonth(),
+      1
+    );
+    dateFin = new Date(
+      aujourdHui.getFullYear(),
+      aujourdHui.getMonth() + 1,
+      0
+    );
+  } else if (periode === 'DOUZE_DERNIERS_MOIS') {
+    dateDebut = new Date(
+      aujourdHui.getFullYear(),
+      aujourdHui.getMonth() - 11,
+      1
+    );
+    dateFin = aujourdHui;
+  } else if (periode === 'ANNEE_PRECEDENTE') {
+    dateDebut = new Date(aujourdHui.getFullYear() - 1, 0, 1);
+    dateFin = new Date(aujourdHui.getFullYear() - 1, 11, 31);
+  } else if (periode === 'PERSONNALISEE') {
+    debut.disabled = false;
+    fin.disabled = false;
+    if (!debut.value) {
+      debut.value = datePourChampStatistiques_(
+        new Date(aujourdHui.getFullYear(), 0, 1)
+      );
+    }
+    if (!fin.value) {
+      fin.value = datePourChampStatistiques_(aujourdHui);
+    }
+    return;
+  } else {
+    dateDebut = new Date(aujourdHui.getFullYear(), 0, 1);
+    dateFin = new Date(aujourdHui.getFullYear(), 11, 31);
+  }
+
+  debut.disabled = true;
+  fin.disabled = true;
+  debut.value = datePourChampStatistiques_(dateDebut);
+  fin.value = datePourChampStatistiques_(dateFin);
+}
+
+
+function datePourChampStatistiques_(date) {
+  return date.getFullYear() + '-' +
+    String(date.getMonth() + 1).padStart(2, '0') + '-' +
+    String(date.getDate()).padStart(2, '0');
+}
+
+
+function lireFiltresStatistiques_(forcerActualisation) {
+  return {
+    periode: document.getElementById('periodeStatistiques')?.value ||
+      'ANNEE_EN_COURS',
+    dateDebut: document.getElementById('dateDebutStatistiques')?.value || '',
+    dateFin: document.getElementById('dateFinStatistiques')?.value || '',
+    formationId: document.getElementById('formationStatistiques')?.value || '',
+    formateurId: document.getElementById('formateurStatistiques')?.value || '',
+    inclureFormateursSansActivite: Boolean(
+      document.getElementById('inclureFormateursSansActiviteStatistiques')
+        ?.checked
+    ),
+    inclureItemsInactifs: Boolean(
+      document.getElementById('inclureItemsInactifsStatistiques')?.checked
+    ),
+    forcerActualisation: Boolean(forcerActualisation)
+  };
+}
+
+
+function chargerStatistiques(forcerActualisation) {
+  if (etatApplication.chargementStatistiquesEnCours) {
+    return;
+  }
+
+  const generation = ++etatApplication.generationStatistiques;
+  etatApplication.chargementStatistiquesEnCours = true;
+  basculerChargementStatistiques_(true);
+
+  google.script.run
+    .withSuccessHandler(function (resultat) {
+      if (
+        generation !== etatApplication.generationStatistiques ||
+        etatApplication.pageActive !== 'Statistiques'
+      ) {
+        return;
+      }
+
+      etatApplication.chargementStatistiquesEnCours = false;
+      etatApplication.statistiques = resultat;
+      basculerChargementStatistiques_(false);
+      afficherStatistiques(resultat || {});
+    })
+    .withFailureHandler(function (erreur) {
+      if (
+        generation !== etatApplication.generationStatistiques ||
+        etatApplication.pageActive !== 'Statistiques'
+      ) {
+        return;
+      }
+
+      etatApplication.chargementStatistiquesEnCours = false;
+      basculerChargementStatistiques_(false);
+      afficherErreurStatistiques_(extraireMessageErreur(erreur));
+    })
+    .getDonneesStatistiques(
+      lireFiltresStatistiques_(forcerActualisation),
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+
+function basculerChargementStatistiques_(actif) {
+  const zone = document.getElementById('chargementStatistiques');
+  const bouton = document.getElementById('boutonActualiserStatistiques');
+
+  zone?.classList.toggle('masque', !actif);
+  if (bouton) {
+    bouton.disabled = actif;
+    bouton.textContent = actif ? 'Calcul en cours…' : 'Actualiser';
+  }
+}
+
+
+function afficherStatistiques(donnees) {
+  remplirOptionsStatistiques_(donnees.options || {}, donnees.filtres || {});
+  afficherMetadonneesStatistiques_(donnees.meta || {}, donnees.filtres || {});
+  afficherAvertissementsStatistiques_(donnees.meta || {}, donnees.avertissements || []);
+
+  const indicateurs = donnees.indicateurs || {};
+  const fma = indicateurs.fmaRealisees || {};
+  definirTexteStatistiques_('statFmaRealisees', Number(fma.valeur) || 0);
+
+  const evolution = document.getElementById('statEvolutionFma');
+  if (evolution) {
+    if (fma.evolutionCalculable) {
+      const valeur = Number(fma.evolutionPourcentage) || 0;
+      evolution.textContent = (valeur > 0 ? '+' : '') + valeur +
+        ' % par rapport à la période précédente';
+      evolution.className = valeur > 0
+        ? 'evolution-statistique-positive'
+        : valeur < 0
+          ? 'evolution-statistique-negative'
+          : '';
+    } else {
+      evolution.textContent =
+        'Évolution non calculable : aucune donnée sur la période précédente';
+      evolution.className = '';
+    }
+  }
+
+  definirTexteStatistiques_(
+    'statStagiairesAccompagnes',
+    Number(indicateurs.stagiairesAccompagnes) || 0
+  );
+  definirTexteStatistiques_(
+    'statPreparationsCloturees',
+    Number(indicateurs.preparationsCloturees) || 0
+  );
+  definirTexteStatistiques_(
+    'statVolumeHeures',
+    formaterHeuresStatistiques_(indicateurs.volumeHoraireFormateurs)
+  );
+
+  const intervalles = indicateurs.tempsEntreSeances || {};
+  definirTexteStatistiques_(
+    'statTempsMoyen',
+    intervalles.calculable
+      ? intervalles.moyenneJours + ' jours'
+      : 'Non calculable'
+  );
+  definirTexteStatistiques_(
+    'statDetailsIntervalles',
+    intervalles.calculable
+      ? 'Médiane : ' + intervalles.medianeJours + ' jours · ' +
+        intervalles.nombreIntervalles + ' intervalle(s)'
+      : intervalles.message || 'Données insuffisantes.'
+  );
+
+  afficherFormateursStatistiques_(donnees.formateurs || {});
+  afficherEvolutionMensuelleStatistiques_(
+    Array.isArray(donnees.evolutionMensuelle)
+      ? donnees.evolutionMensuelle
+      : []
+  );
+  afficherItemsStatistiques_(donnees.items || {});
+}
+
+
+function remplirOptionsStatistiques_(options, filtres) {
+  remplirSelectObjetsStatistiques_(
+    'formationStatistiques',
+    Array.isArray(options.formations) ? options.formations : [],
+    'idFormation',
+    'libelle',
+    'Toutes les formations',
+    filtres.formationId
+  );
+  remplirSelectObjetsStatistiques_(
+    'formateurStatistiques',
+    Array.isArray(options.formateurs) ? options.formateurs : [],
+    'idFormateur',
+    'nomComplet',
+    'Tous les formateurs',
+    filtres.formateurId
+  );
+}
+
+
+function remplirSelectObjetsStatistiques_(
+  identifiant,
+  valeurs,
+  cleValeur,
+  cleLibelle,
+  libelleTous,
+  valeurSelectionnee
+) {
+  const select = document.getElementById(identifiant);
+  if (!select) {
+    return;
+  }
+
+  select.innerHTML = '';
+  const tous = document.createElement('option');
+  tous.value = '';
+  tous.textContent = libelleTous;
+  select.appendChild(tous);
+
+  valeurs.forEach(function (valeur) {
+    const option = document.createElement('option');
+    option.value = String(valeur[cleValeur] || '');
+    option.textContent = String(valeur[cleLibelle] || '') +
+      (valeur.actif === false ? ' (inactif)' : '');
+    select.appendChild(option);
+  });
+  select.value = String(valeurSelectionnee || '');
+}
+
+
+function afficherMetadonneesStatistiques_(meta, filtres) {
+  const zone = document.getElementById('metadonneesCalculStatistiques');
+  if (!zone) {
+    return;
+  }
+
+  const date = meta.calculeA ? new Date(meta.calculeA) : null;
+  const dateLisible = date && !isNaN(date.getTime())
+    ? date.toLocaleString('fr-FR')
+    : 'date inconnue';
+  const periode = filtres.dateFinEffective &&
+    filtres.dateFinEffective !== filtres.dateFin
+    ? ' · fin effective : ' + afficherDateFrancaise(filtres.dateFinEffective)
+    : '';
+  const cache = meta.cacheUtilise
+    ? ' · cache de ' + Number(meta.ageCacheSecondes || 0) + ' s'
+    : '';
+
+  zone.textContent = 'Calcul du ' + dateLisible + ' · ' +
+    Number(meta.dureeCalculMs || 0) + ' ms' + cache + periode;
+}
+
+
+function afficherAvertissementsStatistiques_(meta, avertissements) {
+  const zone = document.getElementById('avertissementsStatistiques');
+  if (!zone) {
+    return;
+  }
+
+  const liste = Array.isArray(meta.avertissements) &&
+    meta.avertissements.length
+    ? meta.avertissements
+    : avertissements;
+
+  if (!liste || !liste.length) {
+    zone.classList.add('masque');
+    zone.innerHTML = '';
+    return;
+  }
+
+  zone.classList.remove('masque');
+  zone.innerHTML = '<strong>Données partielles ou anomalies détectées</strong>' +
+    '<ul>' + liste.slice(0, 10).map(function (message) {
+      return '<li>' + echapperHtml(message) + '</li>';
+    }).join('') + '</ul>';
+}
+
+
+function afficherFormateursStatistiques_(donnees) {
+  const lignes = Array.isArray(donnees.lignes) ? donnees.lignes : [];
+  const corps = document.getElementById('corpsFormateursStatistiques');
+
+  if (corps) {
+    corps.innerHTML = lignes.length
+      ? lignes.map(function (ligne) {
+        return '<tr>' +
+          '<td><strong>' + echapperHtml(ligne.nomComplet) + '</strong></td>' +
+          '<td>' + Number(ligne.nombreSeances || 0) + '</td>' +
+          '<td>' + echapperHtml(formaterHeuresStatistiques_(ligne.totalHeures)) + '</td>' +
+          '<td>' + Number(ligne.nombreStagiairesDistincts || 0) + '</td>' +
+          '<td>' + Number(ligne.moyenneStagiairesParSeance || 0) + '</td>' +
+          '<td>' + echapperHtml(
+            afficherDateFrancaise(ligne.derniereSeance) || '—'
+          ) + '</td></tr>';
+      }).join('')
+      : creerLigneVideStatistiques_(6, 'Aucune activité formateur sur cette période.');
+  }
+
+  rendreGraphiqueBarresHorizontalesStatistiques_(
+    'graphiqueHeuresFormateursStatistiques',
+    Array.isArray(donnees.graphiqueHeures) ? donnees.graphiqueHeures : [],
+    'Heures de formation par formateur',
+    '#1b6ca8',
+    ' h'
+  );
+}
+
+
+function afficherEvolutionMensuelleStatistiques_(mois) {
+  const corps = document.getElementById('corpsEvolutionStatistiques');
+  if (corps) {
+    corps.innerHTML = mois.length
+      ? mois.map(function (ligne) {
+        return '<tr><td>' + echapperHtml(ligne.libelle) + '</td>' +
+          '<td>' + Number(ligne.nombreSeances || 0) + '</td>' +
+          '<td>' + echapperHtml(
+            formaterHeuresStatistiques_(ligne.volumeHeures)
+          ) + '</td></tr>';
+      }).join('')
+      : creerLigneVideStatistiques_(3, 'Aucun mois exploitable dans la période.');
+  }
+
+  rendreGraphiqueBarresMensuellesStatistiques_(
+    'graphiqueEvolutionSeancesStatistiques',
+    mois.map(function (ligne) {
+      return { libelle: ligne.libelle, valeur: ligne.nombreSeances };
+    }),
+    '#1b6ca8',
+    ' séance(s)'
+  );
+  rendreGraphiqueBarresMensuellesStatistiques_(
+    'graphiqueEvolutionHeuresStatistiques',
+    mois.map(function (ligne) {
+      return { libelle: ligne.libelle, valeur: ligne.volumeHeures };
+    }),
+    '#d78322',
+    ' h'
+  );
+}
+
+
+function afficherItemsStatistiques_(donnees) {
+  const categories = Array.isArray(donnees.repartitionCategories)
+    ? donnees.repartitionCategories
+    : [];
+  const corpsCategories = document.getElementById(
+    'corpsCategoriesStatistiques'
+  );
+
+  if (corpsCategories) {
+    corpsCategories.innerHTML = categories.length
+      ? categories.map(function (categorie) {
+        return '<tr><td><strong>' + echapperHtml(categorie.libelle) +
+          '</strong>' + (categorie.actif ? '' : ' <small>(historique)</small>') +
+          '</td><td>' + Number(categorie.nombreSeances || 0) +
+          '</td><td>' + Number(categorie.occurrences || 0) +
+          '</td><td>' + Number(categorie.pourcentage || 0) + ' %</td></tr>';
+      }).join('')
+      : creerLigneVideStatistiques_(
+        4,
+        'Aucun item travaillé sur cette période.'
+      );
+  }
+
+  rendreGraphiqueBarresHorizontalesStatistiques_(
+    'graphiqueCategoriesStatistiques',
+    categories.map(function (categorie) {
+      return {
+        libelle: categorie.libelle,
+        valeur: categorie.occurrences
+      };
+    }),
+    'Occurrences d’items par catégorie',
+    '#d78322',
+    ''
+  );
+
+  afficherClassementItemsStatistiques_(
+    'corpsItemsPlusStatistiques',
+    Array.isArray(donnees.plusTravailles) ? donnees.plusTravailles : []
+  );
+  afficherClassementItemsStatistiques_(
+    'corpsItemsMoinsStatistiques',
+    Array.isArray(donnees.moinsTravailles) ? donnees.moinsTravailles : []
+  );
+
+  const source = donnees.sources || {};
+  definirTexteStatistiques_(
+    'sourceItemsStatistiques',
+    'Source principale : ' +
+      Number(source.occurrencesItemsSessions || 0) +
+      ' occurrence(s) ITEMS_SESSIONS · repli historique : ' +
+      Number(source.occurrencesEvaluationsHistoriques || 0) +
+      ' occurrence(s) EVALUATIONS.'
+  );
+}
+
+
+function afficherClassementItemsStatistiques_(identifiant, lignes) {
+  const corps = document.getElementById(identifiant);
+  if (!corps) {
+    return;
+  }
+
+  corps.innerHTML = lignes.length
+    ? lignes.map(function (ligne) {
+      return '<tr><td><strong>' + echapperHtml(ligne.intitule) +
+        '</strong>' + (ligne.actif ? '' : ' <small>(inactif)</small>') +
+        '</td><td>' + echapperHtml(ligne.categorie) +
+        '</td><td>' + Number(ligne.nombreSeances || 0) +
+        '</td><td>' + echapperHtml(
+          afficherDateFrancaise(ligne.derniereDate) || 'Jamais'
+        ) + '</td></tr>';
+    }).join('')
+    : creerLigneVideStatistiques_(4, 'Aucun item dans ce classement.');
+}
+
+
+function rendreGraphiqueBarresHorizontalesStatistiques_(
+  identifiant,
+  donnees,
+  titre,
+  couleur,
+  suffixe
+) {
+  const zone = document.getElementById(identifiant);
+  if (!zone) {
+    return;
+  }
+
+  if (!donnees.length || !donnees.some(function (ligne) {
+    return Number(ligne.valeur) > 0;
+  })) {
+    zone.innerHTML = creerEtatVideGraphiqueStatistiques_(
+      'Aucune donnée à représenter.'
+    );
+    return;
+  }
+
+  const largeur = 900;
+  const largeurLibelle = 260;
+  const hauteurLigne = 42;
+  const hauteur = 44 + donnees.length * hauteurLigne;
+  const maximum = Math.max.apply(null, donnees.map(function (ligne) {
+    return Number(ligne.valeur) || 0;
+  }));
+  const barres = donnees.map(function (ligne, index) {
+    const valeur = Number(ligne.valeur) || 0;
+    const y = 40 + index * hauteurLigne;
+    const largeurBarre = maximum
+      ? Math.max(2, valeur / maximum * (largeur - largeurLibelle - 90))
+      : 0;
+    const libelle = tronquerLibelleStatistiques_(ligne.libelle, 34);
+    return '<g><title>' + echapperHtml(ligne.libelle + ' : ' + valeur + suffixe) +
+      '</title><text x="4" y="' + (y + 17) +
+      '" class="texte-graphique-statistiques">' + echapperHtml(libelle) +
+      '</text><rect x="' + largeurLibelle + '" y="' + y +
+      '" width="' + largeurBarre + '" height="24" rx="5" fill="' +
+      couleur + '"></rect><text x="' +
+      (largeurLibelle + largeurBarre + 8) + '" y="' + (y + 17) +
+      '" class="valeur-graphique-statistiques">' + valeur +
+      echapperHtml(suffixe) + '</text></g>';
+  }).join('');
+
+  zone.innerHTML = '<div class="defilement-graphique-statistiques">' +
+    '<svg role="img" aria-label="' + echapperHtml(titre) +
+    '" viewBox="0 0 ' + largeur + ' ' + hauteur +
+    '" style="min-width:720px;height:' + hauteur + 'px">' +
+    '<text x="4" y="22" class="titre-graphique-svg-statistiques">' +
+    echapperHtml(titre) + '</text>' + barres + '</svg></div>';
+}
+
+
+function rendreGraphiqueBarresMensuellesStatistiques_(
+  identifiant,
+  donnees,
+  couleur,
+  suffixe
+) {
+  const zone = document.getElementById(identifiant);
+  if (!zone) {
+    return;
+  }
+
+  if (!donnees.length) {
+    zone.innerHTML = creerEtatVideGraphiqueStatistiques_(
+      'Aucune période à représenter.'
+    );
+    return;
+  }
+
+  const largeur = Math.max(720, donnees.length * 64 + 70);
+  const hauteur = 290;
+  const base = 225;
+  const maximum = Math.max(1, ...donnees.map(function (ligne) {
+    return Number(ligne.valeur) || 0;
+  }));
+  const largeurBarre = Math.min(34, (largeur - 70) / donnees.length * 0.6);
+  const espace = (largeur - 70) / donnees.length;
+  const barres = donnees.map(function (ligne, index) {
+    const valeur = Number(ligne.valeur) || 0;
+    const hauteurBarre = valeur / maximum * 170;
+    const x = 50 + index * espace + (espace - largeurBarre) / 2;
+    const y = base - hauteurBarre;
+    return '<g><title>' + echapperHtml(
+      ligne.libelle + ' : ' + valeur + suffixe
+    ) + '</title><rect x="' + x + '" y="' + y + '" width="' +
+      largeurBarre + '" height="' + hauteurBarre + '" rx="4" fill="' +
+      couleur + '"></rect><text x="' + (x + largeurBarre / 2) +
+      '" y="' + (base + 18) +
+      '" text-anchor="middle" class="mois-graphique-statistiques">' +
+      echapperHtml(tronquerLibelleStatistiques_(ligne.libelle, 9)) +
+      '</text><text x="' + (x + largeurBarre / 2) + '" y="' +
+      Math.max(20, y - 6) +
+      '" text-anchor="middle" class="valeur-graphique-statistiques">' +
+      valeur + '</text></g>';
+  }).join('');
+
+  zone.innerHTML = '<div class="defilement-graphique-statistiques">' +
+    '<svg role="img" viewBox="0 0 ' + largeur + ' ' + hauteur +
+    '" style="min-width:' + largeur + 'px;height:' + hauteur + 'px">' +
+    '<line x1="45" y1="' + base + '" x2="' + (largeur - 10) +
+    '" y2="' + base + '" class="axe-graphique-statistiques"></line>' +
+    barres + '</svg></div>';
+}
+
+
+function creerEtatVideGraphiqueStatistiques_(message) {
+  return '<div class="etat-vide etat-vide-graphique-statistiques">' +
+    echapperHtml(message) + '</div>';
+}
+
+
+function creerLigneVideStatistiques_(colonnes, message) {
+  return '<tr><td colspan="' + Number(colonnes) + '" class="etat-vide">' +
+    echapperHtml(message) + '</td></tr>';
+}
+
+
+function tronquerLibelleStatistiques_(valeur, longueur) {
+  const texte = String(valeur || '');
+  return texte.length > longueur
+    ? texte.slice(0, longueur - 1) + '…'
+    : texte;
+}
+
+
+function formaterHeuresStatistiques_(valeur) {
+  const nombre = Number(valeur || 0);
+  return nombre.toLocaleString('fr-FR', {
+    minimumFractionDigits: nombre % 1 ? 1 : 0,
+    maximumFractionDigits: 2
+  }) + ' h';
+}
+
+
+function definirTexteStatistiques_(identifiant, valeur) {
+  const element = document.getElementById(identifiant);
+  if (element) {
+    element.textContent = String(valeur);
+  }
+}
+
+
+function reinitialiserFiltresStatistiques() {
+  const periode = document.getElementById('periodeStatistiques');
+  if (periode) {
+    periode.value = 'ANNEE_EN_COURS';
+  }
+  ['formationStatistiques', 'formateurStatistiques'].forEach(
+    function (identifiant) {
+      const element = document.getElementById(identifiant);
+      if (element) {
+        element.value = '';
+      }
+    }
+  );
+  [
+    'inclureFormateursSansActiviteStatistiques',
+    'inclureItemsInactifsStatistiques'
+  ].forEach(function (identifiant) {
+    const element = document.getElementById(identifiant);
+    if (element) {
+      element.checked = false;
+    }
+  });
+  definirDatesPeriodeStatistiques_('ANNEE_EN_COURS');
+  chargerStatistiques(true);
+}
+
+
+function afficherErreurStatistiques_(message) {
+  afficherToast(message, true);
+  const zone = document.getElementById('avertissementsStatistiques');
+  if (zone) {
+    zone.classList.remove('masque');
+    zone.innerHTML = '<strong>Calcul impossible</strong><p>' +
+      echapperHtml(message) + '</p>';
+  }
 }
 
 </script>

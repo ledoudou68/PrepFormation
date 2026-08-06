@@ -1898,6 +1898,10 @@ function finaliserRollbackRestauration_(etat, proprietes) {
     PROPRIETE_OPERATION_RESTAURATION_ACTIVE_
   );
 
+  if (typeof invaliderCacheStatistiques_ === 'function') {
+    invaliderCacheStatistiques_();
+  }
+
   return {
     complet: true,
     nombreErreurs: 0,
@@ -2175,6 +2179,10 @@ function finaliserOperationRestauration_(
     JSON.stringify(construireEtatArchiveRestauration_(etat))
   );
   proprietes.deleteProperty(PROPRIETE_OPERATION_RESTAURATION_ACTIVE_);
+
+  if (typeof invaliderCacheStatistiques_ === 'function') {
+    invaliderCacheStatistiques_();
+  }
 
   return {
     succes: true,

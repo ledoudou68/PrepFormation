@@ -25,6 +25,7 @@ function getPage(nomPage, jetonAdministrateur) {
     'Stagiaires',
     'Formateurs',
     'Sessions',
+    'Statistiques',
     'Referentiel',
     'Indemnisation',
     'Administration'

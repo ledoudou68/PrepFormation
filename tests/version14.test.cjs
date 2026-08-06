@@ -384,9 +384,9 @@ test('le formulaire conserve les champs métier existants', () => {
   ));
 });
 
-test('la version applicative est centralisée à 1.4.0', () => {
+test('la version applicative est centralisée à 1.5.0', () => {
   assert(sourceMetadonnees.includes(
-    "VERSION_APPLICATION_PREPFORMATION_ = '1.4.0'"
+    "VERSION_APPLICATION_PREPFORMATION_ = '1.5.0'"
   ));
 });
 
@@ -403,5 +403,5 @@ tests.forEach(({ nom, traitement }) => {
 });
 
 process.stdout.write(
-  '\n' + reussis + '/' + tests.length + ' tests de la version 1.4 réussis.\n'
+  '\n' + reussis + '/' + tests.length + ' tests hérités de la version 1.4 réussis.\n'
 );

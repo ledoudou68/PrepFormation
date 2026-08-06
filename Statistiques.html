@@ -1,0 +1,325 @@
+<div class="page page-statistiques">
+
+  <div class="entete-page entete-page-actions entete-statistiques">
+    <div>
+      <h1>Statistiques</h1>
+      <p>
+        Pilotage de l’activité de préparation SUAP à partir des séances réalisées.
+      </p>
+      <small id="metadonneesCalculStatistiques">
+        En attente du premier calcul…
+      </small>
+    </div>
+
+    <button
+      type="button"
+      id="boutonActualiserStatistiques"
+      class="bouton-principal"
+      onclick="chargerStatistiques(true)"
+    >
+      Actualiser
+    </button>
+  </div>
+
+  <section class="bloc filtres-statistiques" aria-labelledby="titreFiltresStatistiques">
+    <div class="fiche-bloc-entete">
+      <div>
+        <h2 id="titreFiltresStatistiques">Filtres</h2>
+        <p>Les bornes sont inclusives et les séances futures sont exclues.</p>
+      </div>
+    </div>
+
+    <div class="grille-filtres-statistiques">
+      <div class="groupe-champ">
+        <label for="periodeStatistiques">Période</label>
+        <select
+          id="periodeStatistiques"
+          class="champ"
+          onchange="changerPeriodeStatistiques()"
+        >
+          <option value="MOIS_EN_COURS">Mois en cours</option>
+          <option value="ANNEE_EN_COURS" selected>Année en cours</option>
+          <option value="DOUZE_DERNIERS_MOIS">12 derniers mois</option>
+          <option value="ANNEE_PRECEDENTE">Année précédente</option>
+          <option value="PERSONNALISEE">Période personnalisée</option>
+        </select>
+      </div>
+
+      <div class="groupe-champ">
+        <label for="dateDebutStatistiques">Du</label>
+        <input
+          type="date"
+          id="dateDebutStatistiques"
+          class="champ"
+          disabled
+        >
+      </div>
+
+      <div class="groupe-champ">
+        <label for="dateFinStatistiques">Au</label>
+        <input
+          type="date"
+          id="dateFinStatistiques"
+          class="champ"
+          disabled
+        >
+      </div>
+
+      <div class="groupe-champ">
+        <label for="formationStatistiques">Formation</label>
+        <select id="formationStatistiques" class="champ">
+          <option value="">Toutes les formations</option>
+        </select>
+      </div>
+
+      <div class="groupe-champ">
+        <label for="formateurStatistiques">Formateur</label>
+        <select id="formateurStatistiques" class="champ">
+          <option value="">Tous les formateurs</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="options-filtres-statistiques">
+      <label class="case-option-statistiques">
+        <input type="checkbox" id="inclureFormateursSansActiviteStatistiques">
+        <span>Inclure les formateurs sans activité</span>
+      </label>
+
+      <label class="case-option-statistiques">
+        <input type="checkbox" id="inclureItemsInactifsStatistiques">
+        <span>Inclure les items inactifs dans les classements</span>
+      </label>
+    </div>
+
+    <div class="actions-filtres-statistiques">
+      <button
+        type="button"
+        class="bouton-principal"
+        onclick="chargerStatistiques(false)"
+      >
+        Appliquer les filtres
+      </button>
+      <button
+        type="button"
+        class="bouton-secondaire"
+        onclick="reinitialiserFiltresStatistiques()"
+      >
+        Réinitialiser les filtres
+      </button>
+    </div>
+  </section>
+
+  <div
+    id="chargementStatistiques"
+    class="chargement-statistiques masque"
+    aria-live="polite"
+  >
+    <span class="spinner-statistiques"></span>
+    Calcul des statistiques…
+  </div>
+
+  <div
+    id="avertissementsStatistiques"
+    class="avertissements-statistiques masque"
+  ></div>
+
+  <section aria-labelledby="titreIndicateursStatistiques">
+    <div class="titre-section-statistiques">
+      <h2 id="titreIndicateursStatistiques">Indicateurs généraux</h2>
+    </div>
+
+    <div class="grille-indicateurs-statistiques">
+      <article class="carte indicateur-statistique">
+        <span class="icone-indicateur-statistique">FMA</span>
+        <div>
+          <p>FMA réalisées</p>
+          <strong id="statFmaRealisees">—</strong>
+          <small id="statEvolutionFma">—</small>
+        </div>
+      </article>
+
+      <article class="carte indicateur-statistique">
+        <span class="icone-indicateur-statistique">STG</span>
+        <div>
+          <p>Stagiaires accompagnés</p>
+          <strong id="statStagiairesAccompagnes">—</strong>
+          <small>Présents à au moins une séance</small>
+        </div>
+      </article>
+
+      <article class="carte indicateur-statistique">
+        <span class="icone-indicateur-statistique">✓</span>
+        <div>
+          <p>Préparations clôturées</p>
+          <strong id="statPreparationsCloturees">—</strong>
+          <small>Selon la date de clôture renseignée</small>
+        </div>
+      </article>
+
+      <article class="carte indicateur-statistique">
+        <span class="icone-indicateur-statistique">H</span>
+        <div>
+          <p>Volume horaire formateurs</p>
+          <strong id="statVolumeHeures">—</strong>
+          <small>Somme des prestations dédupliquées</small>
+        </div>
+      </article>
+
+      <article class="carte indicateur-statistique indicateur-statistique-large">
+        <span class="icone-indicateur-statistique">Δ</span>
+        <div>
+          <p>Temps entre deux séances</p>
+          <strong id="statTempsMoyen">—</strong>
+          <small id="statDetailsIntervalles">—</small>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <section class="bloc section-statistiques" aria-labelledby="titreActiviteFormateursStatistiques">
+    <div class="fiche-bloc-entete">
+      <div>
+        <h2 id="titreActiviteFormateursStatistiques">Activité des formateurs</h2>
+        <p>Heures issues de PRESTATIONS_FORMATEURS, séances dédupliquées.</p>
+      </div>
+    </div>
+
+    <div
+      id="graphiqueHeuresFormateursStatistiques"
+      class="zone-graphique-statistiques"
+    ></div>
+
+    <div class="tableau-responsive">
+      <table class="tableau tableau-statistiques">
+        <thead>
+          <tr>
+            <th>Formateur</th>
+            <th>Séances</th>
+            <th>Heures</th>
+            <th>Stagiaires distincts</th>
+            <th>Moyenne / séance</th>
+            <th>Dernière séance</th>
+          </tr>
+        </thead>
+        <tbody id="corpsFormateursStatistiques">
+          <tr><td colspan="6" class="etat-vide">Chargement…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="bloc section-statistiques" aria-labelledby="titreEvolutionStatistiques">
+    <div class="fiche-bloc-entete">
+      <div>
+        <h2 id="titreEvolutionStatistiques">Évolution mensuelle</h2>
+        <p>Deux graphiques séparés pour éviter une double échelle trompeuse.</p>
+      </div>
+    </div>
+
+    <div class="grille-graphiques-mensuels-statistiques">
+      <article>
+        <h3>Nombre de séances réalisées</h3>
+        <div
+          id="graphiqueEvolutionSeancesStatistiques"
+          class="zone-graphique-statistiques zone-graphique-mensuel"
+        ></div>
+      </article>
+      <article>
+        <h3>Volume horaire formateurs</h3>
+        <div
+          id="graphiqueEvolutionHeuresStatistiques"
+          class="zone-graphique-statistiques zone-graphique-mensuel"
+        ></div>
+      </article>
+    </div>
+
+    <div class="tableau-responsive">
+      <table class="tableau tableau-statistiques">
+        <thead>
+          <tr>
+            <th>Mois</th>
+            <th>Séances réalisées</th>
+            <th>Heures formateurs</th>
+          </tr>
+        </thead>
+        <tbody id="corpsEvolutionStatistiques">
+          <tr><td colspan="3" class="etat-vide">Chargement…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="bloc section-statistiques" aria-labelledby="titreItemsStatistiques">
+    <div class="fiche-bloc-entete">
+      <div>
+        <h2 id="titreItemsStatistiques">Répartition des items travaillés</h2>
+        <p id="sourceItemsStatistiques">
+          Source principale : ITEMS_SESSIONS.
+        </p>
+      </div>
+    </div>
+
+    <div
+      id="graphiqueCategoriesStatistiques"
+      class="zone-graphique-statistiques"
+    ></div>
+
+    <div class="tableau-responsive">
+      <table class="tableau tableau-statistiques">
+        <thead>
+          <tr>
+            <th>Catégorie</th>
+            <th>Séances distinctes</th>
+            <th>Occurrences</th>
+            <th>Part</th>
+          </tr>
+        </thead>
+        <tbody id="corpsCategoriesStatistiques">
+          <tr><td colspan="4" class="etat-vide">Chargement…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="grille-classements-items-statistiques">
+      <article>
+        <h3>10 items les plus travaillés</h3>
+        <div class="tableau-responsive">
+          <table class="tableau tableau-statistiques">
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Catégorie</th>
+                <th>Séances</th>
+                <th>Dernier travail</th>
+              </tr>
+            </thead>
+            <tbody id="corpsItemsPlusStatistiques">
+              <tr><td colspan="4" class="etat-vide">Chargement…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </article>
+
+      <article>
+        <h3>10 items les moins travaillés</h3>
+        <div class="tableau-responsive">
+          <table class="tableau tableau-statistiques">
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Catégorie</th>
+                <th>Séances</th>
+                <th>Dernier travail</th>
+              </tr>
+            </thead>
+            <tbody id="corpsItemsMoinsStatistiques">
+              <tr><td colspan="4" class="etat-vide">Chargement…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </article>
+    </div>
+  </section>
+
+</div>
