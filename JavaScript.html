@@ -79,6 +79,7 @@ const etatApplication = {
   formationsAdministration: [],
   parametresEmailIndemnisationAdministration: null,
   diagnosticAdministration: null,
+  reinitialisationProduction: null,
   sauvegardesAdministration: null,
   restaurationAdministration: null,
   previewRestaurationActive: null,
@@ -12463,6 +12464,377 @@ function initialiserPageAdministration() {
     .getDonneesAdministration(
       obtenirJetonAdministrateurApplication()
     );
+}
+
+
+function ouvrirReinitialisationProduction() {
+  if (!estAdministrateurApplication()) {
+    afficherToast('Accès réservé à l’administrateur.', true);
+    return;
+  }
+
+  const modal = document.getElementById(
+    'modalReinitialisationProduction'
+  );
+  if (!modal) return;
+
+  etatApplication.reinitialisationProduction = {
+    preview: null,
+    resultat: null,
+    enCours: true,
+    rafraichirApresFermeture: false
+  };
+
+  const boutonFermer = document.getElementById(
+    'boutonFermerReinitialisationProduction'
+  );
+  const boutonAnnuler = document.getElementById(
+    'boutonAnnulerReinitialisationProduction'
+  );
+  const boutonConfirmer = document.getElementById(
+    'boutonConfirmerReinitialisationProduction'
+  );
+  if (boutonFermer) boutonFermer.disabled = true;
+  if (boutonAnnuler) boutonAnnuler.classList.remove('masque');
+  if (boutonConfirmer) {
+    boutonConfirmer.onclick =
+      confirmerEtExecuterReinitialisationProduction;
+  }
+
+  document.getElementById(
+    'texteConfirmationReinitialisationProduction'
+  ).value = '';
+  document.getElementById(
+    'motDePasseReinitialisationProduction'
+  ).value = '';
+  document.getElementById(
+    'confirmationReinitialisationProduction'
+  ).classList.add('masque');
+  document.getElementById(
+    'contenuReinitialisationProduction'
+  ).innerHTML = `
+    <div class="etat-vide">
+      Analyse des données métier et des références…
+    </div>
+  `;
+  configurerBoutonsReinitialisationProduction_(
+    true,
+    'Prévisualisation…',
+    'bouton-danger'
+  );
+
+  modal.classList.remove('masque');
+  document.body.classList.add('modal-ouverte');
+
+  google.script.run
+    .withSuccessHandler(function (preview) {
+      const etat = etatApplication.reinitialisationProduction;
+      if (!etat) return;
+      etat.preview = preview;
+      etat.enCours = false;
+      afficherPrevisualisationReinitialisationProduction_(preview);
+      document.getElementById(
+        'confirmationReinitialisationProduction'
+      ).classList.remove('masque');
+      configurerBoutonsReinitialisationProduction_(
+        false,
+        'Confirmer la mise en production',
+        'bouton-danger'
+      );
+      if (boutonFermer) boutonFermer.disabled = false;
+      mettreAJourConfirmationReinitialisationProduction();
+    })
+    .withFailureHandler(function (erreur) {
+      afficherErreurReinitialisationProduction_(
+        extraireMessageErreur(erreur)
+      );
+    })
+    .previsualiserReinitialisationProduction(
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+
+function afficherPrevisualisationReinitialisationProduction_(preview) {
+  const compteurs = preview.compteurs || {};
+  const cible = document.getElementById(
+    'contenuReinitialisationProduction'
+  );
+  const structures = preview.structuresConservees || [];
+  const orphelines = preview.referencesOrphelines || [];
+
+  cible.innerHTML = `
+    <h3>Données qui seront supprimées</h3>
+    <div class="grille-compteurs-reinitialisation-production">
+      ${creerCompteurReinitialisationProduction_('Stagiaires', compteurs.stagiaires)}
+      ${creerCompteurReinitialisationProduction_('Formateurs', compteurs.formateurs)}
+      ${creerCompteurReinitialisationProduction_('Séances', compteurs.sessions)}
+      ${creerCompteurReinitialisationProduction_('Présences', compteurs.presences)}
+      ${creerCompteurReinitialisationProduction_('Prestations', compteurs.prestations)}
+      ${creerCompteurReinitialisationProduction_('Items de séance', compteurs.itemsSessions)}
+      ${creerCompteurReinitialisationProduction_('Évaluations', compteurs.evaluations)}
+      ${creerCompteurReinitialisationProduction_('Favoris', compteurs.favoris)}
+      ${creerCompteurReinitialisationProduction_('Historiques d’indemnisation', compteurs.historiquesIndemnisation)}
+      ${creerCompteurReinitialisationProduction_('Photos Drive', preview.photosStagiairesConcernees)}
+    </div>
+
+    <div class="structures-conservees-reinitialisation">
+      <h3>Structures et configurations conservées</h3>
+      <ul>
+        ${structures.map(function (structure) {
+          return `<li>✓ ${echapperHtml(structure)}</li>`;
+        }).join('')}
+      </ul>
+    </div>
+
+    <div class="references-orphelines-reinitialisation">
+      <h3>Références orphelines supprimées avec les données métier</h3>
+      ${orphelines.length
+        ? `<ul>${orphelines.map(function (reference) {
+          return `<li>${echapperHtml(reference.message || reference.feuille)}</li>`;
+        }).join('')}</ul>`
+        : '<p>Aucune référence orpheline métier détectée.</p>'}
+    </div>
+
+    <p class="avertissement-mise-production-administration">
+      Une sauvegarde complète de type AUTO_AVANT_REINITIALISATION_PRODUCTION
+      sera créée et vérifiée avant la première suppression. Les feuilles,
+      en-têtes, formats et protections ne seront pas supprimés.
+    </p>
+  `;
+}
+
+
+function creerCompteurReinitialisationProduction_(libelle, valeur) {
+  return `
+    <div class="compteur-reinitialisation-production">
+      <strong>${Number(valeur || 0).toLocaleString('fr-FR')}</strong>
+      <span>${echapperHtml(libelle)}</span>
+    </div>
+  `;
+}
+
+
+function mettreAJourConfirmationReinitialisationProduction() {
+  const etat = etatApplication.reinitialisationProduction;
+  const bouton = document.getElementById(
+    'boutonConfirmerReinitialisationProduction'
+  );
+  if (!etat || !bouton) return;
+
+  const texte = String(document.getElementById(
+    'texteConfirmationReinitialisationProduction'
+  )?.value || '').trim();
+  const motDePasse = String(document.getElementById(
+    'motDePasseReinitialisationProduction'
+  )?.value || '');
+
+  bouton.disabled = etat.enCours || !etat.preview ||
+    texte !== 'MISE EN PRODUCTION' || !motDePasse;
+}
+
+
+function confirmerEtExecuterReinitialisationProduction() {
+  const etat = etatApplication.reinitialisationProduction;
+  if (!etat || !etat.preview || etat.enCours) return;
+
+  const champMotDePasse = document.getElementById(
+    'motDePasseReinitialisationProduction'
+  );
+  let motDePasse = String(champMotDePasse?.value || '');
+  const texte = String(document.getElementById(
+    'texteConfirmationReinitialisationProduction'
+  )?.value || '').trim();
+
+  etat.enCours = true;
+  if (champMotDePasse) champMotDePasse.value = '';
+  document.getElementById(
+    'boutonFermerReinitialisationProduction'
+  ).disabled = true;
+  configurerBoutonsReinitialisationProduction_(
+    true,
+    'Validation du mot de passe…',
+    'bouton-danger'
+  );
+
+  google.script.run
+    .withSuccessHandler(function (confirmation) {
+      motDePasse = '';
+      executerReinitialisationProduction_(
+        confirmation.confirmationId
+      );
+    })
+    .withFailureHandler(function (erreur) {
+      motDePasse = '';
+      afficherErreurReinitialisationProduction_(
+        extraireMessageErreur(erreur)
+      );
+    })
+    .confirmerReinitialisationProduction(
+      etat.preview.previewId,
+      texte,
+      motDePasse,
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+
+function executerReinitialisationProduction_(confirmationId) {
+  const etat = etatApplication.reinitialisationProduction;
+  if (!etat) return;
+
+  document.getElementById(
+    'confirmationReinitialisationProduction'
+  ).classList.add('masque');
+  document.getElementById(
+    'contenuReinitialisationProduction'
+  ).innerHTML = `
+    <div class="etat-vide">
+      Sauvegarde complète, suppression transactionnelle et diagnostic final…
+    </div>
+  `;
+  configurerBoutonsReinitialisationProduction_(
+    true,
+    'Réinitialisation en cours…',
+    'bouton-danger'
+  );
+
+  google.script.run
+    .withSuccessHandler(function (resultat) {
+      const etatActuel = etatApplication.reinitialisationProduction;
+      if (!etatActuel) return;
+      etatActuel.enCours = false;
+      etatActuel.resultat = resultat;
+      etatActuel.rafraichirApresFermeture = true;
+      afficherResultatReinitialisationProduction_(resultat);
+      finaliserBoutonsReinitialisationProduction_();
+    })
+    .withFailureHandler(function (erreur) {
+      afficherErreurReinitialisationProduction_(
+        extraireMessageErreur(erreur)
+      );
+    })
+    .executerReinitialisationProductionConfirmee(
+      confirmationId,
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+
+function afficherResultatReinitialisationProduction_(resultat) {
+  const compteurs = resultat.compteursSupprimes || {};
+  const diagnostic = resultat.diagnostic || {};
+  document.getElementById(
+    'contenuReinitialisationProduction'
+  ).innerHTML = `
+    <div class="resultat-reinitialisation-production">
+      <h3>Base métier réinitialisée avec succès</h3>
+      <p>
+        Sauvegarde de sécurité : <strong>${echapperHtml(resultat.backupId || '—')}</strong><br>
+        Schéma conservé : <strong>version ${echapperHtml(resultat.versionSchema)}</strong><br>
+        Référentiel conservé : <strong>${resultat.referentielConserve ? 'Oui' : 'Non'}</strong><br>
+        Diagnostic final : <strong>${diagnostic.conforme ? 'Conforme' : diagnostic.totalErreurs + ' erreur(s) préexistante(s) conservée(s)'}</strong>
+      </p>
+    </div>
+    <div class="grille-compteurs-reinitialisation-production">
+      ${creerCompteurReinitialisationProduction_('Stagiaires supprimés', compteurs.stagiaires)}
+      ${creerCompteurReinitialisationProduction_('Formateurs supprimés', compteurs.formateurs)}
+      ${creerCompteurReinitialisationProduction_('Séances supprimées', compteurs.sessions)}
+      ${creerCompteurReinitialisationProduction_('Présences supprimées', compteurs.presences)}
+      ${creerCompteurReinitialisationProduction_('Prestations supprimées', compteurs.prestations)}
+      ${creerCompteurReinitialisationProduction_('Items de séance supprimés', compteurs.itemsSessions)}
+      ${creerCompteurReinitialisationProduction_('Évaluations supprimées', compteurs.evaluations)}
+      ${creerCompteurReinitialisationProduction_('Favoris supprimés', compteurs.favoris)}
+      ${creerCompteurReinitialisationProduction_('Historiques supprimés', compteurs.historiquesIndemnisation)}
+      ${creerCompteurReinitialisationProduction_('Photos placées dans la corbeille', resultat.photosMisesCorbeille)}
+    </div>
+    ${(resultat.avertissementsPhotos || []).length
+      ? `<div class="references-orphelines-reinitialisation"><h3>Avertissements photos</h3><ul>${resultat.avertissementsPhotos.map(function (message) {
+        return `<li>${echapperHtml(message)}</li>`;
+      }).join('')}</ul></div>`
+      : ''}
+  `;
+}
+
+
+function afficherErreurReinitialisationProduction_(message) {
+  const etat = etatApplication.reinitialisationProduction;
+  if (!etat) return;
+  etat.enCours = false;
+  etat.preview = null;
+  document.getElementById(
+    'confirmationReinitialisationProduction'
+  ).classList.add('masque');
+  document.getElementById(
+    'contenuReinitialisationProduction'
+  ).innerHTML = `
+    <div class="erreur-sauvegarde-administration">
+      <strong>Opération interrompue</strong>
+      <span>${echapperHtml(message)}</span>
+    </div>
+  `;
+  finaliserBoutonsReinitialisationProduction_();
+}
+
+
+function configurerBoutonsReinitialisationProduction_(
+  desactive,
+  libelle,
+  classe
+) {
+  const bouton = document.getElementById(
+    'boutonConfirmerReinitialisationProduction'
+  );
+  const annuler = document.getElementById(
+    'boutonAnnulerReinitialisationProduction'
+  );
+  if (bouton) {
+    bouton.disabled = Boolean(desactive);
+    bouton.textContent = libelle;
+    bouton.className = classe;
+  }
+  if (annuler) annuler.disabled = Boolean(desactive);
+}
+
+
+function finaliserBoutonsReinitialisationProduction_() {
+  const fermer = document.getElementById(
+    'boutonFermerReinitialisationProduction'
+  );
+  const annuler = document.getElementById(
+    'boutonAnnulerReinitialisationProduction'
+  );
+  const bouton = document.getElementById(
+    'boutonConfirmerReinitialisationProduction'
+  );
+  if (fermer) fermer.disabled = false;
+  if (annuler) annuler.classList.add('masque');
+  if (bouton) {
+    bouton.disabled = false;
+    bouton.textContent = 'Fermer';
+    bouton.className = 'bouton-principal';
+    bouton.onclick = fermerReinitialisationProduction;
+  }
+}
+
+
+function fermerReinitialisationProduction() {
+  const etat = etatApplication.reinitialisationProduction;
+  if (etat && etat.enCours) {
+    afficherToast('Attends la fin de l’opération en cours.', true);
+    return;
+  }
+
+  const modal = document.getElementById(
+    'modalReinitialisationProduction'
+  );
+  if (modal) modal.classList.add('masque');
+  document.body.classList.remove('modal-ouverte');
+  const rafraichir = Boolean(etat && etat.rafraichirApresFermeture);
+  etatApplication.reinitialisationProduction = null;
+  if (rafraichir && etatApplication.pageActive === 'Administration') {
+    initialiserPageAdministration();
+  }
 }
 
 

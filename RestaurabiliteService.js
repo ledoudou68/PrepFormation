@@ -343,6 +343,10 @@ function construireResumeGlobalInventaireSauvegardes_(sauvegardes) {
       operationsAdministration: liste.filter(function (sauvegarde) {
         return sauvegarde.type ===
           TYPE_SAUVEGARDE_AVANT_OPERATION_ADMIN_;
+      }).length,
+      reinitialisationsProduction: liste.filter(function (sauvegarde) {
+        return sauvegarde.type ===
+          TYPE_SAUVEGARDE_AVANT_REINITIALISATION_PRODUCTION_;
       }).length
     }
   };

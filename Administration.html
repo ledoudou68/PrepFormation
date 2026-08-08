@@ -20,6 +20,29 @@
     ></div>
   </section>
 
+  <section class="bloc bloc-mise-production-administration">
+    <div class="entete-page entete-page-actions">
+      <div>
+        <h2>Mise en production</h2>
+        <p>
+          Supprime les données métier de test tout en conservant les paramètres,
+          les formations, les catégories et le référentiel pédagogique.
+        </p>
+      </div>
+      <button
+        type="button"
+        id="boutonReinitialiserDonneesMetier"
+        class="bouton-danger"
+        onclick="ouvrirReinitialisationProduction()"
+      >Réinitialiser les données métier</button>
+    </div>
+    <div class="avertissement-mise-production-administration">
+      Une prévisualisation, une sauvegarde complète vérifiée, la phrase
+      « MISE EN PRODUCTION » et une nouvelle saisie du mot de passe sont
+      obligatoires avant toute suppression.
+    </div>
+  </section>
+
   <section class="bloc bloc-parametres-email-indemnisation">
     <div class="entete-page entete-page-actions">
       <div>
@@ -397,6 +420,88 @@
     </div>
   </section>
 
+</div>
+
+<div
+  id="modalReinitialisationProduction"
+  class="modal-overlay masque"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="titreModalReinitialisationProduction"
+>
+  <div class="modal-contenu modal-reinitialisation-production">
+    <div class="modal-entete">
+      <div>
+        <h2 id="titreModalReinitialisationProduction">
+          Réinitialiser les données métier
+        </h2>
+        <p>
+          Préparation contrôlée de la base avant mise en production.
+        </p>
+      </div>
+      <button
+        type="button"
+        id="boutonFermerReinitialisationProduction"
+        class="bouton-fermer-modal"
+        onclick="fermerReinitialisationProduction()"
+        aria-label="Fermer"
+      >×</button>
+    </div>
+
+    <div
+      id="contenuReinitialisationProduction"
+      class="modal-corps contenu-reinitialisation-production"
+      aria-live="polite"
+    >
+      <div class="etat-vide">Préparation de la prévisualisation…</div>
+    </div>
+
+    <div
+      id="confirmationReinitialisationProduction"
+      class="confirmation-reinitialisation-production masque"
+    >
+      <div class="groupe-champ">
+        <label for="texteConfirmationReinitialisationProduction">
+          Saisir MISE EN PRODUCTION
+        </label>
+        <input
+          type="text"
+          id="texteConfirmationReinitialisationProduction"
+          class="champ"
+          autocomplete="off"
+          oninput="mettreAJourConfirmationReinitialisationProduction()"
+        >
+      </div>
+      <div class="groupe-champ">
+        <label for="motDePasseReinitialisationProduction">
+          Mot de passe administrateur
+        </label>
+        <input
+          type="password"
+          id="motDePasseReinitialisationProduction"
+          class="champ"
+          autocomplete="current-password"
+          oninput="mettreAJourConfirmationReinitialisationProduction()"
+        >
+      </div>
+    </div>
+
+    <div class="modal-pied">
+      <button
+        type="button"
+        id="boutonAnnulerReinitialisationProduction"
+        class="bouton-secondaire"
+        onclick="fermerReinitialisationProduction()"
+      >Annuler</button>
+      <button
+        type="button"
+        id="boutonConfirmerReinitialisationProduction"
+        class="bouton-danger"
+        onclick="confirmerEtExecuterReinitialisationProduction()"
+        disabled
+      >Confirmer la mise en production</button>
+    </div>
+  </div>
 </div>
 
 <div

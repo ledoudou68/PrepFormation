@@ -701,9 +701,9 @@ test('le panneau mobile est plein écran avec des cibles tactiles suffisantes', 
 });
 
 
-test('la version applicative est centralisée à 1.9.3', () => {
+test('la version applicative est centralisée à 1.9.4', () => {
   assert(metadonnees.includes(
-    "VERSION_APPLICATION_PREPFORMATION_ = '1.9.3'"
+    "VERSION_APPLICATION_PREPFORMATION_ = '1.9.4'"
   ));
 });
 
