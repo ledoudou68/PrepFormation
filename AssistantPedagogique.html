@@ -1,0 +1,269 @@
+<div class="page page-assistant-pedagogique">
+
+  <header class="entete-page entete-page-actions entete-assistant-pedagogique">
+    <div>
+      <h1>Assistant pédagogique</h1>
+      <p>Construisez un groupe et préparez la prochaine séance à partir des analyses individuelles existantes.</p>
+      <small id="metadonneesAssistantPedagogique">Sélectionnez les stagiaires à analyser.</small>
+    </div>
+
+    <button
+      type="button"
+      id="boutonAnalyserGroupe"
+      class="bouton-principal bouton-analyser-groupe"
+      onclick="analyserGroupeAssistantPedagogique()"
+      disabled
+    >Analyser le groupe</button>
+  </header>
+
+  <div
+    id="erreurAssistantPedagogique"
+    class="erreur-assistant-pedagogique masque"
+    role="alert"
+  ></div>
+
+  <section class="bloc selection-assistant-pedagogique" aria-labelledby="titreSelectionAssistant">
+    <div class="fiche-bloc-entete">
+      <div>
+        <p class="fiche-sur-titre">Composition du groupe</p>
+        <h2 id="titreSelectionAssistant">Sélection des stagiaires</h2>
+        <p>Choisissez manuellement les participants ou partez d’une séance existante.</p>
+      </div>
+      <strong id="compteurSelectionAssistant" class="compteur-selection-assistant" aria-live="polite">0 sélectionné</strong>
+    </div>
+
+    <div
+      id="chargementPreparationAssistant"
+      class="chargement-assistant-pedagogique"
+      role="status"
+      aria-live="polite"
+    >
+      <span class="spinner-statistiques"></span>
+      Chargement des stagiaires et des séances…
+    </div>
+
+    <div id="contenuSelectionAssistant" class="masque">
+      <div class="selection-depuis-session-assistant">
+        <div class="groupe-champ">
+          <label for="sessionSourceAssistant">Depuis une séance existante</label>
+          <select
+            id="sessionSourceAssistant"
+            class="champ"
+            onchange="selectionnerDepuisSessionAssistant()"
+          >
+            <option value="">Choisir une séance…</option>
+          </select>
+        </div>
+        <p>La séance reste inchangée. Vous pouvez ensuite ajouter ou retirer des stagiaires.</p>
+      </div>
+
+      <div class="barre-filtres-assistant">
+        <div class="groupe-champ">
+          <label for="rechercheStagiaireAssistant">Recherche</label>
+          <input
+            type="search"
+            id="rechercheStagiaireAssistant"
+            class="champ"
+            placeholder="Nom ou prénom"
+            oninput="filtrerStagiairesAssistantPedagogique()"
+          >
+        </div>
+
+        <div class="groupe-champ">
+          <label for="formationStagiaireAssistant">Formation</label>
+          <select
+            id="formationStagiaireAssistant"
+            class="champ"
+            onchange="filtrerStagiairesAssistantPedagogique()"
+          >
+            <option value="">Toutes les formations</option>
+          </select>
+        </div>
+
+        <div class="actions-selection-assistant" role="group" aria-label="Actions sur le résultat filtré">
+          <button type="button" class="bouton-secondaire" onclick="selectionnerResultatFiltreAssistant(true)">Tout sélectionner</button>
+          <button type="button" class="bouton-secondaire" onclick="selectionnerResultatFiltreAssistant(false)">Tout désélectionner</button>
+        </div>
+      </div>
+
+      <div
+        id="listeStagiairesAssistant"
+        class="liste-stagiaires-assistant"
+        aria-label="Stagiaires non clôturés"
+      ></div>
+    </div>
+  </section>
+
+  <div
+    id="chargementAnalyseGroupe"
+    class="chargement-assistant-pedagogique masque"
+    role="status"
+    aria-live="polite"
+  >
+    <span class="spinner-statistiques"></span>
+    Analyse pédagogique du groupe en cours…
+  </div>
+
+  <div
+    id="analyseObsoleteAssistant"
+    class="analyse-obsolete-assistant masque"
+    role="status"
+  >
+    La sélection a changé. Le résultat ci-dessous reste visible mais doit être recalculé.
+  </div>
+
+  <div id="resultatAssistantPedagogique" class="resultat-assistant-pedagogique masque">
+    <nav class="navigation-rapide-assistant" aria-label="Navigation dans l’analyse du groupe">
+      <a href="#groupeAssistant">Groupe</a>
+      <a href="#prioritesAssistant">Priorités</a>
+      <a href="#recommandationsAssistant">Recommandations</a>
+      <a href="#stagiairesAssistant">Stagiaires</a>
+      <a href="#maitrisesAssistant">Items maîtrisés</a>
+      <a href="#critiquesAssistant">Items critiques</a>
+    </nav>
+
+    <section id="groupeAssistant" class="section-assistant" aria-labelledby="titreGroupeAssistant">
+      <div class="titre-section-assistant">
+        <div>
+          <p class="fiche-sur-titre">Vue d’ensemble</p>
+          <h2 id="titreGroupeAssistant">Synthèse du groupe</h2>
+        </div>
+      </div>
+
+      <div id="cartesSyntheseAssistant" class="grille-synthese-assistant"></div>
+
+      <div class="grille-visualisations-assistant">
+        <article class="bloc carte-homogeneite-assistant">
+          <div class="titre-carte-assistant">
+            <h3>Homogénéité du groupe</h3>
+            <strong id="valeurHomogeneiteAssistant">—</strong>
+          </div>
+          <div
+            class="barre-homogeneite-assistant"
+            role="progressbar"
+            aria-label="Homogénéité du groupe"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow="0"
+          >
+            <span id="remplissageHomogeneiteAssistant"></span>
+          </div>
+          <p>Indice descriptif retourné par le moteur, sans interprétation ajoutée.</p>
+        </article>
+
+        <article class="bloc repartition-besoins-assistant">
+          <div class="titre-carte-assistant">
+            <h3>Répartition des besoins</h3>
+          </div>
+          <div id="graphiqueRepartitionAssistant" class="graphique-repartition-assistant"></div>
+        </article>
+      </div>
+    </section>
+
+    <section id="prioritesAssistant" class="bloc section-assistant" aria-labelledby="titrePrioritesAssistant">
+      <div class="fiche-bloc-entete entete-priorites-assistant">
+        <div>
+          <p class="fiche-sur-titre">Préparation de séance</p>
+          <h2 id="titrePrioritesAssistant">Priorités pédagogiques du groupe</h2>
+          <p>Les scores, niveaux et motifs proviennent du moteur d’analyse.</p>
+        </div>
+        <strong id="compteurPrioritesAssistant">0 priorité</strong>
+      </div>
+
+      <div class="filtres-priorites-assistant">
+        <div class="groupe-champ">
+          <label for="niveauPrioriteAssistant">Niveau</label>
+          <select id="niveauPrioriteAssistant" class="champ" onchange="appliquerFiltresPrioritesAssistant()">
+            <option value="TOUS">Toutes les priorités</option>
+            <option value="CRITIQUE">Très élevées</option>
+            <option value="ELEVEE">Élevées</option>
+            <option value="MODEREE">Moyennes</option>
+            <option value="FAIBLE">Faibles</option>
+          </select>
+        </div>
+        <div class="groupe-champ">
+          <label for="categoriePrioriteAssistant">Catégorie</label>
+          <select id="categoriePrioriteAssistant" class="champ" onchange="appliquerFiltresPrioritesAssistant()">
+            <option value="">Toutes les catégories</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="tableau-responsive tableau-priorites-assistant">
+        <table>
+          <thead>
+            <tr>
+              <th>Rang</th>
+              <th>Item</th>
+              <th>Catégorie</th>
+              <th>Niveau</th>
+              <th>Concernés</th>
+              <th>Score moyen</th>
+              <th>Score max.</th>
+              <th>Jamais acquis</th>
+              <th>Oubliés</th>
+              <th>Échecs</th>
+              <th>Ancienneté</th>
+              <th>Motifs</th>
+            </tr>
+          </thead>
+          <tbody id="corpsPrioritesAssistant"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="recommandationsAssistant" class="section-assistant" aria-labelledby="titreRecommandationsAssistant">
+      <div class="titre-section-assistant">
+        <div>
+          <p class="fiche-sur-titre">Prochaine séance</p>
+          <h2 id="titreRecommandationsAssistant">Recommandations pour la prochaine séance</h2>
+        </div>
+      </div>
+      <div id="listeRecommandationsAssistant" class="grille-recommandations-assistant"></div>
+    </section>
+
+    <section id="stagiairesAssistant" class="bloc section-assistant" aria-labelledby="titreDetailsStagiairesAssistant">
+      <details class="details-stagiaires-assistant">
+        <summary id="titreDetailsStagiairesAssistant">Détail par stagiaire</summary>
+        <div class="tableau-responsive">
+          <table>
+            <thead>
+              <tr>
+                <th>Stagiaire</th>
+                <th>Recommandations</th>
+                <th>Items prioritaires</th>
+                <th>Points faibles</th>
+                <th>Dernière séance</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="corpsDetailsStagiairesAssistant"></tbody>
+          </table>
+        </div>
+      </details>
+    </section>
+
+    <div class="grille-items-groupe-assistant">
+      <section id="maitrisesAssistant" class="bloc section-assistant" aria-labelledby="titreMaitrisesAssistant">
+        <div class="fiche-bloc-entete">
+          <div>
+            <p class="fiche-sur-titre">Consolidé</p>
+            <h2 id="titreMaitrisesAssistant">Items maîtrisés par le groupe</h2>
+          </div>
+        </div>
+        <div id="listeMaitrisesAssistant" class="liste-items-groupe-assistant"></div>
+      </section>
+
+      <section id="critiquesAssistant" class="bloc section-assistant" aria-labelledby="titreCritiquesAssistant">
+        <div class="fiche-bloc-entete">
+          <div>
+            <p class="fiche-sur-titre">Vigilance</p>
+            <h2 id="titreCritiquesAssistant">Items critiques</h2>
+          </div>
+        </div>
+        <div id="listeCritiquesAssistant" class="liste-items-groupe-assistant"></div>
+      </section>
+    </div>
+  </div>
+
+</div>

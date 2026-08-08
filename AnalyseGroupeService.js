@@ -5,6 +5,172 @@ const NOMBRE_MAX_RECOMMANDATIONS_GROUPE_ = 10;
 
 
 /**
+ * Données minimales nécessaires à la sélection d'un groupe. Cette lecture
+ * n'appelle volontairement pas getStagiaires(), qui peut synchroniser les
+ * statuts, et ne déclenche donc aucune mutation métier.
+ */
+function getPreparationAssistantPedagogique() {
+  const avertissements = [];
+  const tables = lireTablesAnalysePedagogique_(avertissements);
+  const formations = construireFormationsAnalysePedagogique_(
+    tables.FORMATIONS,
+    avertissements
+  );
+  const stagiairesParId = {};
+
+  tables.STAGIAIRES.lignes.forEach(function (ligne) {
+    const uuid = valeurAnalysePedagogique_(
+      tables.STAGIAIRES,
+      ligne,
+      'UUID'
+    );
+    const statut = valeurAnalysePedagogique_(
+      tables.STAGIAIRES,
+      ligne,
+      'STATUT'
+    );
+    const statutNormalise = normaliserAnalysePedagogique_(statut);
+
+    if (!uuid || ['CLOTURE', 'ABANDON'].includes(statutNormalise)) {
+      return;
+    }
+    if (stagiairesParId[uuid]) {
+      fusionnerAvertissementsGroupe_(avertissements, [
+        'UUID stagiaire dupliqué ignoré dans la sélection : ' + uuid + '.'
+      ]);
+      return;
+    }
+
+    const formationBrute = valeurAnalysePedagogique_(
+      tables.STAGIAIRES,
+      ligne,
+      'FORMATION'
+    );
+    const formationId = formations.resoudre(formationBrute);
+    const formation = formations.parId[formationId];
+
+    stagiairesParId[uuid] = {
+      uuid: uuid,
+      nom: valeurAnalysePedagogique_(
+        tables.STAGIAIRES,
+        ligne,
+        'NOM'
+      ),
+      prenom: valeurAnalysePedagogique_(
+        tables.STAGIAIRES,
+        ligne,
+        'PRENOM'
+      ),
+      formationId: formationId,
+      formation: formation ? formation.libelle : formationBrute,
+      statut: statut || 'À préparer'
+    };
+  });
+
+  const sessionsParId = {};
+  tables.SESSIONS.lignes.forEach(function (ligne) {
+    const idSession = valeurAnalysePedagogique_(
+      tables.SESSIONS,
+      ligne,
+      'ID_SESSION'
+    );
+    if (!idSession || sessionsParId[idSession]) {
+      return;
+    }
+
+    const dateBrute = valeurAnalysePedagogique_(
+      tables.SESSIONS,
+      ligne,
+      'DATE_SESSION'
+    );
+    const date = normaliserDateAnalysePedagogique_(dateBrute);
+    const formationBrute = valeurAnalysePedagogique_(
+      tables.SESSIONS,
+      ligne,
+      'FORMATION'
+    );
+    const formationId = formations.resoudre(formationBrute);
+    const formation = formations.parId[formationId];
+
+    sessionsParId[idSession] = {
+      idSession: idSession,
+      date: date ? convertirDateIsoAnalysePedagogique_(date) : '',
+      formationId: formationId,
+      formation: formation ? formation.libelle : formationBrute,
+      idsStagiaires: []
+    };
+  });
+
+  const presencesDejaAjoutees = new Set();
+  tables.PRESENCES_STAGIAIRES.lignes.forEach(function (ligne) {
+    const idSession = valeurAnalysePedagogique_(
+      tables.PRESENCES_STAGIAIRES,
+      ligne,
+      'ID_SESSION'
+    );
+    const idStagiaire = valeurAnalysePedagogique_(
+      tables.PRESENCES_STAGIAIRES,
+      ligne,
+      'ID_STAGIAIRE'
+    );
+    const cle = idSession + '::' + idStagiaire;
+
+    if (
+      !sessionsParId[idSession] ||
+      !stagiairesParId[idStagiaire] ||
+      presencesDejaAjoutees.has(cle)
+    ) {
+      return;
+    }
+
+    presencesDejaAjoutees.add(cle);
+    sessionsParId[idSession].idsStagiaires.push(idStagiaire);
+  });
+
+  const stagiaires = Object.keys(stagiairesParId).map(function (uuid) {
+    return stagiairesParId[uuid];
+  }).sort(comparerIdentitesAssistantPedagogique_);
+  const formationsSelection = [];
+  const formationsDejaAjoutees = new Set();
+
+  stagiaires.forEach(function (stagiaire) {
+    const cle = stagiaire.formationId || stagiaire.formation;
+    if (!cle || formationsDejaAjoutees.has(cle)) {
+      return;
+    }
+    formationsDejaAjoutees.add(cle);
+    formationsSelection.push({
+      idFormation: stagiaire.formationId,
+      libelle: stagiaire.formation
+    });
+  });
+
+  return {
+    stagiaires: stagiaires,
+    formations: formationsSelection.sort(function (a, b) {
+      return a.libelle.localeCompare(
+        b.libelle,
+        'fr',
+        { sensitivity: 'base' }
+      );
+    }),
+    sessions: Object.keys(sessionsParId).map(function (idSession) {
+      const session = sessionsParId[idSession];
+      session.idsStagiaires.sort();
+      session.nombreStagiaires = session.idsStagiaires.length;
+      return session;
+    }).filter(function (session) {
+      return session.nombreStagiaires > 0;
+    }).sort(function (a, b) {
+      return b.date.localeCompare(a.date) ||
+        b.idSession.localeCompare(a.idSession);
+    }),
+    avertissements: avertissements.slice(0, 100)
+  };
+}
+
+
+/**
  * Analyse pédagogique agrégée d'un groupe.
  *
  * Ce service ne porte aucune règle pédagogique : les scores, classements,
@@ -269,6 +435,18 @@ function agregerAnalysesPedagogiquesGroupe_(analyses, avertissements) {
     },
     priorites: priorites,
     recommandations: recommandations,
+    detailsStagiaires: analyses.map(function (analyse) {
+      return {
+        uuid: analyse.stagiaire.uuid,
+        nombreRecommandationsIndividuelles:
+          (analyse.recommandationsProchaineSeance || []).length,
+        nombreItemsPrioritaires:
+          (analyse.itemsPrioritaires || []).length,
+        nombrePointsFaibles: (analyse.pointsFaibles || []).length,
+        joursDepuisDerniereSeance:
+          analyse.synthese.joursDepuisDerniereSeance
+      };
+    }),
     statistiques: {
       itemsMaitrisesParToutLeGroupe: items.filter(function (item) {
         return item.nombreStagiairesDansPerimetre === nombreStagiaires &&
@@ -450,6 +628,9 @@ function construireRecommandationsGroupe_(priorites) {
         ),
         justification: construireJustificationGroupe_(priorite, motifs),
         nombreStagiairesConcernes: priorite.nombreStagiairesConcernes,
+        nombreJamaisAcquis: priorite.nombreJamaisAcquis,
+        nombreOublies: priorite.nombreOublies,
+        nombreEchecs: priorite.nombreEchecs,
         motifs: motifs.map(function (motif) {
           return motif.texte;
         })
@@ -608,6 +789,9 @@ function resumerItemStatistiqueGroupe_(item) {
 
 
 function resumerPrioriteGroupe_(item) {
+  const motifs = compterMotifsRecommandationsGroupe_(
+    item.recommandationsIndividuelles
+  );
   return {
     rang: item.rang,
     idItem: item.idItem,
@@ -620,8 +804,27 @@ function resumerPrioriteGroupe_(item) {
     nombreJamaisAcquis: item.nombreJamaisAcquis,
     nombreOublies: item.nombreOublies,
     nombreEchecs: item.nombreEchecs,
-    ancienneteMoyenne: item.ancienneteMoyenne
+    ancienneteMoyenne: item.ancienneteMoyenne,
+    niveauPriorite: choisirNiveauRecommandationGroupe_(
+      item.recommandationsIndividuelles
+    ),
+    motifs: motifs.map(function (motif) {
+      return motif.texte;
+    })
   };
+}
+
+
+function comparerIdentitesAssistantPedagogique_(a, b) {
+  return String(a.nom || '').localeCompare(
+    String(b.nom || ''),
+    'fr',
+    { sensitivity: 'base' }
+  ) || String(a.prenom || '').localeCompare(
+    String(b.prenom || ''),
+    'fr',
+    { sensitivity: 'base' }
+  ) || String(a.uuid).localeCompare(String(b.uuid));
 }
 
 
@@ -648,6 +851,7 @@ function construireResultatGroupeVide_(debutCalcul) {
     },
     priorites: [],
     recommandations: [],
+    detailsStagiaires: [],
     statistiques: {
       itemsMaitrisesParToutLeGroupe: [],
       itemsCritiques: [],

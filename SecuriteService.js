@@ -71,6 +71,7 @@ function construireSessionUtilisateur_(sessionAdministration) {
       consulterCalendrier: true,
       consulterFormateurs: true,
       consulterStatistiques: true,
+      consulterAssistantPedagogique: true,
       consulterMonRecapitulatifHeures: Boolean(email),
       gererStagiaires: estAdministrateur,
       gererFormateurs: estAdministrateur,

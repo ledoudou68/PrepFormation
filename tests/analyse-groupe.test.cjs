@@ -178,7 +178,7 @@ function creerEnvironnement(donneesOptionnelles) {
         .toString('base64url')
     },
     restaurationBloqueEcritures_: () => false,
-    obtenirVersionApplication_: () => '1.8.0'
+    obtenirVersionApplication_: () => '1.8.1'
   };
 
   vm.createContext(contexte);

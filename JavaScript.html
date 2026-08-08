@@ -21,6 +21,7 @@ const etatApplication = {
   statistiques: null,
   chargementStatistiquesEnCours: false,
   generationStatistiques: 0,
+  assistantPedagogique: null,
   donneesCalendrier: null,
   moisCalendrierActif: null,
   chargementCalendrierEnCours: false,
@@ -197,6 +198,10 @@ function initialiserPageActive(nomPage) {
 
   if (nomPage === 'Statistiques') {
     initialiserPageStatistiques();
+  }
+
+  if (nomPage === 'AssistantPedagogique') {
+    initialiserPageAssistantPedagogique();
   }
 
   if (nomPage === 'Referentiel') {
@@ -417,6 +422,7 @@ function verrouillerAdministrationLocale() {
       consulterCalendrier: true,
       consulterFormateurs: true,
       consulterStatistiques: true,
+      consulterAssistantPedagogique: true,
       consulterMonRecapitulatifHeures: Boolean(
         etatApplication.sessionUtilisateur?.email
       )
@@ -13480,6 +13486,845 @@ function supprimerFormationAdministration(idFormation) {
       obtenirJetonAdministrateurApplication()
     );
 }
+
+/* =====================================================
+   ASSISTANT PÉDAGOGIQUE DE GROUPE
+===================================================== */
+
+function initialiserPageAssistantPedagogique() {
+  etatApplication.assistantPedagogique = {
+    preparation: null,
+    selection: {},
+    resultat: null,
+    signatureAnalyse: '',
+    analyseObsolete: false,
+    chargementPreparation: true,
+    chargementAnalyse: false,
+    generation: 0,
+    filtresPriorites: {
+      niveau: 'TOUS',
+      categorie: ''
+    }
+  };
+
+  basculerChargementPreparationAssistant_(true);
+  masquerErreurAssistantPedagogique_();
+
+  google.script.run
+    .withSuccessHandler(function (preparation) {
+      if (etatApplication.pageActive !== 'AssistantPedagogique') {
+        return;
+      }
+
+      const etat = etatApplication.assistantPedagogique;
+      if (!etat) {
+        return;
+      }
+
+      etat.chargementPreparation = false;
+      etat.preparation = preparation || {
+        stagiaires: [],
+        formations: [],
+        sessions: []
+      };
+      basculerChargementPreparationAssistant_(false);
+      remplirPreparationAssistantPedagogique_();
+      afficherAvertissementsPreparationAssistant_(
+        etat.preparation.avertissements || []
+      );
+    })
+    .withFailureHandler(function (erreur) {
+      const etat = etatApplication.assistantPedagogique;
+      if (etat) {
+        etat.chargementPreparation = false;
+      }
+      basculerChargementPreparationAssistant_(false);
+      afficherErreurAssistantPedagogique_(
+        extraireMessageErreur(erreur),
+        true
+      );
+    })
+    .getPreparationAssistantPedagogique();
+}
+
+
+function basculerChargementPreparationAssistant_(actif) {
+  document.getElementById('chargementPreparationAssistant')
+    ?.classList.toggle('masque', !actif);
+  document.getElementById('contenuSelectionAssistant')
+    ?.classList.toggle('masque', actif);
+}
+
+
+function remplirPreparationAssistantPedagogique_() {
+  const etat = etatApplication.assistantPedagogique;
+  if (!etat || !etat.preparation) {
+    return;
+  }
+
+  const selectFormation = document.getElementById(
+    'formationStagiaireAssistant'
+  );
+  const selectSession = document.getElementById('sessionSourceAssistant');
+
+  if (selectFormation) {
+    selectFormation.innerHTML =
+      '<option value="">Toutes les formations</option>' +
+      (etat.preparation.formations || []).map(function (formation) {
+        return '<option value="' + echapperHtml(formation.idFormation) + '">' +
+          echapperHtml(formation.libelle) + '</option>';
+      }).join('');
+  }
+
+  if (selectSession) {
+    selectSession.innerHTML =
+      '<option value="">Choisir une séance…</option>' +
+      (etat.preparation.sessions || []).map(function (session) {
+        const libelle = [
+          afficherDateFrancaise(session.date) || 'Date inconnue',
+          session.formation || 'Formation non renseignée',
+          session.nombreStagiaires + ' stagiaire(s)'
+        ].join(' · ');
+        return '<option value="' + echapperHtml(session.idSession) + '">' +
+          echapperHtml(libelle) + '</option>';
+      }).join('');
+  }
+
+  afficherListeStagiairesAssistant_();
+  mettreAJourSelectionAssistant_();
+}
+
+
+function afficherAvertissementsPreparationAssistant_(avertissements) {
+  if (!avertissements.length) {
+    return;
+  }
+  afficherErreurAssistantPedagogique_(
+    avertissements.slice(0, 3).join(' '),
+    false
+  );
+}
+
+
+function normaliserRechercheAssistant_(valeur) {
+  return String(valeur || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+
+function obtenirStagiairesFiltresAssistant_() {
+  const etat = etatApplication.assistantPedagogique;
+  const stagiaires = etat?.preparation?.stagiaires || [];
+  const recherche = normaliserRechercheAssistant_(
+    document.getElementById('rechercheStagiaireAssistant')?.value || ''
+  );
+  const formationId = String(
+    document.getElementById('formationStagiaireAssistant')?.value || ''
+  );
+
+  return stagiaires.filter(function (stagiaire) {
+    const identite = normaliserRechercheAssistant_(
+      (stagiaire.nom || '') + ' ' + (stagiaire.prenom || '')
+    );
+    return (!recherche || identite.includes(recherche)) &&
+      (!formationId || stagiaire.formationId === formationId);
+  });
+}
+
+
+function filtrerStagiairesAssistantPedagogique() {
+  afficherListeStagiairesAssistant_();
+}
+
+
+function afficherListeStagiairesAssistant_() {
+  const zone = document.getElementById('listeStagiairesAssistant');
+  const etat = etatApplication.assistantPedagogique;
+
+  if (!zone || !etat) {
+    return;
+  }
+
+  const stagiaires = obtenirStagiairesFiltresAssistant_();
+  if (!stagiaires.length) {
+    zone.innerHTML = `
+      <div class="etat-vide etat-vide-assistant">
+        Aucun stagiaire non clôturé ne correspond aux filtres.
+      </div>
+    `;
+    return;
+  }
+
+  zone.innerHTML = stagiaires.map(function (stagiaire) {
+    const selectionne = Boolean(etat.selection[stagiaire.uuid]);
+    return `
+      <label class="carte-stagiaire-assistant ${selectionne ? 'selectionnee' : ''}">
+        <input
+          type="checkbox"
+          data-stagiaire-id="${echapperHtml(stagiaire.uuid)}"
+          ${selectionne ? 'checked' : ''}
+          onchange="basculerSelectionStagiaireAssistant(this.dataset.stagiaireId, this.checked)"
+        >
+        <span class="initiales-assistant" aria-hidden="true">
+          ${echapperHtml(
+            (stagiaire.prenom || '').charAt(0) +
+            (stagiaire.nom || '').charAt(0)
+          )}
+        </span>
+        <span class="identite-stagiaire-assistant">
+          <strong>${echapperHtml(stagiaire.nom)} ${echapperHtml(stagiaire.prenom)}</strong>
+          <small>${echapperHtml(stagiaire.formation || 'Formation non renseignée')} · ${echapperHtml(stagiaire.statut)}</small>
+        </span>
+      </label>
+    `;
+  }).join('');
+}
+
+
+function basculerSelectionStagiaireAssistant(uuid, selectionne) {
+  const etat = etatApplication.assistantPedagogique;
+  const identifiant = String(uuid || '');
+
+  if (!etat || !identifiant) {
+    return;
+  }
+
+  if (selectionne) {
+    etat.selection[identifiant] = true;
+  } else {
+    delete etat.selection[identifiant];
+  }
+
+  selectionModifieeAssistant_();
+  afficherListeStagiairesAssistant_();
+}
+
+
+function selectionnerResultatFiltreAssistant(selectionner) {
+  const etat = etatApplication.assistantPedagogique;
+  if (!etat) {
+    return;
+  }
+
+  obtenirStagiairesFiltresAssistant_().forEach(function (stagiaire) {
+    if (selectionner) {
+      etat.selection[stagiaire.uuid] = true;
+    } else {
+      delete etat.selection[stagiaire.uuid];
+    }
+  });
+
+  selectionModifieeAssistant_();
+  afficherListeStagiairesAssistant_();
+}
+
+
+function selectionnerDepuisSessionAssistant() {
+  const etat = etatApplication.assistantPedagogique;
+  const idSession = String(
+    document.getElementById('sessionSourceAssistant')?.value || ''
+  );
+
+  if (!etat || !idSession) {
+    return;
+  }
+
+  const session = (etat.preparation.sessions || []).find(
+    function (element) {
+      return element.idSession === idSession;
+    }
+  );
+
+  if (!session) {
+    afficherErreurAssistantPedagogique_('Séance introuvable.', true);
+    return;
+  }
+
+  etat.selection = {};
+  (session.idsStagiaires || []).forEach(function (uuid) {
+    etat.selection[uuid] = true;
+  });
+
+  selectionModifieeAssistant_();
+  afficherListeStagiairesAssistant_();
+}
+
+
+function obtenirIdsSelectionAssistant_() {
+  const etat = etatApplication.assistantPedagogique;
+  return Object.keys(etat?.selection || {}).filter(function (uuid) {
+    return Boolean(etat.selection[uuid]);
+  }).sort();
+}
+
+
+function construireSignatureSelectionAssistant_() {
+  return obtenirIdsSelectionAssistant_().join('|');
+}
+
+
+function selectionModifieeAssistant_() {
+  const etat = etatApplication.assistantPedagogique;
+  if (!etat) {
+    return;
+  }
+
+  const signature = construireSignatureSelectionAssistant_();
+  etat.analyseObsolete = Boolean(
+    etat.resultat && signature !== etat.signatureAnalyse
+  );
+  mettreAJourSelectionAssistant_();
+}
+
+
+function mettreAJourSelectionAssistant_() {
+  const etat = etatApplication.assistantPedagogique;
+  if (!etat) {
+    return;
+  }
+
+  const nombre = obtenirIdsSelectionAssistant_().length;
+  const compteur = document.getElementById('compteurSelectionAssistant');
+  const bouton = document.getElementById('boutonAnalyserGroupe');
+  const obsolete = document.getElementById('analyseObsoleteAssistant');
+  const analyseAJour = Boolean(
+    etat.resultat &&
+    construireSignatureSelectionAssistant_() === etat.signatureAnalyse
+  );
+
+  if (compteur) {
+    compteur.textContent = nombre + ' sélectionné' + (nombre > 1 ? 's' : '');
+  }
+  if (bouton) {
+    bouton.disabled = !nombre || etat.chargementAnalyse || analyseAJour;
+    bouton.textContent = etat.chargementAnalyse
+      ? 'Analyse en cours…'
+      : analyseAJour
+        ? 'Analyse à jour'
+        : 'Analyser le groupe';
+  }
+  obsolete?.classList.toggle('masque', !etat.analyseObsolete);
+}
+
+
+function analyserGroupeAssistantPedagogique() {
+  const etat = etatApplication.assistantPedagogique;
+  const ids = obtenirIdsSelectionAssistant_();
+
+  if (!etat || etat.chargementAnalyse) {
+    return;
+  }
+  if (!ids.length) {
+    afficherErreurAssistantPedagogique_(
+      'Sélectionnez au moins un stagiaire avant de lancer l’analyse.',
+      true
+    );
+    return;
+  }
+
+  const signature = ids.join('|');
+  if (etat.resultat && signature === etat.signatureAnalyse) {
+    document.getElementById('resultatAssistantPedagogique')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+
+  const generation = ++etat.generation;
+  etat.chargementAnalyse = true;
+  masquerErreurAssistantPedagogique_();
+  basculerChargementAnalyseAssistant_(true);
+  mettreAJourSelectionAssistant_();
+
+  google.script.run
+    .withSuccessHandler(function (resultat) {
+      const etatActuel = etatApplication.assistantPedagogique;
+      if (
+        !etatActuel ||
+        generation !== etatActuel.generation ||
+        etatApplication.pageActive !== 'AssistantPedagogique'
+      ) {
+        return;
+      }
+
+      etatActuel.chargementAnalyse = false;
+      etatActuel.resultat = resultat || {};
+      etatActuel.signatureAnalyse = signature;
+      etatActuel.analyseObsolete =
+        construireSignatureSelectionAssistant_() !== signature;
+      basculerChargementAnalyseAssistant_(false);
+      afficherResultatAssistantPedagogique_();
+      mettreAJourSelectionAssistant_();
+    })
+    .withFailureHandler(function (erreur) {
+      const etatActuel = etatApplication.assistantPedagogique;
+      if (!etatActuel || generation !== etatActuel.generation) {
+        return;
+      }
+      etatActuel.chargementAnalyse = false;
+      basculerChargementAnalyseAssistant_(false);
+      mettreAJourSelectionAssistant_();
+      afficherErreurAssistantPedagogique_(
+        extraireMessageErreur(erreur),
+        true
+      );
+    })
+    .getAnalyseGroupe(ids, {});
+}
+
+
+function basculerChargementAnalyseAssistant_(actif) {
+  document.getElementById('chargementAnalyseGroupe')
+    ?.classList.toggle('masque', !actif);
+}
+
+
+function afficherResultatAssistantPedagogique_() {
+  const etat = etatApplication.assistantPedagogique;
+  const resultat = etat?.resultat;
+  const zone = document.getElementById('resultatAssistantPedagogique');
+
+  if (!resultat || !zone) {
+    return;
+  }
+
+  zone.classList.remove('masque');
+  afficherMetadonneesAssistant_(resultat.meta || {});
+  afficherSyntheseAssistant_(resultat);
+  remplirFiltresPrioritesAssistant_(resultat.priorites || []);
+  appliquerFiltresPrioritesAssistant();
+  afficherRecommandationsAssistant_(resultat.recommandations || []);
+  afficherDetailsStagiairesAssistant_(resultat.detailsStagiaires || []);
+  afficherItemsGroupeAssistant_(
+    'listeMaitrisesAssistant',
+    resultat.statistiques?.itemsMaitrisesParToutLeGroupe || [],
+    'Aucun item n’est actuellement maîtrisé par tout le groupe.'
+  );
+  afficherItemsGroupeAssistant_(
+    'listeCritiquesAssistant',
+    resultat.statistiques?.itemsCritiques || [],
+    'Aucun item critique n’est retourné par le moteur.'
+  );
+}
+
+
+function afficherMetadonneesAssistant_(meta) {
+  const zone = document.getElementById('metadonneesAssistantPedagogique');
+  if (!zone) {
+    return;
+  }
+
+  const date = meta.calculeA ? new Date(meta.calculeA) : null;
+  const dateLisible = date && !isNaN(date.getTime())
+    ? date.toLocaleString('fr-FR')
+    : 'date inconnue';
+  zone.textContent = 'Calcul du ' + dateLisible +
+    ' · ' + (Number(meta.dureeCalculMs) || 0) + ' ms';
+}
+
+
+function afficherSyntheseAssistant_(resultat) {
+  const globale = resultat.analyseGlobale || {};
+  const statistiques = resultat.statistiques || {};
+  const cartes = [
+    ['Stagiaires', globale.nombreStagiaires],
+    ['Items actifs', globale.nombreItemsActifs],
+    ['Items travaillés', globale.nombreItemsTravailles],
+    ['Items acquis', globale.nombreItemsAcquis],
+    ['Jamais acquis', globale.nombreItemsJamaisAcquis],
+    ['Score moyen', formaterScoreAssistant_(statistiques.moyenneScores)],
+    ['Médiane', formaterScoreAssistant_(statistiques.medianeScores)],
+    ['Dispersion', formaterScoreAssistant_(statistiques.dispersionScores)]
+  ];
+  const zone = document.getElementById('cartesSyntheseAssistant');
+
+  if (zone) {
+    zone.innerHTML = cartes.map(function (carte) {
+      return `
+        <article class="carte carte-synthese-assistant">
+          <span>${echapperHtml(carte[0])}</span>
+          <strong>${echapperHtml(carte[1] ?? 0)}</strong>
+        </article>
+      `;
+    }).join('');
+  }
+
+  const homogeneite = Math.max(
+    0,
+    Math.min(100, Number(globale.homogeneite) || 0)
+  );
+  const valeur = document.getElementById('valeurHomogeneiteAssistant');
+  const remplissage = document.getElementById(
+    'remplissageHomogeneiteAssistant'
+  );
+  const barre = remplissage?.parentElement;
+
+  if (valeur) {
+    valeur.textContent = formaterScoreAssistant_(homogeneite) + ' %';
+  }
+  if (remplissage) {
+    remplissage.style.width = homogeneite + '%';
+  }
+  barre?.setAttribute('aria-valuenow', String(homogeneite));
+
+  afficherRepartitionBesoinsAssistant_(resultat.priorites || []);
+}
+
+
+function afficherRepartitionBesoinsAssistant_(priorites) {
+  const zone = document.getElementById('graphiqueRepartitionAssistant');
+  if (!zone) {
+    return;
+  }
+
+  const niveaux = [
+    ['CRITIQUE', 'Très prioritaires', 'tres-elevee'],
+    ['ELEVEE', 'Prioritaires', 'elevee'],
+    ['MODEREE', 'À surveiller', 'moyenne'],
+    ['FAIBLE', 'Faibles', 'faible']
+  ];
+  const total = priorites.length;
+
+  zone.innerHTML = niveaux.map(function (niveau) {
+    const nombre = priorites.filter(function (priorite) {
+      return priorite.niveauPriorite === niveau[0];
+    }).length;
+    const largeur = total ? nombre / total * 100 : 0;
+    return `
+      <div class="ligne-repartition-assistant">
+        <span>${echapperHtml(niveau[1])}</span>
+        <div><i class="niveau-${niveau[2]}" style="width:${largeur}%"></i></div>
+        <strong>${nombre}</strong>
+      </div>
+    `;
+  }).join('');
+
+  const nonClasses = priorites.filter(function (priorite) {
+    return !priorite.niveauPriorite;
+  }).length;
+  if (nonClasses) {
+    zone.innerHTML += `
+      <p class="note-repartition-assistant">
+        ${nonClasses} priorité(s) sans niveau disponible dans les analyses individuelles.
+      </p>
+    `;
+  }
+}
+
+
+function remplirFiltresPrioritesAssistant_(priorites) {
+  const select = document.getElementById('categoriePrioriteAssistant');
+  if (!select) {
+    return;
+  }
+
+  const categories = Array.from(new Set(priorites.map(function (priorite) {
+    return priorite.categorie || '';
+  }).filter(Boolean))).sort(function (a, b) {
+    return a.localeCompare(b, 'fr', { sensitivity: 'base' });
+  });
+
+  select.innerHTML = '<option value="">Toutes les catégories</option>' +
+    categories.map(function (categorie) {
+      return '<option value="' + echapperHtml(categorie) + '">' +
+        echapperHtml(categorie) + '</option>';
+    }).join('');
+}
+
+
+function appliquerFiltresPrioritesAssistant() {
+  const etat = etatApplication.assistantPedagogique;
+  const resultat = etat?.resultat;
+  if (!resultat) {
+    return;
+  }
+
+  const niveau = String(
+    document.getElementById('niveauPrioriteAssistant')?.value || 'TOUS'
+  );
+  const categorie = String(
+    document.getElementById('categoriePrioriteAssistant')?.value || ''
+  );
+  etat.filtresPriorites = { niveau: niveau, categorie: categorie };
+
+  const priorites = (resultat.priorites || []).filter(function (priorite) {
+    return (niveau === 'TOUS' || priorite.niveauPriorite === niveau) &&
+      (!categorie || priorite.categorie === categorie);
+  });
+  afficherPrioritesAssistant_(priorites);
+}
+
+
+function afficherPrioritesAssistant_(priorites) {
+  const corps = document.getElementById('corpsPrioritesAssistant');
+  const compteur = document.getElementById('compteurPrioritesAssistant');
+  if (!corps) {
+    return;
+  }
+
+  if (compteur) {
+    compteur.textContent = priorites.length + ' priorité' +
+      (priorites.length > 1 ? 's' : '');
+  }
+  if (!priorites.length) {
+    corps.innerHTML = `
+      <tr><td colspan="12" class="etat-vide">
+        Aucune priorité ne correspond aux filtres.
+      </td></tr>
+    `;
+    return;
+  }
+
+  corps.innerHTML = priorites.slice(0, 15).map(function (priorite) {
+    const niveau = obtenirPresentationNiveauAssistant_(
+      priorite.niveauPriorite
+    );
+    const motifs = (priorite.motifs || []).length
+      ? priorite.motifs.join(' · ')
+      : 'Aucun motif détaillé disponible';
+    return `
+      <tr>
+        <td><strong>#${echapperHtml(priorite.rang)}</strong></td>
+        <td><strong>${echapperHtml(priorite.item)}</strong></td>
+        <td>${echapperHtml(priorite.categorie || '—')}</td>
+        <td><span class="badge-priorite-assistant ${niveau.classe}">${echapperHtml(niveau.libelle)}</span></td>
+        <td>${echapperHtml(priorite.nombreStagiairesConcernes)}</td>
+        <td>${formaterScoreAssistant_(priorite.scoreMoyen)}</td>
+        <td>${formaterScoreAssistant_(priorite.scoreMaximum)}</td>
+        <td>${echapperHtml(priorite.nombreJamaisAcquis)}</td>
+        <td>${echapperHtml(priorite.nombreOublies)}</td>
+        <td>${echapperHtml(priorite.nombreEchecs)}</td>
+        <td>${formaterAncienneteAssistant_(priorite.ancienneteMoyenne)}</td>
+        <td class="motifs-priorite-assistant">${echapperHtml(motifs)}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+
+function obtenirPresentationNiveauAssistant_(niveau) {
+  const presentations = {
+    CRITIQUE: { libelle: 'Très élevée', classe: 'niveau-tres-elevee' },
+    ELEVEE: { libelle: 'Élevée', classe: 'niveau-elevee' },
+    MODEREE: { libelle: 'Moyenne', classe: 'niveau-moyenne' },
+    FAIBLE: { libelle: 'Faible', classe: 'niveau-faible' }
+  };
+  return presentations[niveau] || {
+    libelle: 'Non classée',
+    classe: 'niveau-non-classee'
+  };
+}
+
+
+function afficherRecommandationsAssistant_(recommandations) {
+  const zone = document.getElementById('listeRecommandationsAssistant');
+  if (!zone) {
+    return;
+  }
+  if (!recommandations.length) {
+    zone.innerHTML = `
+      <div class="bloc etat-vide etat-vide-assistant">
+        Aucune recommandation n’est retournée pour ce groupe.
+      </div>
+    `;
+    return;
+  }
+
+  zone.innerHTML = recommandations.slice(0, 10).map(
+    function (recommandation) {
+      const niveau = obtenirPresentationNiveauAssistant_(
+        recommandation.niveau
+      );
+      const compteurs = [
+        [recommandation.nombreStagiairesConcernes, 'stagiaire(s) concerné(s)'],
+        [recommandation.nombreJamaisAcquis, 'jamais acquis'],
+        [recommandation.nombreOublies, 'item(s) oublié(s)'],
+        [recommandation.nombreEchecs, 'échec(s) enregistré(s)']
+      ].filter(function (ligne) {
+        return Number(ligne[0]) > 0;
+      });
+      return `
+        <article class="bloc recommandation-groupe-assistant">
+          <header>
+            <span class="rang-recommandation-assistant">#${echapperHtml(recommandation.rang)}</span>
+            <div>
+              <h3>${echapperHtml(recommandation.item)}</h3>
+              <p>${echapperHtml(recommandation.categorie || 'Catégorie non renseignée')}</p>
+            </div>
+            <span class="badge-priorite-assistant ${niveau.classe}">${echapperHtml(niveau.libelle)}</span>
+          </header>
+          <div class="score-recommandation-assistant">Score ${formaterScoreAssistant_(recommandation.score)}</div>
+          ${compteurs.length ? `
+            <ul class="compteurs-recommandation-assistant">
+              ${compteurs.map(function (ligne) {
+                return '<li><strong>' + echapperHtml(ligne[0]) + '</strong> ' +
+                  echapperHtml(ligne[1]) + '</li>';
+              }).join('')}
+            </ul>
+          ` : ''}
+          <p class="justification-recommandation-assistant">
+            ${echapperHtml(recommandation.justification || 'Aucune justification détaillée disponible.')}
+          </p>
+        </article>
+      `;
+    }
+  ).join('');
+}
+
+
+function afficherDetailsStagiairesAssistant_(details) {
+  const corps = document.getElementById('corpsDetailsStagiairesAssistant');
+  const preparation = etatApplication.assistantPedagogique?.preparation;
+  if (!corps) {
+    return;
+  }
+
+  const stagiairesParId = {};
+  (preparation?.stagiaires || []).forEach(function (stagiaire) {
+    stagiairesParId[stagiaire.uuid] = stagiaire;
+  });
+
+  if (!details.length) {
+    corps.innerHTML = '<tr><td colspan="6" class="etat-vide">Aucun détail individuel disponible.</td></tr>';
+    return;
+  }
+
+  corps.innerHTML = details.map(function (detail) {
+    const stagiaire = stagiairesParId[detail.uuid] || {
+      nom: 'Stagiaire',
+      prenom: 'non identifié'
+    };
+    return `
+      <tr>
+        <td><strong>${echapperHtml(stagiaire.nom)} ${echapperHtml(stagiaire.prenom)}</strong></td>
+        <td>${echapperHtml(detail.nombreRecommandationsIndividuelles)}</td>
+        <td>${echapperHtml(detail.nombreItemsPrioritaires)}</td>
+        <td>${echapperHtml(detail.nombrePointsFaibles)}</td>
+        <td>${formaterDerniereSeanceAssistant_(detail.joursDepuisDerniereSeance)}</td>
+        <td>
+          <button
+            type="button"
+            class="bouton-secondaire bouton-ouvrir-fiche-assistant"
+            data-stagiaire-id="${echapperHtml(detail.uuid)}"
+            onclick="ouvrirFicheStagiaireDepuisAssistant(this.dataset.stagiaireId)"
+          >Ouvrir la fiche</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+
+function ouvrirFicheStagiaireDepuisAssistant(uuid) {
+  const preparation = etatApplication.assistantPedagogique?.preparation;
+  const stagiaire = (preparation?.stagiaires || []).find(
+    function (element) {
+      return element.uuid === uuid;
+    }
+  );
+
+  if (!stagiaire) {
+    afficherToast('Stagiaire introuvable.', true);
+    return;
+  }
+
+  const indexExistant = etatApplication.stagiaires.findIndex(
+    function (element) {
+      return element.uuid === uuid;
+    }
+  );
+  if (indexExistant === -1) {
+    etatApplication.stagiaires.push(Object.assign({
+      dateDebutPreparation: '',
+      dateStage: '',
+      grade: '',
+      telephone: '',
+      email: '',
+      aUnePhoto: false,
+      notesAdministratives: ''
+    }, stagiaire));
+  }
+
+  consulterStagiaire(uuid);
+}
+
+
+function afficherItemsGroupeAssistant_(identifiant, items, messageVide) {
+  const zone = document.getElementById(identifiant);
+  if (!zone) {
+    return;
+  }
+  if (!items.length) {
+    zone.innerHTML = '<p class="etat-vide">' + echapperHtml(messageVide) + '</p>';
+    return;
+  }
+
+  zone.innerHTML = items.map(function (item) {
+    return `
+      <article class="item-groupe-assistant">
+        <div>
+          <strong>${echapperHtml(item.item)}</strong>
+          <small>${echapperHtml(item.categorie || 'Catégorie non renseignée')}</small>
+        </div>
+        <span>${formaterScoreAssistant_(item.scoreMoyen)}</span>
+      </article>
+    `;
+  }).join('');
+}
+
+
+function formaterScoreAssistant_(valeur) {
+  const nombre = Number(valeur);
+  if (!Number.isFinite(nombre)) {
+    return '—';
+  }
+  return nombre.toLocaleString('fr-FR', {
+    maximumFractionDigits: 1
+  });
+}
+
+
+function formaterAncienneteAssistant_(valeur) {
+  if (valeur === null || valeur === undefined || valeur === '') {
+    return 'Non calculable';
+  }
+  return formaterScoreAssistant_(valeur) + ' j';
+}
+
+
+function formaterDerniereSeanceAssistant_(jours) {
+  if (jours === null || jours === undefined) {
+    return 'Aucune séance';
+  }
+  if (Number(jours) === 0) {
+    return 'Aujourd’hui';
+  }
+  return 'Il y a ' + echapperHtml(jours) + ' jour(s)';
+}
+
+
+function afficherErreurAssistantPedagogique_(message, estErreur) {
+  const zone = document.getElementById('erreurAssistantPedagogique');
+  if (!zone) {
+    return;
+  }
+  zone.textContent = String(message || 'Une erreur est survenue.');
+  zone.classList.toggle('avertissement', !estErreur);
+  zone.classList.remove('masque');
+}
+
+
+function masquerErreurAssistantPedagogique_() {
+  const zone = document.getElementById('erreurAssistantPedagogique');
+  if (zone) {
+    zone.textContent = '';
+    zone.classList.add('masque');
+    zone.classList.remove('avertissement');
+  }
+}
+
 
 /* =====================================================
    STATISTIQUES

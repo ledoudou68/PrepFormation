@@ -571,7 +571,7 @@ test('chaque feuille est lue une fois et le cache évite la seconde lecture', ()
       estAdministrateur: false,
       droits: { gererSessions: true }
     }),
-    obtenirVersionApplication_: () => '1.8.0',
+    obtenirVersionApplication_: () => '1.8.1',
     restaurationBloqueEcritures_: () => false
   });
   const premier = c.getDonneesCalendrier(
@@ -628,9 +628,9 @@ test('le cache calendrier est invalidé après séance et restauration', () => {
   );
 });
 
-test('la version applicative est centralisée à 1.8.0', () => {
+test('la version applicative est centralisée à 1.8.1', () => {
   assert(metadonnees.includes(
-    "VERSION_APPLICATION_PREPFORMATION_ = '1.8.0'"
+    "VERSION_APPLICATION_PREPFORMATION_ = '1.8.1'"
   ));
 });
 
