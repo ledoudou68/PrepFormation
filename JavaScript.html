@@ -62,6 +62,10 @@ const etatApplication = {
   donneesAccueil: null,
   sessionAConsulterDepuisAccueil: '',
   stagiaireAConsulterDepuisAccueil: '',
+  formationStagiairesDepuisRechercheGlobale: '',
+  formateurDepuisRechercheGlobale: '',
+  referentielFormationDepuisRechercheGlobale: '',
+  rechercheGlobale: null,
   photoStagiaireEnCours: null,
   photoStagiaireExistante: false,
   analysePedagogiqueFicheStagiaire: null,
@@ -110,6 +114,11 @@ function initialiserInterface() {
         { passive: true }
       );
     }
+  );
+
+  document.addEventListener(
+    'click',
+    gererClicExterieurRechercheGlobale
   );
 
   google.script.run
@@ -601,6 +610,489 @@ function fermerMenuMobile() {
 }
 
 /* =====================================================
+   RECHERCHE GLOBALE
+===================================================== */
+
+function obtenirEtatRechercheGlobale_() {
+  if (!etatApplication.rechercheGlobale) {
+    etatApplication.rechercheGlobale = {
+      minuterie: null,
+      generation: 0,
+      resultat: null,
+      resultatsNavigables: [],
+      indexActif: -1,
+      chargement: false,
+      requete: ''
+    };
+  }
+  return etatApplication.rechercheGlobale;
+}
+
+
+function programmerRechercheGlobale() {
+  const champ = document.getElementById('champRechercheGlobale');
+  const etat = obtenirEtatRechercheGlobale_();
+  const texte = String(champ?.value || '');
+  const requete = normaliserRechercheGlobaleClient_(texte);
+
+  window.clearTimeout(etat.minuterie);
+  etat.generation++;
+  etat.requete = texte;
+  etat.indexActif = -1;
+
+  if (requete.length < 2) {
+    etat.chargement = false;
+    etat.resultatsNavigables = [];
+    basculerChargementRechercheGlobale_(false);
+    if (requete.length) {
+      afficherMessageRechercheGlobale_(
+        'Saisissez au moins 2 caractères.'
+      );
+      ouvrirPanneauRechercheGlobale_();
+    } else {
+      fermerPanneauRechercheGlobale_();
+    }
+    return;
+  }
+
+  ouvrirPanneauRechercheGlobale_();
+  basculerChargementRechercheGlobale_(true);
+  afficherMessageRechercheGlobale_('Recherche en cours…');
+  const generationProgramme = etat.generation;
+  etat.minuterie = window.setTimeout(function () {
+    executerRechercheGlobale_(texte, generationProgramme);
+  }, 250);
+}
+
+
+function executerRechercheGlobale_(texte, generationProgramme) {
+  const etat = obtenirEtatRechercheGlobale_();
+  if (generationProgramme !== etat.generation) {
+    return;
+  }
+
+  etat.chargement = true;
+  google.script.run
+    .withSuccessHandler(function (resultat) {
+      const etatActuel = obtenirEtatRechercheGlobale_();
+      if (generationProgramme !== etatActuel.generation) {
+        return;
+      }
+      etatActuel.chargement = false;
+      etatActuel.resultat = resultat || {};
+      basculerChargementRechercheGlobale_(false);
+      afficherResultatsRechercheGlobale_(etatActuel.resultat);
+    })
+    .withFailureHandler(function (erreur) {
+      const etatActuel = obtenirEtatRechercheGlobale_();
+      if (generationProgramme !== etatActuel.generation) {
+        return;
+      }
+      etatActuel.chargement = false;
+      basculerChargementRechercheGlobale_(false);
+      afficherMessageRechercheGlobale_(
+        'Recherche indisponible : ' + extraireMessageErreur(erreur),
+        true
+      );
+    })
+    .rechercherGlobalement(texte, {});
+}
+
+
+function normaliserRechercheGlobaleClient_(valeur) {
+  return String(valeur || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ');
+}
+
+
+function afficherResultatsRechercheGlobale_(resultat) {
+  const zone = document.getElementById('contenuRechercheGlobale');
+  const etat = obtenirEtatRechercheGlobale_();
+  const groupes = Array.isArray(resultat.groupes) ? resultat.groupes : [];
+
+  if (!zone) {
+    return;
+  }
+
+  etat.resultatsNavigables = [];
+  etat.indexActif = -1;
+
+  if (!Number(resultat.nombreResultats || 0)) {
+    zone.innerHTML = `
+      <div class="etat-recherche-globale">
+        Aucun résultat pour « ${echapperHtml(resultat.requete || etat.requete)} »
+      </div>
+    `;
+    ouvrirPanneauRechercheGlobale_();
+    return;
+  }
+
+  zone.innerHTML = groupes.filter(function (groupe) {
+    return Number(groupe.total || 0) > 0;
+  }).map(function (groupe) {
+    const resultats = Array.isArray(groupe.resultats)
+      ? groupe.resultats
+      : [];
+    const lignes = resultats.map(function (resultatGroupe) {
+      const accessible = resultatRechercheGlobaleAccessible_(resultatGroupe);
+      const index = accessible ? etat.resultatsNavigables.length : -1;
+      if (accessible) {
+        etat.resultatsNavigables.push(resultatGroupe);
+      }
+      return creerLigneResultatRechercheGlobale_(
+        resultatGroupe,
+        index,
+        accessible
+      );
+    }).join('');
+    const supplement = Number(groupe.total) > resultats.length
+      ? '<span>' + (Number(groupe.total) - resultats.length) +
+        ' autre(s)</span>'
+      : '';
+    return `
+      <section class="groupe-resultats-recherche-globale">
+        <header>
+          <strong>${echapperHtml(groupe.libelle)}</strong>
+          <span>${echapperHtml(groupe.total)} résultat(s)</span>
+          ${supplement}
+        </header>
+        <div>${lignes}</div>
+      </section>
+    `;
+  }).join('');
+
+  ouvrirPanneauRechercheGlobale_();
+  chargerMiniaturesRechercheGlobale_();
+}
+
+
+function resultatRechercheGlobaleAccessible_(resultat) {
+  if (
+    ['CATEGORIE', 'ITEM'].includes(String(resultat.type || '')) &&
+    !estAdministrateurApplication()
+  ) {
+    return false;
+  }
+  return true;
+}
+
+
+function creerLigneResultatRechercheGlobale_(resultat, index, accessible) {
+  const contenu = creerContenuResultatRechercheGlobale_(resultat);
+  const classe = 'resultat-recherche-globale' +
+    (accessible ? '' : ' resultat-recherche-non-accessible');
+
+  if (!accessible) {
+    return `
+      <div class="${classe}" aria-disabled="true">
+        ${contenu}
+        <span class="restriction-resultat-recherche">Consultation du Référentiel réservée à l’administrateur</span>
+      </div>
+    `;
+  }
+
+  return `
+    <button
+      type="button"
+      id="resultatRechercheGlobale${index}"
+      class="${classe}"
+      data-index-recherche="${index}"
+      role="option"
+      aria-selected="false"
+      onclick="ouvrirResultatRechercheGlobale(${index})"
+    >${contenu}</button>
+  `;
+}
+
+
+function creerContenuResultatRechercheGlobale_(resultat) {
+  const type = String(resultat.type || '');
+
+  if (type === 'STAGIAIRE') {
+    const initiales =
+      (resultat.prenom || '').charAt(0) + (resultat.nom || '').charAt(0);
+    return `
+      <span
+        class="miniature-recherche-globale"
+        data-photo-recherche-id="${echapperHtml(resultat.uuid)}"
+        data-photo-disponible="${resultat.aUnePhoto ? 'true' : 'false'}"
+      >${echapperHtml(initiales || 'ST')}</span>
+      <span class="texte-resultat-recherche">
+        <strong>${echapperHtml(resultat.nom)} ${echapperHtml(resultat.prenom)}</strong>
+        <small>${echapperHtml(resultat.formation || 'Formation non renseignée')} · ${echapperHtml(resultat.statut || 'Statut inconnu')}</small>
+      </span>
+      <span class="type-resultat-recherche">Stagiaire</span>
+    `;
+  }
+
+  if (type === 'FORMATEUR') {
+    return `
+      <span class="icone-type-recherche" aria-hidden="true">👨‍🏫</span>
+      <span class="texte-resultat-recherche">
+        <strong>${echapperHtml(resultat.nom)} ${echapperHtml(resultat.prenom)}</strong>
+        <small>${resultat.actif ? 'Actif' : 'Inactif'}</small>
+      </span>
+      <span class="type-resultat-recherche">Formateur</span>
+    `;
+  }
+
+  if (type === 'SESSION') {
+    const participants = (resultat.participantsPrincipaux || []).join(', ');
+    return `
+      <span class="icone-type-recherche" aria-hidden="true">📅</span>
+      <span class="texte-resultat-recherche">
+        <strong>${echapperHtml(afficherDateFrancaise(resultat.date) || 'Date inconnue')} · ${echapperHtml(resultat.heureDebut || '—')}–${echapperHtml(resultat.heureFin || '—')}</strong>
+        <small>${echapperHtml(resultat.formation || 'Formation non renseignée')}${participants ? ' · ' + echapperHtml(participants) : ''}</small>
+      </span>
+      <span class="type-resultat-recherche">Séance</span>
+    `;
+  }
+
+  if (type === 'FORMATION') {
+    return `
+      <span class="icone-type-recherche" aria-hidden="true">🎓</span>
+      <span class="texte-resultat-recherche">
+        <strong>${echapperHtml(resultat.libelle)}</strong>
+        <small>Formation</small>
+      </span>
+      <span class="type-resultat-recherche">Formation</span>
+    `;
+  }
+
+  return `
+    <span class="icone-type-recherche" aria-hidden="true">📚</span>
+    <span class="texte-resultat-recherche">
+      <strong>${echapperHtml(resultat.item || resultat.categorie)}</strong>
+      <small>${echapperHtml(resultat.formation || 'Formation non renseignée')} · ${echapperHtml(resultat.categorie || 'Catégorie non renseignée')}</small>
+    </span>
+    <span class="type-resultat-recherche">${resultat.sousType === 'ITEM' ? 'Item' : 'Catégorie'}</span>
+  `;
+}
+
+
+function chargerMiniaturesRechercheGlobale_() {
+  const etat = obtenirEtatRechercheGlobale_();
+  const generation = etat.generation;
+  document.querySelectorAll(
+    '.miniature-recherche-globale[data-photo-disponible="true"]'
+  ).forEach(function (zone) {
+    const uuid = zone.dataset.photoRechercheId;
+    google.script.run
+      .withSuccessHandler(function (photo) {
+        if (
+          generation !== obtenirEtatRechercheGlobale_().generation ||
+          !photo || !photo.disponible
+        ) {
+          return;
+        }
+        const image = document.createElement('img');
+        image.src = photo.dataUrl;
+        image.alt = '';
+        zone.innerHTML = '';
+        zone.appendChild(image);
+      })
+      .withFailureHandler(function () {})
+      .getPhotoStagiaire(uuid);
+  });
+}
+
+
+function ouvrirResultatRechercheGlobale(index) {
+  const etat = obtenirEtatRechercheGlobale_();
+  const resultat = etat.resultatsNavigables[Number(index)];
+  if (!resultat) {
+    return;
+  }
+
+  fermerRechercheGlobale();
+
+  if (resultat.type === 'STAGIAIRE') {
+    etatApplication.stagiaireAConsulterDepuisAccueil = resultat.uuid;
+    chargerPage('Stagiaires');
+    return;
+  }
+
+  if (resultat.type === 'SESSION') {
+    consulterSession(resultat.idSession);
+    return;
+  }
+
+  if (resultat.type === 'FORMATEUR') {
+    etatApplication.formateurDepuisRechercheGlobale =
+      resultat.idFormateur;
+    chargerPage('Formateurs');
+    return;
+  }
+
+  if (resultat.type === 'FORMATION') {
+    etatApplication.formationStagiairesDepuisRechercheGlobale =
+      resultat.libelle;
+    chargerPage('Stagiaires');
+    return;
+  }
+
+  if (
+    ['ITEM', 'CATEGORIE'].includes(resultat.type) &&
+    estAdministrateurApplication()
+  ) {
+    etatApplication.referentielFormationDepuisRechercheGlobale =
+      resultat.formation;
+    chargerPage('Referentiel');
+  }
+}
+
+
+function mettreEnEvidenceFormateurRechercheGlobale_() {
+  const idFormateur = etatApplication.formateurDepuisRechercheGlobale;
+  if (!idFormateur) {
+    return;
+  }
+  etatApplication.formateurDepuisRechercheGlobale = '';
+  const ligne = Array.from(document.querySelectorAll('[data-formateur-id]'))
+    .find(function (element) {
+      return element.dataset.formateurId === idFormateur;
+    });
+  if (!ligne) {
+    return;
+  }
+  ligne.classList.add('resultat-recherche-surligne');
+  ligne.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  window.setTimeout(function () {
+    ligne.classList.remove('resultat-recherche-surligne');
+  }, 2200);
+}
+
+
+function gererClavierRechercheGlobale(evenement) {
+  const etat = obtenirEtatRechercheGlobale_();
+  const nombre = etat.resultatsNavigables.length;
+
+  if (evenement.key === 'Escape') {
+    evenement.preventDefault();
+    fermerRechercheGlobale();
+    return;
+  }
+
+  if (!nombre) {
+    return;
+  }
+
+  if (evenement.key === 'ArrowDown') {
+    evenement.preventDefault();
+    definirResultatActifRechercheGlobale_(
+      etat.indexActif < nombre - 1 ? etat.indexActif + 1 : 0
+    );
+    return;
+  }
+
+  if (evenement.key === 'ArrowUp') {
+    evenement.preventDefault();
+    definirResultatActifRechercheGlobale_(
+      etat.indexActif > 0 ? etat.indexActif - 1 : nombre - 1
+    );
+    return;
+  }
+
+  if (evenement.key === 'Enter') {
+    evenement.preventDefault();
+    ouvrirResultatRechercheGlobale(
+      etat.indexActif >= 0 ? etat.indexActif : 0
+    );
+  }
+}
+
+
+function definirResultatActifRechercheGlobale_(index) {
+  const etat = obtenirEtatRechercheGlobale_();
+  etat.indexActif = index;
+  document.querySelectorAll('[data-index-recherche]').forEach(
+    function (element) {
+      const actif = Number(element.dataset.indexRecherche) === index;
+      element.classList.toggle('actif', actif);
+      element.setAttribute('aria-selected', actif ? 'true' : 'false');
+      if (actif) {
+        element.scrollIntoView({ block: 'nearest' });
+      }
+    }
+  );
+}
+
+
+function gererFocusRechercheGlobale() {
+  const champ = document.getElementById('champRechercheGlobale');
+  if (normaliserRechercheGlobaleClient_(champ?.value || '').length >= 2) {
+    ouvrirPanneauRechercheGlobale_();
+  }
+}
+
+
+function gererClicExterieurRechercheGlobale(evenement) {
+  const conteneur = document.getElementById('conteneurRechercheGlobale');
+  if (conteneur && !conteneur.contains(evenement.target)) {
+    fermerPanneauRechercheGlobale_();
+  }
+}
+
+
+function ouvrirRechercheGlobaleMobile() {
+  const conteneur = document.getElementById('conteneurRechercheGlobale');
+  conteneur?.classList.add('recherche-globale-mobile-ouverte');
+  document.body.classList.add('recherche-globale-ouverte');
+  ouvrirPanneauRechercheGlobale_();
+  window.setTimeout(function () {
+    document.getElementById('champRechercheGlobale')?.focus();
+  }, 30);
+}
+
+
+function fermerRechercheGlobale() {
+  fermerPanneauRechercheGlobale_();
+  document.getElementById('conteneurRechercheGlobale')
+    ?.classList.remove('recherche-globale-mobile-ouverte');
+  document.body.classList.remove('recherche-globale-ouverte');
+}
+
+
+function ouvrirPanneauRechercheGlobale_() {
+  document.getElementById('panneauRechercheGlobale')
+    ?.classList.remove('masque');
+  document.getElementById('champRechercheGlobale')
+    ?.setAttribute('aria-expanded', 'true');
+}
+
+
+function fermerPanneauRechercheGlobale_() {
+  document.getElementById('panneauRechercheGlobale')
+    ?.classList.add('masque');
+  document.getElementById('champRechercheGlobale')
+    ?.setAttribute('aria-expanded', 'false');
+}
+
+
+function basculerChargementRechercheGlobale_(actif) {
+  document.getElementById('chargementRechercheGlobale')
+    ?.classList.toggle('masque', !actif);
+}
+
+
+function afficherMessageRechercheGlobale_(message, erreur) {
+  const zone = document.getElementById('contenuRechercheGlobale');
+  if (!zone) {
+    return;
+  }
+  zone.innerHTML = `
+    <div class="etat-recherche-globale ${erreur ? 'erreur' : ''}">
+      ${echapperHtml(message)}
+    </div>
+  `;
+}
+
+
+/* =====================================================
    ACCUEIL
 ===================================================== */
 
@@ -1026,6 +1518,18 @@ function initialiserPageStagiaires() {
       !erreurRencontree
     ) {
       remplirFiltresStagiaires();
+
+      const formationRecherche =
+        etatApplication.formationStagiairesDepuisRechercheGlobale;
+      if (formationRecherche) {
+        etatApplication.formationStagiairesDepuisRechercheGlobale = '';
+        const filtreFormation = document.getElementById(
+          'filtreFormationStagiaire'
+        );
+        if (filtreFormation) {
+          filtreFormation.value = formationRecherche;
+        }
+      }
       afficherListeStagiaires();
       masquerLoader();
 
@@ -5255,6 +5759,7 @@ function initialiserPageFormateurs() {
         Array.isArray(formateurs) ? formateurs : [];
 
       afficherListeFormateurs();
+      mettreEnEvidenceFormateurRechercheGlobale_();
 
       if (!estAdministrateurApplication()) {
         chargerMonRecapitulatifFormateur();
@@ -5327,7 +5832,7 @@ function afficherListeFormateurs() {
         : '—';
 
       return `
-        <tr>
+        <tr data-formateur-id="${echapperHtml(formateur.idFormateur)}">
           <td>
             <strong>${echapperHtml(formateur.nom)}</strong>
           </td>
@@ -5634,8 +6139,14 @@ function initialiserPageReferentiel() {
         return;
       }
 
-      select.value =
-        etatApplication.formationsReferentiel[0];
+      const formationRecherche =
+        etatApplication.referentielFormationDepuisRechercheGlobale;
+      etatApplication.referentielFormationDepuisRechercheGlobale = '';
+      select.value = etatApplication.formationsReferentiel.includes(
+        formationRecherche
+      )
+        ? formationRecherche
+        : etatApplication.formationsReferentiel[0];
 
       changerFormationReferentiel();
     })

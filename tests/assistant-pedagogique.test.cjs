@@ -367,7 +367,7 @@ function testerPreparationServeur() {
     Boolean,
     isNaN,
     restaurationBloqueEcritures_: () => false,
-    obtenirVersionApplication_: () => '1.8.1'
+    obtenirVersionApplication_: () => '1.9.0'
   };
   vm.createContext(contexte);
   vm.runInContext(sourceIndividuelle, contexte);

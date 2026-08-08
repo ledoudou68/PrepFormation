@@ -349,6 +349,7 @@ function executerMutationMetier_(traitement, contexteInterne) {
 
   const verrou = LockService.getDocumentLock();
   const verrouDejaDetenu = verrou.hasLock();
+  let mutationCommencee = false;
 
   if (!verrouDejaDetenu && !verrou.tryLock(30000)) {
     throw new Error(
@@ -358,8 +359,15 @@ function executerMutationMetier_(traitement, contexteInterne) {
 
   try {
     exigerEcritureAutorisee_(contexteInterne);
+    mutationCommencee = true;
     return traitement();
   } finally {
+    if (
+      mutationCommencee &&
+      typeof invaliderCacheRechercheGlobale_ === 'function'
+    ) {
+      invaliderCacheRechercheGlobale_();
+    }
     if (!verrouDejaDetenu) {
       verrou.releaseLock();
     }

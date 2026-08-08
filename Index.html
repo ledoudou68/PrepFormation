@@ -95,6 +95,67 @@
       <div class="sous-titre">Suivi des préparations</div>
     </div>
 
+    <div id="conteneurRechercheGlobale" class="conteneur-recherche-globale">
+      <button
+        type="button"
+        class="bouton-ouvrir-recherche-mobile"
+        onclick="ouvrirRechercheGlobaleMobile()"
+        aria-label="Ouvrir la recherche globale"
+      >⌕</button>
+
+      <div class="champ-recherche-globale">
+        <span class="icone-recherche-globale" aria-hidden="true">⌕</span>
+        <input
+          type="search"
+          id="champRechercheGlobale"
+          placeholder="Rechercher dans PrepFormation…"
+          autocomplete="off"
+          spellcheck="false"
+          aria-label="Rechercher dans PrepFormation"
+          aria-controls="panneauRechercheGlobale"
+          aria-expanded="false"
+          aria-autocomplete="list"
+          oninput="programmerRechercheGlobale()"
+          onkeydown="gererClavierRechercheGlobale(event)"
+          onfocus="gererFocusRechercheGlobale()"
+        >
+        <span
+          id="chargementRechercheGlobale"
+          class="chargement-recherche-globale masque"
+          aria-label="Recherche en cours"
+        ></span>
+        <button
+          type="button"
+          class="bouton-fermer-recherche-globale"
+          onclick="fermerRechercheGlobale()"
+          aria-label="Fermer la recherche"
+        >×</button>
+      </div>
+
+      <section
+        id="panneauRechercheGlobale"
+        class="panneau-recherche-globale masque"
+        aria-label="Résultats de la recherche globale"
+      >
+        <header class="entete-recherche-mobile">
+          <strong>Recherche globale</strong>
+          <button
+            type="button"
+            onclick="fermerRechercheGlobale()"
+            aria-label="Fermer"
+          >×</button>
+        </header>
+        <div
+          id="contenuRechercheGlobale"
+          class="contenu-recherche-globale"
+          role="listbox"
+          aria-live="polite"
+        >
+          Saisissez au moins 2 caractères.
+        </div>
+      </section>
+    </div>
+
     <div class="actions-acces-administration">
       <button
         type="button"

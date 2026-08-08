@@ -384,9 +384,9 @@ test('le formulaire conserve les champs métier existants', () => {
   ));
 });
 
-test('la version applicative est centralisée à 1.8.1', () => {
+test('la version applicative est centralisée à 1.9.0', () => {
   assert(sourceMetadonnees.includes(
-    "VERSION_APPLICATION_PREPFORMATION_ = '1.8.1'"
+    "VERSION_APPLICATION_PREPFORMATION_ = '1.9.0'"
   ));
 });
 

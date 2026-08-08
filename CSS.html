@@ -7066,6 +7066,355 @@ button:disabled {
 }
 
 /* =====================================================
+   RECHERCHE GLOBALE
+===================================================== */
+
+.conteneur-recherche-globale {
+  position: relative;
+  min-width: 240px;
+  max-width: 560px;
+  flex: 1 1 420px;
+}
+
+.champ-recherche-globale {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.champ-recherche-globale input {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 72px 9px 40px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--texte);
+  outline: none;
+}
+
+.champ-recherche-globale input:focus {
+  border-color: #fff;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.23);
+}
+
+.champ-recherche-globale input::placeholder {
+  color: #71808d;
+}
+
+.icone-recherche-globale {
+  position: absolute;
+  left: 13px;
+  z-index: 1;
+  color: #52616d;
+  font-size: 22px;
+  pointer-events: none;
+}
+
+.bouton-fermer-recherche-globale {
+  position: absolute;
+  right: 8px;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #52616d;
+  cursor: pointer;
+  font-size: 20px;
+}
+
+.bouton-fermer-recherche-globale:hover,
+.bouton-fermer-recherche-globale:focus-visible {
+  background: #e9eef2;
+  outline: none;
+}
+
+.chargement-recherche-globale {
+  position: absolute;
+  right: 43px;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #cbd5dc;
+  border-top-color: var(--rouge);
+  border-radius: 50%;
+  animation: rotation 0.7s linear infinite;
+}
+
+.bouton-ouvrir-recherche-mobile,
+.entete-recherche-mobile {
+  display: none;
+}
+
+.panneau-recherche-globale {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 700;
+  max-block-size: min(70vh, 570px);
+  overflow-y: auto;
+  border: 1px solid var(--bordure);
+  border-radius: 12px;
+  background: var(--blanc);
+  color: var(--texte);
+  box-shadow: 0 18px 45px rgba(15, 35, 50, 0.24);
+}
+
+.contenu-recherche-globale {
+  padding: 7px;
+}
+
+.groupe-resultats-recherche-globale +
+.groupe-resultats-recherche-globale {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--bordure);
+}
+
+.groupe-resultats-recherche-globale > header {
+  padding: 7px 9px 5px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--texte-secondaire);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.045em;
+}
+
+.groupe-resultats-recherche-globale > header strong {
+  margin-right: auto;
+  color: var(--texte);
+  font-size: 11px;
+}
+
+.resultat-recherche-globale {
+  width: 100%;
+  min-height: 54px;
+  padding: 8px 9px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--texte);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.resultat-recherche-globale:hover,
+.resultat-recherche-globale:focus-visible,
+.resultat-recherche-globale.actif {
+  background: #eaf3fb;
+  outline: none;
+}
+
+.resultat-recherche-non-accessible {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.resultat-recherche-non-accessible:hover {
+  background: transparent;
+}
+
+.miniature-recherche-globale,
+.icone-type-recherche {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 9px;
+  background: #edf2f6;
+  color: var(--bleu-fonce);
+  font-size: 15px;
+  font-weight: 850;
+}
+
+.miniature-recherche-globale {
+  border-radius: 50%;
+  background: var(--bleu-fonce);
+  color: #fff;
+  font-size: 11px;
+}
+
+.miniature-recherche-globale img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.texte-resultat-recherche {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.texte-resultat-recherche strong,
+.texte-resultat-recherche small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.texte-resultat-recherche strong {
+  font-size: 12px;
+}
+
+.texte-resultat-recherche small {
+  color: var(--texte-secondaire);
+  font-size: 10px;
+}
+
+.type-resultat-recherche {
+  padding: 4px 6px;
+  border-radius: 999px;
+  background: #f0f3f5;
+  color: #586773;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.restriction-resultat-recherche {
+  grid-column: 2 / -1;
+  color: #8a5700;
+  font-size: 9px;
+}
+
+.etat-recherche-globale {
+  padding: 24px 14px;
+  color: var(--texte-secondaire);
+  font-size: 12px;
+  text-align: center;
+}
+
+.etat-recherche-globale.erreur {
+  color: var(--rouge-fonce);
+}
+
+.resultat-recherche-surligne {
+  animation: surlignage-recherche-globale 2.2s ease;
+}
+
+@keyframes surlignage-recherche-globale {
+  0%, 70% { background: #fff4cc; }
+  100% { background: transparent; }
+}
+
+@media (max-width: 1050px) {
+  .conteneur-recherche-globale {
+    flex-basis: 300px;
+  }
+
+  .champ-recherche-globale input {
+    font-size: 12px;
+  }
+
+  .identite-utilisateur-application {
+    display: none;
+  }
+}
+
+@media (max-width: 800px) {
+  .conteneur-recherche-globale {
+    min-width: 44px;
+    max-width: none;
+    flex: 0 0 44px;
+    margin-left: auto;
+  }
+
+  .bouton-ouvrir-recherche-mobile {
+    width: 44px;
+    height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+    cursor: pointer;
+    font-size: 25px;
+  }
+
+  .conteneur-recherche-globale:not(.recherche-globale-mobile-ouverte)
+  .champ-recherche-globale,
+  .conteneur-recherche-globale:not(.recherche-globale-mobile-ouverte)
+  .panneau-recherche-globale {
+    display: none !important;
+  }
+
+  .conteneur-recherche-globale.recherche-globale-mobile-ouverte {
+    position: fixed;
+    inset: 0;
+    z-index: 1500;
+    width: 100%;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    background: var(--fond);
+  }
+
+  .recherche-globale-mobile-ouverte .bouton-ouvrir-recherche-mobile {
+    display: none;
+  }
+
+  .recherche-globale-mobile-ouverte .champ-recherche-globale {
+    flex: 0 0 auto;
+  }
+
+  .recherche-globale-mobile-ouverte .champ-recherche-globale input {
+    min-height: 50px;
+    border-color: var(--bordure);
+    box-shadow: var(--ombre);
+    font-size: 16px;
+  }
+
+  .recherche-globale-mobile-ouverte .panneau-recherche-globale {
+    position: static;
+    max-block-size: none;
+    margin-top: 10px;
+    flex: 1 1 auto;
+    overflow-y: auto;
+    border-radius: 12px;
+  }
+
+  .entete-recherche-mobile {
+    min-height: 48px;
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--bordure);
+  }
+
+  .entete-recherche-mobile button {
+    width: 36px;
+    height: 36px;
+    border: 0;
+    border-radius: 50%;
+    background: #edf1f4;
+    cursor: pointer;
+    font-size: 22px;
+  }
+
+  .resultat-recherche-globale {
+    min-height: 58px;
+    padding: 10px;
+  }
+
+  body.recherche-globale-ouverte {
+    overflow: hidden;
+  }
+}
+
+/* =====================================================
    ASSISTANT PÉDAGOGIQUE DE GROUPE
 ===================================================== */
 
