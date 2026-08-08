@@ -21,6 +21,18 @@ const etatApplication = {
   statistiques: null,
   chargementStatistiquesEnCours: false,
   generationStatistiques: 0,
+  donneesCalendrier: null,
+  moisCalendrierActif: null,
+  chargementCalendrierEnCours: false,
+  generationCalendrier: 0,
+  filtresCalendrier: {
+    formationId: '',
+    formateurId: '',
+    stagiaireId: '',
+    temporalite: 'TOUTES'
+  },
+  sessionAConsulterDepuisCalendrier: '',
+  dateNouvelleSessionDepuisCalendrier: '',
   referentielSession: [],
   formationReferentielSession: '',
   itemsTravaillesSession: {},
@@ -177,6 +189,10 @@ function initialiserPageActive(nomPage) {
 
   if (nomPage === 'Sessions') {
     initialiserPageSessions();
+  }
+
+  if (nomPage === 'Calendrier') {
+    initialiserPageCalendrier();
   }
 
   if (nomPage === 'Statistiques') {
@@ -398,6 +414,7 @@ function verrouillerAdministrationLocale() {
       consulterStagiaires: true,
       consulterSuiviPedagogique: true,
       gererSessions: true,
+      consulterCalendrier: true,
       consulterFormateurs: true,
       consulterStatistiques: true,
       consulterMonRecapitulatifHeures: Boolean(
@@ -6664,13 +6681,23 @@ function initialiserPageSessions() {
       masquerLoader();
 
       const idSession =
-        etatApplication.sessionAConsulterDepuisAccueil;
+        etatApplication.sessionAConsulterDepuisAccueil ||
+        etatApplication.sessionAConsulterDepuisCalendrier;
+      const dateNouvelleSession =
+        etatApplication.dateNouvelleSessionDepuisCalendrier;
 
       if (idSession) {
         etatApplication.sessionAConsulterDepuisAccueil = '';
+        etatApplication.sessionAConsulterDepuisCalendrier = '';
 
         window.setTimeout(function () {
           consulterSession(idSession);
+        }, 50);
+      } else if (dateNouvelleSession) {
+        etatApplication.dateNouvelleSessionDepuisCalendrier = '';
+
+        window.setTimeout(function () {
+          nouvelleSessionDepuisDate(dateNouvelleSession);
         }, 50);
       }
     }
@@ -7271,6 +7298,30 @@ function nouvelleSession() {
   window.setTimeout(function () {
     document.getElementById('sessionDate').focus();
   }, 100);
+}
+
+
+function nouvelleSessionDepuisDate(dateIso) {
+  if (!creerDateLocaleCalendrier_(dateIso)) {
+    afficherToast('Date de séance invalide.', true);
+    return;
+  }
+
+  nouvelleSession();
+
+  const date = document.getElementById('sessionDate');
+  const heureDebut = document.getElementById('sessionHeureDebut');
+  const heureFin = document.getElementById('sessionHeureFin');
+
+  if (!date || !heureDebut || !heureFin) {
+    return;
+  }
+
+  date.value = dateIso;
+  heureDebut.value = '';
+  heureFin.value = '';
+  mettreAJourDureeSession();
+  date.focus();
 }
 
 function reinitialiserEtatFormulaireSession() {
@@ -8477,6 +8528,688 @@ function rechargerSessions() {
     })
     .withFailureHandler(gererErreurServeur)
     .getSessions();
+}
+
+/* =====================================================
+   CALENDRIER
+===================================================== */
+
+function initialiserPageCalendrier() {
+  const maintenant = new Date();
+  etatApplication.moisCalendrierActif = new Date(
+    maintenant.getFullYear(),
+    maintenant.getMonth(),
+    1,
+    12
+  );
+  etatApplication.donneesCalendrier = null;
+  etatApplication.filtresCalendrier = {
+    formationId: '',
+    formateurId: '',
+    stagiaireId: '',
+    temporalite: 'TOUTES'
+  };
+  chargerMoisCalendrier();
+}
+
+
+function changerMoisCalendrier(decalage) {
+  if (etatApplication.chargementCalendrierEnCours) {
+    return;
+  }
+
+  const mois = etatApplication.moisCalendrierActif || new Date();
+  etatApplication.moisCalendrierActif = new Date(
+    mois.getFullYear(),
+    mois.getMonth() + Number(decalage || 0),
+    1,
+    12
+  );
+  chargerMoisCalendrier();
+}
+
+
+function revenirAujourdhuiCalendrier() {
+  if (etatApplication.chargementCalendrierEnCours) {
+    return;
+  }
+
+  const maintenant = new Date();
+  etatApplication.moisCalendrierActif = new Date(
+    maintenant.getFullYear(),
+    maintenant.getMonth(),
+    1,
+    12
+  );
+  chargerMoisCalendrier();
+}
+
+
+function chargerMoisCalendrier() {
+  const mois = etatApplication.moisCalendrierActif;
+
+  if (!mois || etatApplication.chargementCalendrierEnCours) {
+    return;
+  }
+
+  const periode = calculerPeriodeVisibleCalendrier_(mois);
+  const generation = ++etatApplication.generationCalendrier;
+  etatApplication.chargementCalendrierEnCours = true;
+  basculerChargementCalendrier_(true);
+  masquerErreurCalendrier_();
+  afficherTitreMoisCalendrier_();
+
+  google.script.run
+    .withSuccessHandler(function (donnees) {
+      if (
+        generation !== etatApplication.generationCalendrier ||
+        etatApplication.pageActive !== 'Calendrier'
+      ) {
+        return;
+      }
+
+      etatApplication.chargementCalendrierEnCours = false;
+      etatApplication.donneesCalendrier = donnees || {};
+      basculerChargementCalendrier_(false);
+      remplirFiltresCalendrier_(donnees || {});
+      appliquerFiltresCalendrier();
+      afficherMetadonneesCalendrier_(donnees || {});
+    })
+    .withFailureHandler(function (erreur) {
+      if (
+        generation !== etatApplication.generationCalendrier ||
+        etatApplication.pageActive !== 'Calendrier'
+      ) {
+        return;
+      }
+
+      etatApplication.chargementCalendrierEnCours = false;
+      basculerChargementCalendrier_(false);
+      afficherErreurCalendrier_(extraireMessageErreur(erreur));
+    })
+    .getDonneesCalendrier(
+      periode.dateDebut,
+      periode.dateFin,
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+
+function calculerPeriodeVisibleCalendrier_(dateMois) {
+  const premierJour = new Date(
+    dateMois.getFullYear(),
+    dateMois.getMonth(),
+    1,
+    12
+  );
+  const decalageLundi = (premierJour.getDay() + 6) % 7;
+  const dateDebut = ajouterJoursCalendrier_(premierJour, -decalageLundi);
+  const dernierJour = new Date(
+    dateMois.getFullYear(),
+    dateMois.getMonth() + 1,
+    0,
+    12
+  );
+  const decalageDimanche = (7 - dernierJour.getDay()) % 7;
+  const dateFin = ajouterJoursCalendrier_(
+    dernierJour,
+    decalageDimanche
+  );
+
+  return {
+    dateDebut: formaterDateIsoCalendrierClient_(dateDebut),
+    dateFin: formaterDateIsoCalendrierClient_(dateFin),
+    nombreJours: Math.round(
+      (dateFin.getTime() - dateDebut.getTime()) / 86400000
+    ) + 1
+  };
+}
+
+
+function ajouterJoursCalendrier_(date, nombreJours) {
+  const resultat = new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+    12
+  );
+  resultat.setDate(resultat.getDate() + Number(nombreJours || 0));
+  return resultat;
+}
+
+
+function creerDateLocaleCalendrier_(dateIso) {
+  const correspondance = /^(\d{4})-(\d{2})-(\d{2})$/.exec(
+    String(dateIso || '')
+  );
+  if (!correspondance) {
+    return null;
+  }
+  const date = new Date(
+    Number(correspondance[1]),
+    Number(correspondance[2]) - 1,
+    Number(correspondance[3]),
+    12
+  );
+  return date.getFullYear() === Number(correspondance[1]) &&
+    date.getMonth() === Number(correspondance[2]) - 1 &&
+    date.getDate() === Number(correspondance[3])
+    ? date
+    : null;
+}
+
+
+function formaterDateIsoCalendrierClient_(date) {
+  return date.getFullYear() + '-' +
+    String(date.getMonth() + 1).padStart(2, '0') + '-' +
+    String(date.getDate()).padStart(2, '0');
+}
+
+
+function afficherTitreMoisCalendrier_() {
+  const zone = document.getElementById('titreMoisCalendrier');
+  const mois = etatApplication.moisCalendrierActif;
+
+  if (!zone || !mois) {
+    return;
+  }
+
+  const libelle = mois.toLocaleDateString('fr-FR', {
+    month: 'long',
+    year: 'numeric'
+  });
+  zone.textContent = libelle.charAt(0).toUpperCase() + libelle.slice(1);
+}
+
+
+function basculerChargementCalendrier_(actif) {
+  document.getElementById('chargementCalendrier')
+    ?.classList.toggle('masque', !actif);
+  document.querySelectorAll('.navigation-mois-calendrier button')
+    .forEach(function (bouton) {
+      bouton.disabled = actif;
+    });
+}
+
+
+function masquerErreurCalendrier_() {
+  const zone = document.getElementById('erreurCalendrier');
+  if (zone) {
+    zone.classList.add('masque');
+    zone.innerHTML = '';
+  }
+}
+
+
+function afficherErreurCalendrier_(message) {
+  const zone = document.getElementById('erreurCalendrier');
+  if (!zone) {
+    return;
+  }
+  zone.classList.remove('masque');
+  zone.innerHTML = `
+    <strong>Calendrier indisponible</strong>
+    <p>${echapperHtml(message)}</p>
+    <button type="button" class="bouton-secondaire" onclick="chargerMoisCalendrier()">Réessayer</button>
+  `;
+}
+
+
+function afficherMetadonneesCalendrier_(donnees) {
+  const zone = document.getElementById('metadonneesCalendrier');
+  if (!zone) {
+    return;
+  }
+  const meta = donnees.meta || {};
+  const cache = meta.cacheUtilise
+    ? ' · cache ' + Number(meta.ageCacheSecondes || 0) + ' s'
+    : '';
+  const avertissements = Array.isArray(donnees.avertissements)
+    ? donnees.avertissements.length
+    : 0;
+  zone.textContent = 'Calcul serveur : ' +
+    Number(meta.dureeCalculMs || 0) + ' ms' + cache +
+    (avertissements ? ' · ' + avertissements + ' avertissement(s)' : '');
+}
+
+
+function remplirFiltresCalendrier_(donnees) {
+  remplirSelectCalendrier_(
+    'filtreFormationCalendrier',
+    donnees.formations,
+    'idFormation',
+    'libelle',
+    'Toutes les formations',
+    etatApplication.filtresCalendrier.formationId
+  );
+  remplirSelectCalendrier_(
+    'filtreFormateurCalendrier',
+    donnees.formateurs,
+    'idFormateur',
+    'nomComplet',
+    'Tous les formateurs',
+    etatApplication.filtresCalendrier.formateurId
+  );
+  remplirSelectCalendrier_(
+    'filtreStagiaireCalendrier',
+    donnees.stagiaires,
+    'idStagiaire',
+    'nomComplet',
+    'Tous les stagiaires',
+    etatApplication.filtresCalendrier.stagiaireId
+  );
+
+  const temporalite = document.getElementById('filtrePeriodeCalendrier');
+  if (temporalite) {
+    temporalite.value = etatApplication.filtresCalendrier.temporalite ||
+      'TOUTES';
+  }
+}
+
+
+function remplirSelectCalendrier_(
+  identifiant,
+  donnees,
+  champValeur,
+  champLibelle,
+  libelleTous,
+  valeurSelectionnee
+) {
+  const select = document.getElementById(identifiant);
+  if (!select) {
+    return;
+  }
+  const options = Array.isArray(donnees) ? donnees : [];
+  select.innerHTML = `<option value="">${echapperHtml(libelleTous)}</option>` +
+    options.map(function (option) {
+      return `<option value="${echapperHtml(option[champValeur])}">${echapperHtml(option[champLibelle])}</option>`;
+    }).join('');
+  select.value = String(valeurSelectionnee || '');
+  if (select.value !== String(valeurSelectionnee || '')) {
+    select.value = '';
+  }
+}
+
+
+function lireFiltresCalendrier_() {
+  return {
+    formationId: document.getElementById('filtreFormationCalendrier')
+      ?.value || '',
+    formateurId: document.getElementById('filtreFormateurCalendrier')
+      ?.value || '',
+    stagiaireId: document.getElementById('filtreStagiaireCalendrier')
+      ?.value || '',
+    temporalite: document.getElementById('filtrePeriodeCalendrier')
+      ?.value || 'TOUTES'
+  };
+}
+
+
+function appliquerFiltresCalendrier() {
+  const donnees = etatApplication.donneesCalendrier || {};
+  const filtres = lireFiltresCalendrier_();
+  const aujourdHui = donnees.periode && donnees.periode.aujourdHui
+    ? donnees.periode.aujourdHui
+    : formaterDateIsoCalendrierClient_(new Date());
+  etatApplication.filtresCalendrier = filtres;
+  const sessions = filtrerSeancesCalendrier_(
+    Array.isArray(donnees.sessions) ? donnees.sessions : [],
+    filtres,
+    aujourdHui
+  );
+  afficherCalendrier_(sessions, donnees);
+}
+
+
+function filtrerSeancesCalendrier_(sessions, filtres, aujourdHui) {
+  const configuration = filtres || {};
+  return (Array.isArray(sessions) ? sessions : []).filter(
+    function (session) {
+      if (
+        configuration.formationId &&
+        session.formationId !== configuration.formationId
+      ) {
+        return false;
+      }
+      if (
+        configuration.formateurId &&
+        !(session.formateurIds || []).includes(configuration.formateurId)
+      ) {
+        return false;
+      }
+      if (
+        configuration.stagiaireId &&
+        !(session.stagiaireIds || []).includes(configuration.stagiaireId)
+      ) {
+        return false;
+      }
+      if (
+        configuration.temporalite === 'PASSEES' &&
+        session.date >= aujourdHui
+      ) {
+        return false;
+      }
+      if (
+        configuration.temporalite === 'FUTURES' &&
+        session.date < aujourdHui
+      ) {
+        return false;
+      }
+      return true;
+    }
+  );
+}
+
+
+function reinitialiserFiltresCalendrier() {
+  etatApplication.filtresCalendrier = {
+    formationId: '',
+    formateurId: '',
+    stagiaireId: '',
+    temporalite: 'TOUTES'
+  };
+  remplirFiltresCalendrier_(etatApplication.donneesCalendrier || {});
+  appliquerFiltresCalendrier();
+}
+
+
+function afficherCalendrier_(sessionsFiltrees, donnees) {
+  const mois = etatApplication.moisCalendrierActif;
+  const periode = calculerPeriodeVisibleCalendrier_(mois);
+  const cleMois = formaterDateIsoCalendrierClient_(mois).slice(0, 7);
+  const aujourdHui = donnees.periode && donnees.periode.aujourdHui
+    ? donnees.periode.aujourdHui
+    : formaterDateIsoCalendrierClient_(new Date());
+  const sessionsParDate = {};
+
+  sessionsFiltrees.forEach(function (session) {
+    sessionsParDate[session.date] = sessionsParDate[session.date] || [];
+    sessionsParDate[session.date].push(session);
+  });
+
+  const sessionsDuMois = sessionsFiltrees.filter(function (session) {
+    return session.date.slice(0, 7) === cleMois;
+  });
+  const compteur = document.getElementById('compteurSeancesCalendrier');
+  if (compteur) {
+    compteur.textContent = sessionsDuMois.length +
+      (sessionsDuMois.length > 1 ? ' séances' : ' séance');
+  }
+
+  afficherTitreMoisCalendrier_();
+  afficherLegendeCalendrier_(sessionsDuMois);
+  afficherGrilleCalendrier_(
+    periode,
+    cleMois,
+    aujourdHui,
+    sessionsParDate,
+    Boolean(donnees.droits && donnees.droits.creerSession)
+  );
+  afficherAgendaCalendrier_(
+    mois,
+    aujourdHui,
+    sessionsParDate,
+    Boolean(donnees.droits && donnees.droits.creerSession)
+  );
+}
+
+
+function afficherGrilleCalendrier_(
+  periode,
+  cleMois,
+  aujourdHui,
+  sessionsParDate,
+  peutCreer
+) {
+  const zone = document.getElementById('grilleCalendrier');
+  if (!zone) {
+    return;
+  }
+  const dateDebut = creerDateLocaleCalendrier_(periode.dateDebut);
+  const jours = [];
+
+  for (let position = 0; position < periode.nombreJours; position++) {
+    const date = ajouterJoursCalendrier_(dateDebut, position);
+    const dateIso = formaterDateIsoCalendrierClient_(date);
+    jours.push(creerJourGrilleCalendrier_(
+      date,
+      dateIso,
+      dateIso.slice(0, 7) === cleMois,
+      dateIso === aujourdHui,
+      sessionsParDate[dateIso] || [],
+      peutCreer
+    ));
+  }
+
+  const semaines = [];
+  for (let position = 0; position < jours.length; position += 7) {
+    semaines.push(
+      '<div class="semaine-calendrier" role="row">' +
+      jours.slice(position, position + 7).join('') +
+      '</div>'
+    );
+  }
+  zone.innerHTML = semaines.join('');
+}
+
+
+function creerJourGrilleCalendrier_(
+  date,
+  dateIso,
+  dansMois,
+  estAujourdhui,
+  sessions,
+  peutCreer
+) {
+  const libelleDate = date.toLocaleDateString('fr-FR', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  });
+  const principales = sessions.slice(0, 3);
+  const supplementaires = sessions.slice(3);
+  const boutonAjout = peutCreer
+    ? `<button type="button" class="bouton-ajout-jour-calendrier" data-date="${dateIso}" onclick="ouvrirNouvelleSessionDepuisCalendrier(this.dataset.date)" aria-label="Créer une séance le ${echapperHtml(libelleDate)}">+</button>`
+    : '';
+  const autres = supplementaires.length
+    ? `<details class="seances-supplementaires-calendrier">
+        <summary>+ ${supplementaires.length} autre${supplementaires.length > 1 ? 's' : ''}</summary>
+        <div>${supplementaires.map(creerBoutonSeanceCalendrier_).join('')}</div>
+      </details>`
+    : '';
+
+  return `
+    <article
+      class="jour-calendrier ${dansMois ? '' : 'jour-hors-mois-calendrier'} ${estAujourdhui ? 'jour-aujourdhui-calendrier' : ''}"
+      role="gridcell"
+      aria-label="${echapperHtml(libelleDate)}, ${sessions.length} séance(s)"
+      ${estAujourdhui ? 'aria-current="date"' : ''}
+    >
+      <header>
+        <span class="numero-jour-calendrier">${date.getDate()}</span>
+        ${sessions.length > 3 ? `<span class="total-jour-calendrier">${sessions.length} séances</span>` : ''}
+        ${boutonAjout}
+      </header>
+      <div class="seances-jour-calendrier">
+        ${principales.map(creerBoutonSeanceCalendrier_).join('')}
+        ${autres}
+      </div>
+    </article>
+  `;
+}
+
+
+function creerBoutonSeanceCalendrier_(session) {
+  const couleur = obtenirCouleurFormationCalendrier_(session.formationId);
+  const formateurs = Array.isArray(session.formateurs)
+    ? session.formateurs
+    : [];
+  const libelleFormateur = !formateurs.length
+    ? 'Sans formateur'
+    : formateurs.length === 1
+      ? formateurs[0].nomComplet
+      : formateurs.length + ' formateurs';
+  const horaires = [session.heureDebut, session.heureFin]
+    .filter(Boolean)
+    .join(' – ');
+  const duree = session.dureeHeures === null ||
+    session.dureeHeures === undefined
+    ? 'Durée non renseignée'
+    : formaterHeuresFormation(session.dureeHeures);
+  const detail = [
+    horaires || 'Horaires non renseignés',
+    duree,
+    session.formation || 'Formation non identifiée',
+    formateurs.length
+      ? formateurs.map(function (formateur) {
+        return formateur.nomComplet;
+      }).join(', ')
+      : 'Aucun formateur',
+    Number(session.nombreStagiaires || 0) + ' stagiaire(s)',
+    session.remarques ? 'Remarques : ' + session.remarques : ''
+  ].filter(Boolean).join(' · ');
+
+  return `
+    <button
+      type="button"
+      class="seance-calendrier"
+      data-session-id="${echapperHtml(session.idSession)}"
+      onclick="ouvrirSessionDepuisCalendrier(this.dataset.sessionId)"
+      aria-label="Ouvrir la séance : ${echapperHtml(detail)}"
+      title="${echapperHtml(detail)}"
+      style="--couleur-formation: ${couleur.fond}; --bordure-formation: ${couleur.bordure}; --texte-formation: ${couleur.texte};"
+    >
+      <span class="horaire-seance-calendrier">${echapperHtml(session.heureDebut || '—')}</span>
+      <strong>${echapperHtml(session.formation || 'Formation non identifiée')}</strong>
+      <small>${Number(session.nombreStagiaires) || 0} stag. · ${echapperHtml(libelleFormateur)}</small>
+    </button>
+  `;
+}
+
+
+function afficherAgendaCalendrier_(
+  mois,
+  aujourdHui,
+  sessionsParDate,
+  peutCreer
+) {
+  const zone = document.getElementById('agendaCalendrier');
+  if (!zone) {
+    return;
+  }
+  const dernierJour = new Date(
+    mois.getFullYear(),
+    mois.getMonth() + 1,
+    0,
+    12
+  ).getDate();
+  const jours = [];
+
+  for (let numero = 1; numero <= dernierJour; numero++) {
+    const date = new Date(
+      mois.getFullYear(),
+      mois.getMonth(),
+      numero,
+      12
+    );
+    const dateIso = formaterDateIsoCalendrierClient_(date);
+    const sessions = sessionsParDate[dateIso] || [];
+    const libelle = date.toLocaleDateString('fr-FR', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long'
+    });
+    jours.push(`
+      <section class="jour-agenda-calendrier ${dateIso === aujourdHui ? 'jour-aujourdhui-calendrier' : ''}" ${dateIso === aujourdHui ? 'aria-current="date"' : ''}>
+        <header>
+          <h3>${echapperHtml(libelle.charAt(0).toUpperCase() + libelle.slice(1))}</h3>
+          ${peutCreer
+            ? `<button type="button" class="bouton-ajout-agenda-calendrier" data-date="${dateIso}" onclick="ouvrirNouvelleSessionDepuisCalendrier(this.dataset.date)" aria-label="Créer une séance le ${echapperHtml(libelle)}">+ Nouvelle séance</button>`
+            : ''}
+        </header>
+        <div class="liste-seances-agenda-calendrier">
+          ${sessions.length
+            ? sessions.map(creerBoutonSeanceCalendrier_).join('')
+            : '<p>Aucune séance.</p>'}
+        </div>
+      </section>
+    `);
+  }
+  zone.innerHTML = jours.join('');
+}
+
+
+function afficherLegendeCalendrier_(sessions) {
+  const zone = document.getElementById('legendeFormationsCalendrier');
+  if (!zone) {
+    return;
+  }
+  const formations = {};
+  sessions.forEach(function (session) {
+    formations[session.formationId] = session.formation;
+  });
+  const ids = Object.keys(formations).sort(function (a, b) {
+    return formations[a].localeCompare(formations[b], 'fr', {
+      sensitivity: 'base'
+    });
+  });
+  zone.innerHTML = ids.length
+    ? ids.map(function (idFormation) {
+      const couleur = obtenirCouleurFormationCalendrier_(idFormation);
+      return `<span style="--couleur-formation: ${couleur.fond}; --bordure-formation: ${couleur.bordure}; --texte-formation: ${couleur.texte};"><i></i>${echapperHtml(formations[idFormation])}</span>`;
+    }).join('')
+    : '<span class="legende-vide-calendrier">Aucune formation affichée ce mois-ci.</span>';
+}
+
+
+function obtenirCouleurFormationCalendrier_(idFormation) {
+  const palette = [
+    { fond: '#e3f0fb', bordure: '#1565c0', texte: '#0d3f78' },
+    { fond: '#e3f5e8', bordure: '#2e7d32', texte: '#205b25' },
+    { fond: '#fff0dc', bordure: '#b85c00', texte: '#713900' },
+    { fond: '#f0e8fa', bordure: '#6a3fa0', texte: '#47236f' },
+    { fond: '#fde5e7', bordure: '#ad2931', texte: '#751c22' },
+    { fond: '#e2f4f4', bordure: '#167878', texte: '#0e5050' },
+    { fond: '#f8edcf', bordure: '#8b6a12', texte: '#5f480b' },
+    { fond: '#e8ebee', bordure: '#536471', texte: '#36434d' }
+  ];
+  const texte = String(idFormation || 'SANS_FORMATION');
+  let empreinte = 0;
+  for (let position = 0; position < texte.length; position++) {
+    empreinte = (empreinte * 31 + texte.charCodeAt(position)) >>> 0;
+  }
+  return palette[empreinte % palette.length];
+}
+
+
+function ouvrirSessionDepuisCalendrier(idSession) {
+  const identifiant = String(idSession || '').trim();
+  if (!identifiant) {
+    afficherToast('Séance introuvable.', true);
+    return;
+  }
+  etatApplication.sessionAConsulterDepuisCalendrier = identifiant;
+  chargerPage('Sessions');
+}
+
+
+function ouvrirNouvelleSessionDepuisCalendrier(dateIso) {
+  const donnees = etatApplication.donneesCalendrier || {};
+  const peutCreer = Boolean(
+    donnees.droits && donnees.droits.creerSession &&
+    peutGererSessionsApplication()
+  );
+  if (!peutCreer) {
+    afficherToast('Création de séance non autorisée.', true);
+    return;
+  }
+  if (!creerDateLocaleCalendrier_(dateIso)) {
+    afficherToast('Date de séance invalide.', true);
+    return;
+  }
+  etatApplication.dateNouvelleSessionDepuisCalendrier = dateIso;
+  chargerPage('Sessions');
 }
 
 /* =====================================================

@@ -1,0 +1,125 @@
+<div class="page page-calendrier">
+
+  <header class="entete-page entete-calendrier">
+    <div>
+      <h1>Calendrier</h1>
+      <p>Vue mensuelle des séances de préparation.</p>
+    </div>
+
+    <div class="navigation-mois-calendrier" role="group" aria-label="Navigation entre les mois">
+      <button
+        type="button"
+        class="bouton-secondaire"
+        onclick="changerMoisCalendrier(-1)"
+        aria-label="Afficher le mois précédent"
+      >‹</button>
+      <button
+        type="button"
+        class="bouton-secondaire bouton-aujourdhui-calendrier"
+        onclick="revenirAujourdhuiCalendrier()"
+      >Aujourd’hui</button>
+      <button
+        type="button"
+        class="bouton-secondaire"
+        onclick="changerMoisCalendrier(1)"
+        aria-label="Afficher le mois suivant"
+      >›</button>
+    </div>
+  </header>
+
+  <section class="bloc filtres-calendrier" aria-labelledby="titreFiltresCalendrier">
+    <div class="fiche-bloc-entete">
+      <div>
+        <h2 id="titreFiltresCalendrier">Filtres</h2>
+        <p>Les filtres se combinent sans recharger le mois.</p>
+      </div>
+      <button
+        type="button"
+        class="bouton-secondaire"
+        onclick="reinitialiserFiltresCalendrier()"
+      >Réinitialiser</button>
+    </div>
+
+    <div class="grille-filtres-calendrier">
+      <div class="groupe-champ">
+        <label for="filtreFormationCalendrier">Formation</label>
+        <select id="filtreFormationCalendrier" class="champ" onchange="appliquerFiltresCalendrier()">
+          <option value="">Toutes les formations</option>
+        </select>
+      </div>
+
+      <div class="groupe-champ">
+        <label for="filtreFormateurCalendrier">Formateur</label>
+        <select id="filtreFormateurCalendrier" class="champ" onchange="appliquerFiltresCalendrier()">
+          <option value="">Tous les formateurs</option>
+        </select>
+      </div>
+
+      <div class="groupe-champ">
+        <label for="filtreStagiaireCalendrier">Stagiaire</label>
+        <select id="filtreStagiaireCalendrier" class="champ" onchange="appliquerFiltresCalendrier()">
+          <option value="">Tous les stagiaires</option>
+        </select>
+      </div>
+
+      <div class="groupe-champ">
+        <label for="filtrePeriodeCalendrier">Temporalité</label>
+        <select id="filtrePeriodeCalendrier" class="champ" onchange="appliquerFiltresCalendrier()">
+          <option value="TOUTES">Toutes les séances</option>
+          <option value="PASSEES">Passées — avant aujourd’hui</option>
+          <option value="FUTURES">À venir — aujourd’hui inclus</option>
+        </select>
+      </div>
+    </div>
+  </section>
+
+  <section class="bloc bloc-calendrier" aria-labelledby="titreMoisCalendrier">
+    <div class="barre-titre-calendrier">
+      <div>
+        <p class="fiche-sur-titre">Vue mensuelle</p>
+        <h2 id="titreMoisCalendrier" aria-live="polite">Chargement…</h2>
+        <p id="metadonneesCalendrier" class="metadonnees-calendrier"></p>
+      </div>
+      <strong id="compteurSeancesCalendrier" class="compteur-calendrier" aria-live="polite">—</strong>
+    </div>
+
+    <div
+      id="chargementCalendrier"
+      class="chargement-calendrier masque"
+      role="status"
+      aria-live="polite"
+    >
+      <span class="spinner-statistiques"></span>
+      Chargement du calendrier…
+    </div>
+
+    <div id="erreurCalendrier" class="erreur-calendrier masque" role="alert"></div>
+
+    <div id="legendeFormationsCalendrier" class="legende-formations-calendrier" aria-label="Légende des formations"></div>
+
+    <div class="calendrier-grille-conteneur">
+      <div class="entetes-jours-calendrier" aria-hidden="true">
+        <span>Lundi</span>
+        <span>Mardi</span>
+        <span>Mercredi</span>
+        <span>Jeudi</span>
+        <span>Vendredi</span>
+        <span>Samedi</span>
+        <span>Dimanche</span>
+      </div>
+      <div
+        id="grilleCalendrier"
+        class="grille-calendrier"
+        role="grid"
+        aria-label="Séances du mois"
+      ></div>
+    </div>
+
+    <div
+      id="agendaCalendrier"
+      class="agenda-calendrier"
+      aria-label="Agenda mensuel"
+    ></div>
+  </section>
+
+</div>

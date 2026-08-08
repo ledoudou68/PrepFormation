@@ -1083,6 +1083,9 @@ function enregistrerSessionInterne_(donnees, sessionUtilisateur) {
       );
 
       if (sessionRejouee) {
+        if (typeof invaliderCacheCalendrier_ === 'function') {
+          invaliderCacheCalendrier_();
+        }
         return {
           succes: true,
           idSession: sessionRejouee,
@@ -1312,6 +1315,10 @@ function enregistrerSessionInterne_(donnees, sessionUtilisateur) {
       },
       sessionUtilisateur.email || 'FORMATEUR_PUBLIC'
     );
+
+    if (typeof invaliderCacheCalendrier_ === 'function') {
+      invaliderCacheCalendrier_();
+    }
 
     return {
       succes: true,

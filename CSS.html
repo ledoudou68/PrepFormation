@@ -6623,4 +6623,446 @@ button:disabled {
   }
 }
 
+/* =====================================================
+   CALENDRIER DES SÉANCES
+===================================================== */
+
+.page-calendrier {
+  max-width: 1680px;
+}
+
+.entete-calendrier {
+  align-items: center;
+}
+
+.navigation-mois-calendrier {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.navigation-mois-calendrier button {
+  min-width: 44px;
+  min-height: 44px;
+  font-size: 20px;
+}
+
+.navigation-mois-calendrier .bouton-aujourdhui-calendrier {
+  min-width: 112px;
+  font-size: 13px;
+}
+
+.grille-filtres-calendrier {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(170px, 1fr));
+  gap: 14px;
+}
+
+.bloc-calendrier {
+  padding: 0;
+  overflow: hidden;
+}
+
+.barre-titre-calendrier {
+  padding: 19px 21px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border-bottom: 1px solid var(--bordure);
+}
+
+.barre-titre-calendrier h2 {
+  margin: 3px 0 0;
+  color: var(--bleu-fonce);
+  font-size: 26px;
+}
+
+.metadonnees-calendrier {
+  margin: 5px 0 0;
+  color: var(--texte-secondaire);
+  font-size: 12px;
+}
+
+.compteur-calendrier {
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: #eaf2f9;
+  color: var(--bleu-fonce);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.chargement-calendrier {
+  min-height: 74px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--bordure);
+  background: #f8fafc;
+  color: var(--texte-secondaire);
+  font-weight: 750;
+}
+
+.erreur-calendrier {
+  margin: 16px 20px;
+  padding: 15px 17px;
+  border: 1px solid #efb4b4;
+  border-radius: 9px;
+  background: #fff1f1;
+  color: #8f2424;
+}
+
+.erreur-calendrier p {
+  margin: 5px 0 12px;
+}
+
+.legende-formations-calendrier {
+  min-height: 50px;
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-bottom: 1px solid var(--bordure);
+  background: #fbfcfd;
+}
+
+.legende-formations-calendrier > span {
+  padding: 5px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--bordure-formation, var(--bordure));
+  border-radius: 999px;
+  background: var(--couleur-formation, var(--blanc));
+  color: var(--texte-formation, var(--texte-secondaire));
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.legende-formations-calendrier i {
+  width: 8px;
+  height: 8px;
+  display: inline-block;
+  border-radius: 50%;
+  background: var(--bordure-formation, #7f8a93);
+}
+
+.legende-formations-calendrier .legende-vide-calendrier {
+  border: 0;
+  background: transparent;
+  color: var(--texte-secondaire);
+}
+
+.calendrier-grille-conteneur {
+  min-width: 0;
+}
+
+.entetes-jours-calendrier,
+.semaine-calendrier {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.grille-calendrier {
+  display: block;
+}
+
+.entetes-jours-calendrier {
+  border-bottom: 1px solid var(--bordure);
+  background: #f3f6f8;
+}
+
+.entetes-jours-calendrier span {
+  padding: 10px 8px;
+  color: var(--texte-secondaire);
+  font-size: 11px;
+  font-weight: 850;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.jour-calendrier {
+  min-width: 0;
+  min-height: 174px;
+  padding: 7px;
+  border-right: 1px solid var(--bordure);
+  border-bottom: 1px solid var(--bordure);
+  background: var(--blanc);
+}
+
+.jour-calendrier:nth-child(7n) {
+  border-right: 0;
+}
+
+.jour-hors-mois-calendrier {
+  background: #f6f8f9;
+  color: #8a949c;
+}
+
+.jour-hors-mois-calendrier .seance-calendrier {
+  opacity: 0.7;
+}
+
+.jour-aujourdhui-calendrier {
+  box-shadow: inset 0 0 0 3px #1565c0;
+  background: #f5faff;
+}
+
+.jour-calendrier > header {
+  min-height: 31px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.numero-jour-calendrier {
+  width: 27px;
+  height: 27px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.jour-aujourdhui-calendrier .numero-jour-calendrier {
+  background: var(--bleu);
+  color: var(--blanc);
+}
+
+.total-jour-calendrier {
+  min-width: 0;
+  color: var(--texte-secondaire);
+  font-size: 9px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.bouton-ajout-jour-calendrier {
+  width: 27px;
+  height: 27px;
+  margin-left: auto;
+  flex: 0 0 27px;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--bleu);
+  cursor: pointer;
+  font: inherit;
+  font-size: 19px;
+  line-height: 1;
+}
+
+.bouton-ajout-jour-calendrier:hover,
+.bouton-ajout-jour-calendrier:focus-visible {
+  border-color: var(--bleu);
+  background: #e5f0fa;
+  outline: none;
+}
+
+.seances-jour-calendrier,
+.liste-seances-agenda-calendrier,
+.seances-supplementaires-calendrier > div {
+  display: grid;
+  gap: 5px;
+}
+
+.seance-calendrier {
+  width: 100%;
+  min-width: 0;
+  padding: 7px 8px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 6px;
+  border: 1px solid var(--bordure-formation);
+  border-left: 4px solid var(--bordure-formation);
+  border-radius: 7px;
+  background: var(--couleur-formation);
+  color: var(--texte-formation);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.seance-calendrier:hover,
+.seance-calendrier:focus-visible {
+  outline: 3px solid rgba(21, 101, 192, 0.25);
+  outline-offset: 1px;
+  filter: brightness(0.97);
+}
+
+.horaire-seance-calendrier {
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.seance-calendrier strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seance-calendrier small {
+  min-width: 0;
+  grid-column: 1 / -1;
+  overflow: hidden;
+  font-size: 9px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seances-supplementaires-calendrier summary {
+  padding: 4px 6px;
+  color: var(--bleu-fonce);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.seances-supplementaires-calendrier > div {
+  margin-top: 4px;
+}
+
+.agenda-calendrier {
+  display: none;
+}
+
+@media (max-width: 1100px) {
+  .grille-filtres-calendrier {
+    grid-template-columns: repeat(2, minmax(170px, 1fr));
+  }
+
+  .jour-calendrier {
+    min-height: 145px;
+    padding: 5px;
+  }
+
+  .seance-calendrier {
+    padding: 6px;
+    grid-template-columns: 1fr;
+  }
+
+  .seance-calendrier strong,
+  .seance-calendrier small {
+    grid-column: 1;
+  }
+}
+
+@media (max-width: 720px),
+  (max-height: 520px) and (max-width: 950px) {
+  .entete-calendrier {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .navigation-mois-calendrier {
+    width: 100%;
+  }
+
+  .navigation-mois-calendrier button {
+    flex: 1 1 auto;
+  }
+
+  .filtres-calendrier .fiche-bloc-entete {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .grille-filtres-calendrier {
+    grid-template-columns: 1fr;
+  }
+
+  .grille-filtres-calendrier .champ,
+  .filtres-calendrier .bouton-secondaire {
+    min-height: 46px;
+  }
+
+  .barre-titre-calendrier {
+    padding: 16px;
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .barre-titre-calendrier h2 {
+    font-size: 23px;
+  }
+
+  .legende-formations-calendrier {
+    padding: 9px 14px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+
+  .legende-formations-calendrier > span {
+    flex: 0 0 auto;
+  }
+
+  .calendrier-grille-conteneur {
+    display: none;
+  }
+
+  .agenda-calendrier {
+    display: block;
+  }
+
+  .jour-agenda-calendrier {
+    padding: 13px 14px;
+    border-bottom: 1px solid var(--bordure);
+  }
+
+  .jour-agenda-calendrier > header {
+    margin-bottom: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .jour-agenda-calendrier h3 {
+    margin: 0;
+    font-size: 14px;
+  }
+
+  .bouton-ajout-agenda-calendrier {
+    min-height: 40px;
+    padding: 7px 10px;
+    border: 1px solid var(--bleu);
+    border-radius: 8px;
+    background: #eef5fc;
+    color: var(--bleu-fonce);
+    cursor: pointer;
+    font: inherit;
+    font-size: 11px;
+    font-weight: 800;
+  }
+
+  .liste-seances-agenda-calendrier .seance-calendrier {
+    min-height: 54px;
+    padding: 9px 10px;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .liste-seances-agenda-calendrier .seance-calendrier strong {
+    grid-column: 2;
+  }
+
+  .liste-seances-agenda-calendrier .seance-calendrier small {
+    grid-column: 1 / -1;
+  }
+
+  .liste-seances-agenda-calendrier > p {
+    margin: 0;
+    color: var(--texte-secondaire);
+    font-size: 12px;
+  }
+}
+
 </style>

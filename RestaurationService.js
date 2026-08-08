@@ -1901,6 +1901,9 @@ function finaliserRollbackRestauration_(etat, proprietes) {
   if (typeof invaliderCacheStatistiques_ === 'function') {
     invaliderCacheStatistiques_();
   }
+  if (typeof invaliderCacheCalendrier_ === 'function') {
+    invaliderCacheCalendrier_();
+  }
 
   return {
     complet: true,
@@ -2182,6 +2185,9 @@ function finaliserOperationRestauration_(
 
   if (typeof invaliderCacheStatistiques_ === 'function') {
     invaliderCacheStatistiques_();
+  }
+  if (typeof invaliderCacheCalendrier_ === 'function') {
+    invaliderCacheCalendrier_();
   }
 
   return {
