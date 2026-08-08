@@ -8,6 +8,8 @@ const TYPE_SAUVEGARDE_SECURITE_RESTAURATION_ =
   'AUTO_AVANT_RESTAURATION';
 const TYPE_SAUVEGARDE_AUTOMATIQUE_PLANIFIEE_ =
   'AUTO_PLANIFIEE';
+const TYPE_SAUVEGARDE_AVANT_OPERATION_ADMIN_ =
+  'AUTO_AVANT_OPERATION_ADMIN';
 const OCTETS_AVERTISSEMENT_SAUVEGARDE_ = 5 * 1024 * 1024;
 const OCTETS_MAX_PHASE_1_SAUVEGARDE_ = 45 * 1024 * 1024;
 const DUREE_PRUDENTE_PHASE_1_MS_ = 4 * 60 * 1000;
@@ -89,7 +91,8 @@ function creerSauvegardeCompleteInterne_(
   if (![
     TYPE_SAUVEGARDE_MANUELLE_,
     TYPE_SAUVEGARDE_SECURITE_RESTAURATION_,
-    TYPE_SAUVEGARDE_AUTOMATIQUE_PLANIFIEE_
+    TYPE_SAUVEGARDE_AUTOMATIQUE_PLANIFIEE_,
+    TYPE_SAUVEGARDE_AVANT_OPERATION_ADMIN_
   ].includes(type)) {
     throw new Error('Type de sauvegarde interne invalide.');
   }
@@ -196,7 +199,11 @@ function creerSauvegardeCompleteInterne_(
           : (
             type === TYPE_SAUVEGARDE_AUTOMATIQUE_PLANIFIEE_
               ? 'SAUVEGARDE_AUTOMATIQUE_CREATION'
-              : 'SAUVEGARDE_SECURITE_RESTAURATION_CREATION'
+              : (
+                type === TYPE_SAUVEGARDE_AVANT_OPERATION_ADMIN_
+                  ? 'SAUVEGARDE_AVANT_OPERATION_ADMIN_CREATION'
+                  : 'SAUVEGARDE_SECURITE_RESTAURATION_CREATION'
+              )
           ),
         'SAUVEGARDE',
         sauvegarde.backupId,

@@ -81,6 +81,9 @@ function createRunner(pending) {
     },
     getEtatRestaurationAdministration() {
       pending.push({ success: this.success, failure: this.failure });
+    },
+    getFavoris() {
+      this.success([]);
     }
   };
 }

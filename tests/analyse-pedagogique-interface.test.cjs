@@ -603,7 +603,12 @@ test('l’onglet est responsive sans hauteur fixe ni débordement imposé', () =
   assert(!section.includes(
     '.contenu-onglet-fiche-consultation {\n  height:'
   ));
-  assert(!/\n\s+max-height\s*:/.test(section));
+  const reglesContenuOnglet = Array.from(section.matchAll(
+    /\.contenu-onglet-fiche-consultation\s*\{([^}]*)\}/g
+  ));
+  assert(reglesContenuOnglet.every(correspondance => (
+    !/(^|;)\s*(height|max-height)\s*:/.test(correspondance[1])
+  )));
   assert(section.includes('.tableau-detail-analyse-pedagogique'));
   assert(section.includes('.navigation-rapide-analyse-pedagogique'));
   assert(section.includes('overflow-x: auto'));

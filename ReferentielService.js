@@ -20,7 +20,8 @@ const CONFIG_ITEMS_REFERENTIEL = {
     'ITEM',
     'DESCRIPTION',
     'ORDRE',
-    'ACTIF'
+    'ACTIF',
+    'NATURE'
   ]
 };
 
@@ -113,6 +114,7 @@ function getItemsReferentiel(formation) {
         ordre: item.ordre,
         intitule: item.intitule,
         description: item.description,
+        nature: item.nature,
         actif: item.actif,
         utilise: idsUtilises.has(item.idItem)
       };
@@ -382,6 +384,10 @@ function enregistrerItemReferentiel(
     )
       ? 'Oui'
       : 'Non';
+    ligne[index.NATURE] = normaliserNatureReferentiel_(
+      donnees.nature,
+      true
+    );
 
     if (itemExistant) {
       feuille
@@ -424,7 +430,8 @@ function enregistrerItemReferentiel(
         idCategorie: idCategorie,
         intitule: ligne[index.ITEM],
         ordre: ordre,
-        actif: ligne[index.ACTIF]
+        actif: ligne[index.ACTIF],
+        nature: ligne[index.NATURE]
       },
       sessionUtilisateur.identifiantHistorique
     );
@@ -957,6 +964,12 @@ function lireItemsReferentiel_(feuille) {
         description: String(
           ligne[index.DESCRIPTION] || ''
         ).trim(),
+        nature: Number.isInteger(index.NATURE)
+          ? normaliserNatureReferentiel_(
+            ligne[index.NATURE],
+            false
+          )
+          : '',
         ordre: lireOrdreReferentiel_(
           ligne[index.ORDRE]
         ),
@@ -1292,6 +1305,38 @@ function verifierItemReferentiel_(donnees) {
   if (!String(donnees.intitule || '').trim()) {
     throw new Error('L’intitulé est obligatoire.');
   }
+
+  normaliserNatureReferentiel_(donnees.nature, true);
+}
+
+
+function normaliserNatureReferentiel_(valeur, exigerValide) {
+  const texte = String(valeur || '').trim();
+
+  if (!texte) {
+    return '';
+  }
+
+  const normalisee = texte
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase();
+
+  if (normalisee === 'THEORIE') {
+    return 'Théorie';
+  }
+
+  if (normalisee === 'TECHNIQUE') {
+    return 'Technique';
+  }
+
+  if (exigerValide) {
+    throw new Error(
+      'La Nature doit être vide, « Théorie » ou « Technique ».'
+    );
+  }
+
+  return texte;
 }
 
 

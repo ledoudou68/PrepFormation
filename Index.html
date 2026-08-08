@@ -6,10 +6,7 @@
 
   <meta charset="UTF-8">
 
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1, maximum-scale=1"
-  >
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 
   <?!= include('CSS'); ?>
 </head>
@@ -83,15 +80,21 @@
 
     <button
       type="button"
+      id="boutonMenuMobile"
       class="bouton-menu-mobile"
       onclick="basculerMenu()"
       aria-label="Ouvrir le menu"
+      aria-controls="menuLateral"
+      aria-expanded="false"
     >
       ☰
     </button>
 
     <div>
-      <div class="titre-application">PrepFormation</div>
+      <div class="titre-application">
+        <span class="titre-application-long">PrepFormation</span>
+        <span class="titre-application-court" aria-hidden="true">Prep</span>
+      </div>
       <div class="sous-titre">Suivi des préparations</div>
     </div>
 
@@ -156,20 +159,71 @@
       </section>
     </div>
 
+    <div id="conteneurFavoris" class="conteneur-favoris">
+      <button
+        type="button"
+        id="boutonOuvrirFavoris"
+        class="bouton-ouvrir-favoris"
+        onclick="basculerPanneauFavoris()"
+        aria-controls="panneauFavoris"
+        aria-expanded="false"
+      >
+        <span aria-hidden="true">★</span>
+        <span class="libelle-bouton-favoris">Favoris</span>
+        <span
+          id="compteurFavorisTopbar"
+          class="compteur-favoris-topbar masque"
+        >0</span>
+      </button>
+
+      <aside
+        id="panneauFavoris"
+        class="panneau-favoris masque"
+        aria-label="Mes favoris"
+      >
+        <header class="entete-panneau-favoris">
+          <div>
+            <strong>Mes favoris</strong>
+            <small>Accès rapide depuis ce navigateur</small>
+          </div>
+          <button
+            type="button"
+            onclick="fermerPanneauFavoris()"
+            aria-label="Fermer les favoris"
+          >×</button>
+        </header>
+        <div
+          id="contenuFavoris"
+          class="contenu-favoris"
+          aria-live="polite"
+        >
+          <div class="etat-favoris">Chargement des favoris…</div>
+        </div>
+      </aside>
+    </div>
+
     <div class="actions-acces-administration">
       <button
         type="button"
         id="boutonAccesAdministrateur"
         class="bouton-acces-administrateur"
         onclick="ouvrirModalAccesAdministrateur()"
-      >Accès administrateur</button>
+        aria-label="Accès administrateur"
+      >
+        <span class="icone-acces-administration" aria-hidden="true">🔒</span>
+        <span class="libelle-acces-administration">Accès administrateur</span>
+      </button>
 
       <button
         type="button"
         id="boutonVerrouillerAdministration"
         class="bouton-verrouiller-administration masque"
         onclick="verrouillerAdministrationInterface()"
-      >Verrouiller l’administration</button>
+        aria-label="Verrouiller l’administration"
+      >
+        <span class="icone-acces-administration" aria-hidden="true">🔓</span>
+        <span class="libelle-acces-administration">Verrouiller l’administration</span>
+      </button>
     </div>
 
     <div
@@ -183,6 +237,12 @@
   <div class="application">
 
     <aside id="menuLateral" class="menu-lateral">
+
+      <div
+        id="identiteUtilisateurMenuMobile"
+        class="identite-utilisateur-menu-mobile"
+        aria-live="polite"
+      >Mode formateur</div>
 
       <button
         type="button"
@@ -278,6 +338,15 @@
       </button>
 
     </aside>
+
+    <button
+      type="button"
+      id="voileMenuMobile"
+      class="voile-menu-mobile masque"
+      onclick="fermerMenuMobile()"
+      aria-label="Fermer le menu"
+      tabindex="-1"
+    ></button>
 
     <main id="contenu" class="contenu-principal">
       <div class="chargement-page">

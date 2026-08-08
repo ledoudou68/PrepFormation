@@ -339,6 +339,10 @@ function construireResumeGlobalInventaireSauvegardes_(sauvegardes) {
       securite: liste.filter(function (sauvegarde) {
         return sauvegarde.type ===
           TYPE_SAUVEGARDE_SECURITE_RESTAURATION_;
+      }).length,
+      operationsAdministration: liste.filter(function (sauvegarde) {
+        return sauvegarde.type ===
+          TYPE_SAUVEGARDE_AVANT_OPERATION_ADMIN_;
       }).length
     }
   };

@@ -1,8 +1,16 @@
 <div class="page">
 
-  <div class="entete-page">
-    <h1>Référentiel</h1>
-    <p>Gestion des catégories et items pédagogiques par formation.</p>
+  <div class="entete-page entete-page-actions">
+    <div>
+      <h1>Référentiel</h1>
+      <p>Gestion des catégories et items pédagogiques par formation.</p>
+    </div>
+    <button
+      type="button"
+      id="boutonImporterReferentiel"
+      class="bouton-principal"
+      onclick="ouvrirImportReferentiel()"
+    >Importer un référentiel</button>
   </div>
 
   <div class="bloc bloc-selection-formation-referentiel">
@@ -85,6 +93,7 @@
             <th>Catégorie</th>
             <th>Intitulé</th>
             <th>Description</th>
+            <th>Nature</th>
             <th>Statut</th>
             <th
               class="colonne-actions-referentiel colonne-actions-item-referentiel"
@@ -96,7 +105,7 @@
         </thead>
         <tbody id="corpsTableauReferentiel">
           <tr>
-            <td colspan="6" class="etat-vide">
+            <td colspan="7" class="etat-vide">
               Sélectionne une formation.
             </td>
           </tr>
@@ -263,6 +272,15 @@
             >
           </div>
 
+          <div class="groupe-champ">
+            <label for="itemReferentielNature">Nature</label>
+            <select id="itemReferentielNature" class="champ">
+              <option value="">Non renseignée</option>
+              <option value="Théorie">Théorie</option>
+              <option value="Technique">Technique</option>
+            </select>
+          </div>
+
           <div class="groupe-champ groupe-champ-large-grille">
             <label for="itemReferentielDescription">
               Description
@@ -305,5 +323,117 @@
         >Enregistrer</button>
       </div>
     </form>
+  </div>
+</div>
+
+<div
+  id="modalImportReferentiel"
+  class="modal-overlay masque"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="titreModalImportReferentiel"
+>
+  <div class="modal-contenu modal-import-referentiel">
+    <div class="modal-entete">
+      <div>
+        <h2 id="titreModalImportReferentiel">
+          Importer un référentiel
+        </h2>
+        <p>Fusion sécurisée depuis un fichier Excel .xlsx.</p>
+      </div>
+      <button
+        type="button"
+        class="bouton-fermer-modal"
+        onclick="fermerImportReferentiel()"
+        aria-label="Fermer"
+      >×</button>
+    </div>
+
+    <div class="etapes-import-referentiel" aria-label="Étapes de l’import">
+      <span data-etape-import="1">1. Fichier</span>
+      <span data-etape-import="2">2. Analyse</span>
+      <span data-etape-import="3">3. Correspondance</span>
+      <span data-etape-import="4">4. Prévisualisation</span>
+      <span data-etape-import="5">5. Confirmation</span>
+      <span data-etape-import="6">6. Résultat</span>
+    </div>
+
+    <div class="modal-corps corps-import-referentiel">
+      <section id="etapeFichierImportReferentiel" data-panneau-import="1">
+        <h3>Sélectionner le fichier Excel</h3>
+        <label
+          id="zoneDepotImportReferentiel"
+          class="zone-depot-import-referentiel"
+          for="fichierImportReferentiel"
+        >
+          <strong>Déposer un fichier .xlsx ici</strong>
+          <span>ou toucher pour le sélectionner — 5 Mo maximum</span>
+          <input
+            type="file"
+            id="fichierImportReferentiel"
+            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            onchange="selectionnerFichierImportReferentiel(this.files[0])"
+          >
+        </label>
+        <div id="resumeFichierImportReferentiel" class="resume-fichier-import-referentiel"></div>
+      </section>
+
+      <section id="etapeAnalyseImportReferentiel" data-panneau-import="2" class="masque">
+        <h3>Analyse du fichier</h3>
+        <div id="contenuAnalyseImportReferentiel"></div>
+      </section>
+
+      <section id="etapeCorrespondanceImportReferentiel" data-panneau-import="3" class="masque">
+        <h3>Correspondance des formations</h3>
+        <p class="texte-secondaire-import-referentiel">
+          Aucune correspondance n’est devinée. Associe chaque valeur source ou choisis de l’ignorer.
+        </p>
+        <div id="listeCorrespondancesImportReferentiel"></div>
+      </section>
+
+      <section id="etapePrevisualisationImportReferentiel" data-panneau-import="4" class="masque">
+        <h3>Prévisualisation de la fusion</h3>
+        <div id="contenuPrevisualisationImportReferentiel"></div>
+      </section>
+
+      <section id="etapeConfirmationImportReferentiel" data-panneau-import="5" class="masque">
+        <h3>Confirmer l’import</h3>
+        <div id="resumeConfirmationImportReferentiel"></div>
+        <div id="conflitsNatureImportReferentiel"></div>
+        <div class="groupe-champ confirmation-import-referentiel">
+          <label for="confirmationTexteImportReferentiel">
+            Saisir IMPORTER
+          </label>
+          <input
+            type="text"
+            id="confirmationTexteImportReferentiel"
+            class="champ"
+            autocomplete="off"
+            oninput="mettreAJourBoutonImportReferentiel()"
+          >
+        </div>
+      </section>
+
+      <section id="etapeResultatImportReferentiel" data-panneau-import="6" class="masque">
+        <h3>Import terminé</h3>
+        <div id="contenuResultatImportReferentiel"></div>
+      </section>
+    </div>
+
+    <div class="modal-pied pied-import-referentiel">
+      <button
+        type="button"
+        id="boutonRetourImportReferentiel"
+        class="bouton-secondaire"
+        onclick="reculerImportReferentiel()"
+      >Retour</button>
+      <button
+        type="button"
+        id="boutonActionImportReferentiel"
+        class="bouton-principal"
+        onclick="executerEtapeImportReferentiel()"
+        disabled
+      >Analyser le fichier</button>
+    </div>
   </div>
 </div>

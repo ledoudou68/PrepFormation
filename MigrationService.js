@@ -88,7 +88,7 @@ const SCHEMA_BASE_ = [
     identifiant: 'ID_ITEM',
     colonnes: [
       'ID_ITEM', 'FORMATION', 'ID_CATEGORIE', 'ITEM',
-      'DESCRIPTION', 'ORDRE', 'ACTIF'
+      'DESCRIPTION', 'ORDRE', 'ACTIF', 'NATURE'
     ]
   },
   {
@@ -147,6 +147,25 @@ const SCHEMA_BASE_ = [
       'SESSION_ADMIN', 'DATE_CREATION', 'PDF_FILE_ID',
       'PDF_NOM', 'PDF_TAILLE', 'PDF_HASH'
     ]
+  },
+  {
+    feuille: 'FAVORIS',
+    identifiant: 'ID_FAVORI',
+    colonnes: [
+      'ID_FAVORI', 'TYPE', 'IDENTIFIANT', 'LIBELLE',
+      'SOUS_LIBELLE', 'UTILISATEUR_CLE', 'DATE_CREATION'
+    ]
+  },
+  {
+    feuille: 'HISTORIQUE_IMPORTS_REFERENTIEL',
+    identifiant: 'ID_IMPORT',
+    colonnes: [
+      'ID_IMPORT', 'DATE_IMPORT', 'NOM_FICHIER',
+      'NOMBRE_LIGNES', 'CATEGORIES_CREEES',
+      'ITEMS_CREES', 'ITEMS_EXISTANTS',
+      'LIGNES_IGNOREES', 'ANOMALIES',
+      'SESSION_ADMIN', 'DATE_CREATION'
+    ]
   }
 ];
 
@@ -195,6 +214,24 @@ const MIGRATIONS_SCHEMA_ = [
     executer: migration5PdfIndemnisationsPhotosStagiaires_,
     simulable: true,
     simuler: simulerMigration5PdfIndemnisationsPhotosStagiairesModele_
+  },
+  {
+    version: 6,
+    versionSource: 5,
+    versionCible: 6,
+    nom: 'Favoris locaux des utilisateurs',
+    executer: migration6Favoris_,
+    simulable: true,
+    simuler: simulerMigration6FavorisModele_
+  },
+  {
+    version: 7,
+    versionSource: 6,
+    versionCible: 7,
+    nom: 'Import XLSX des référentiels pédagogiques',
+    executer: migration7ImportReferentielXlsx_,
+    simulable: true,
+    simuler: simulerMigration7ImportReferentielXlsxModele_
   }
 ];
 
@@ -589,6 +626,20 @@ function migration5PdfIndemnisationsPhotosStagiaires_(classeur) {
 }
 
 
+function migration6Favoris_(classeur) {
+  assurerFeuilleMigration_(classeur, 'FAVORIS');
+}
+
+
+function migration7ImportReferentielXlsx_(classeur) {
+  assurerFeuilleMigration_(classeur, 'REFERENTIEL');
+  assurerFeuilleMigration_(
+    classeur,
+    'HISTORIQUE_IMPORTS_REFERENTIEL'
+  );
+}
+
+
 function ajouterParametresEmailIndemnisationMigration_(feuille) {
   const donnees = feuille.getDataRange().getValues();
   const index = creerIndexMigration_(donnees[0]);
@@ -979,6 +1030,16 @@ function simulerMigration4EnvoisIndemnisationsModele_(modele) {
 
 
 function simulerMigration5PdfIndemnisationsPhotosStagiairesModele_(modele) {
+  assurerStructureModeleMigration_(modele);
+}
+
+
+function simulerMigration6FavorisModele_(modele) {
+  assurerStructureModeleMigration_(modele);
+}
+
+
+function simulerMigration7ImportReferentielXlsxModele_(modele) {
   assurerStructureModeleMigration_(modele);
 }
 

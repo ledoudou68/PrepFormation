@@ -4,6 +4,8 @@
 
 const CLE_JETON_ADMINISTRATION =
   'prepformation.jetonAdministration';
+const CLE_UTILISATEUR_FAVORIS =
+  'prepformation.utilisateurFavoris';
 const DUREE_INACTIVITE_ADMINISTRATION_MS = 30 * 60 * 1000;
 const INTERVALLE_RENOUVELLEMENT_ADMINISTRATION_MS = 60 * 1000;
 
@@ -49,6 +51,7 @@ const etatApplication = {
   itemsReferentiel: [],
   itemsReferentielEnCours: {},
   formationReferentielActive: '',
+  importReferentiel: null,
   prestationsIndemnisation: [],
   prestationsFiltreesIndemnisation: [],
   formateursIndemnisation: [],
@@ -65,7 +68,9 @@ const etatApplication = {
   formationStagiairesDepuisRechercheGlobale: '',
   formateurDepuisRechercheGlobale: '',
   referentielFormationDepuisRechercheGlobale: '',
+  referentielItemASelectionner: '',
   rechercheGlobale: null,
+  favoris: null,
   photoStagiaireEnCours: null,
   photoStagiaireExistante: false,
   analysePedagogiqueFicheStagiaire: null,
@@ -120,6 +125,13 @@ function initialiserInterface() {
     'click',
     gererClicExterieurRechercheGlobale
   );
+
+  document.addEventListener(
+    'click',
+    gererClicExterieurFavoris
+  );
+
+  initialiserFavorisInterface_();
 
   google.script.run
     .withSuccessHandler(function (sessionUtilisateur) {
@@ -176,6 +188,9 @@ function chargerPage(nomPage) {
       fermerMenuMobile();
       masquerLoader();
       initialiserPageActive(nomPage);
+      preparerErgonomieResponsivePage_(
+        document.getElementById('contenu')
+      );
     })
     .withFailureHandler(gererErreurServeur)
     .getPage(
@@ -273,6 +288,19 @@ function appliquerDroitsInterface() {
       identite.textContent += ' · ' + session.email;
     }
 
+    const identiteMenuMobile = document.getElementById(
+      'identiteUtilisateurMenuMobile'
+    );
+
+    if (identiteMenuMobile) {
+      identiteMenuMobile.textContent = identite.textContent;
+    }
+
+  }
+
+  if (etatApplication.favoris) {
+    afficherPanneauFavoris_();
+    synchroniserBoutonsFavoris_();
   }
 }
 
@@ -596,17 +624,512 @@ function gererErreurServeur(erreur) {
 }
 
 function basculerMenu() {
-  document
-    .getElementById('menuLateral')
-    .classList
-    .toggle('ouvert');
+  const menu = document.getElementById('menuLateral');
+  const bouton = document.getElementById('boutonMenuMobile');
+  const voile = document.getElementById('voileMenuMobile');
+  const ouvert = !menu.classList.contains('ouvert');
+
+  menu.classList.toggle('ouvert', ouvert);
+  document.body.classList.toggle('menu-mobile-ouvert', ouvert);
+  voile?.classList.toggle('masque', !ouvert);
+
+  if (bouton) {
+    bouton.setAttribute('aria-expanded', String(ouvert));
+    bouton.setAttribute(
+      'aria-label',
+      ouvert ? 'Fermer le menu' : 'Ouvrir le menu'
+    );
+  }
 }
 
 function fermerMenuMobile() {
-  document
-    .getElementById('menuLateral')
-    .classList
-    .remove('ouvert');
+  document.getElementById('menuLateral')?.classList.remove('ouvert');
+  document.body.classList.remove('menu-mobile-ouvert');
+  document.getElementById('voileMenuMobile')?.classList.add('masque');
+
+  const bouton = document.getElementById('boutonMenuMobile');
+  if (bouton) {
+    bouton.setAttribute('aria-expanded', 'false');
+    bouton.setAttribute('aria-label', 'Ouvrir le menu');
+  }
+}
+
+function preparerErgonomieResponsivePage_(racine) {
+  const contexte = racine || document;
+
+  contexte.querySelectorAll('.tableau-responsive').forEach(
+    function (conteneur) {
+      if (!conteneur.hasAttribute('tabindex')) {
+        conteneur.setAttribute('tabindex', '0');
+      }
+      if (!conteneur.hasAttribute('role')) {
+        conteneur.setAttribute('role', 'region');
+      }
+      if (!conteneur.hasAttribute('aria-label')) {
+        conteneur.setAttribute(
+          'aria-label',
+          'Tableau défilant horizontalement'
+        );
+      }
+    }
+  );
+}
+
+/* =====================================================
+   FAVORIS
+===================================================== */
+
+function obtenirEtatFavoris_() {
+  if (!etatApplication.favoris) {
+    etatApplication.favoris = {
+      utilisateurCle: '',
+      charges: false,
+      chargement: false,
+      liste: [],
+      parCle: {},
+      mutations: {},
+      rechargementRestaurationEffectue: false
+    };
+  }
+  return etatApplication.favoris;
+}
+
+
+function initialiserFavorisInterface_() {
+  const etat = obtenirEtatFavoris_();
+  etat.utilisateurCle = obtenirOuCreerCleUtilisateurFavoris_();
+  chargerFavorisUtilisateur_(false);
+}
+
+
+function obtenirOuCreerCleUtilisateurFavoris_() {
+  let cleExistante = '';
+  try {
+    cleExistante = String(
+      window.localStorage.getItem(CLE_UTILISATEUR_FAVORIS) || ''
+    ).trim();
+  } catch (erreurLecture) {
+    cleExistante = '';
+  }
+
+  if (/^pfav_[a-z0-9._:-]{15,115}$/i.test(cleExistante)) {
+    return cleExistante;
+  }
+
+  const cryptoNavigateur = window.crypto || {};
+  let partieAleatoire = '';
+  if (typeof cryptoNavigateur.randomUUID === 'function') {
+    partieAleatoire = cryptoNavigateur.randomUUID();
+  } else if (typeof cryptoNavigateur.getRandomValues === 'function') {
+    const octets = new Uint32Array(4);
+    cryptoNavigateur.getRandomValues(octets);
+    partieAleatoire = Array.from(octets).map(function (valeur) {
+      return valeur.toString(36);
+    }).join('-');
+  } else {
+    partieAleatoire = Date.now().toString(36) + '-' +
+      Math.random().toString(36).slice(2) + '-' +
+      Math.random().toString(36).slice(2);
+  }
+
+  const nouvelleCle = 'pfav_' + partieAleatoire;
+  try {
+    window.localStorage.setItem(
+      CLE_UTILISATEUR_FAVORIS,
+      nouvelleCle
+    );
+  } catch (erreurEcriture) {
+    // Le favori reste utilisable pour la durée de cette page.
+  }
+  return nouvelleCle;
+}
+
+
+function chargerFavorisUtilisateur_(forcer) {
+  const etat = obtenirEtatFavoris_();
+  if (etat.chargement || (etat.charges && !forcer)) {
+    return;
+  }
+
+  etat.chargement = true;
+  afficherPanneauFavoris_();
+
+  google.script.run
+    .withSuccessHandler(function (favoris) {
+      etat.chargement = false;
+      etat.charges = true;
+      remplacerFavorisClient_(favoris);
+    })
+    .withFailureHandler(function (erreur) {
+      etat.chargement = false;
+      etat.charges = false;
+      afficherPanneauFavoris_(
+        'Favoris indisponibles : ' + extraireMessageErreur(erreur),
+        true
+      );
+    })
+    .getFavoris(etat.utilisateurCle);
+}
+
+
+function remplacerFavorisClient_(favoris) {
+  const etat = obtenirEtatFavoris_();
+  etat.liste = Array.isArray(favoris) ? favoris.slice() : [];
+  etat.parCle = {};
+  etat.liste.forEach(function (favori) {
+    etat.parCle[creerCleFavoriClient_(
+      favori.type,
+      favori.identifiant
+    )] = favori;
+  });
+  trierFavorisClient_();
+  synchroniserInterfaceFavoris_();
+}
+
+
+function definirFavoriClient_(cle, favori) {
+  const etat = obtenirEtatFavoris_();
+  etat.liste = etat.liste.filter(function (element) {
+    return creerCleFavoriClient_(
+      element.type,
+      element.identifiant
+    ) !== cle;
+  });
+  delete etat.parCle[cle];
+
+  if (favori) {
+    etat.liste.push(favori);
+    etat.parCle[cle] = favori;
+  }
+  trierFavorisClient_();
+}
+
+
+function trierFavorisClient_() {
+  obtenirEtatFavoris_().liste.sort(function (a, b) {
+    return String(b.dateCreation || '').localeCompare(
+      String(a.dateCreation || '')
+    ) || String(a.cleResultat || '').localeCompare(
+      String(b.cleResultat || '')
+    );
+  });
+}
+
+
+function creerCleFavoriClient_(type, identifiant) {
+  return String(type || '').trim().toUpperCase() + ':' +
+    String(identifiant || '').trim();
+}
+
+
+function estFavoriClient_(type, identifiant) {
+  return Boolean(obtenirEtatFavoris_().parCle[
+    creerCleFavoriClient_(type, identifiant)
+  ]);
+}
+
+
+function creerBoutonFavori_(type, identifiant, classeSupplementaire) {
+  const typeNormalise = String(type || '').trim().toUpperCase();
+  if (![
+    'STAGIAIRE', 'FORMATEUR', 'SESSION', 'FORMATION', 'ITEM'
+  ].includes(typeNormalise)) {
+    return '';
+  }
+
+  const id = String(identifiant || '').trim();
+  if (!id) {
+    return '';
+  }
+  const etat = obtenirEtatFavoris_();
+  const cle = creerCleFavoriClient_(typeNormalise, id);
+  const actif = Boolean(etat.parCle[cle]);
+  const desactive = !etat.charges || Boolean(etat.mutations[cle]);
+  const libelle = actif ? 'Retirer des favoris' : 'Ajouter aux favoris';
+
+  return `
+    <button
+      type="button"
+      class="bouton-favori ${classeSupplementaire || ''} ${actif ? 'est-favori' : ''}"
+      data-favori-cle="${echapperHtml(cle)}"
+      data-favori-type="${echapperHtml(typeNormalise)}"
+      data-favori-identifiant="${echapperHtml(id)}"
+      aria-label="${libelle}"
+      aria-pressed="${actif ? 'true' : 'false'}"
+      title="${libelle}"
+      onclick="basculerFavoriDepuisBouton(event, this)"
+      ${desactive ? 'disabled' : ''}
+    >${actif ? '★' : '☆'}</button>
+  `;
+}
+
+
+function basculerFavoriDepuisBouton(evenement, bouton) {
+  evenement?.preventDefault();
+  evenement?.stopPropagation();
+
+  const etat = obtenirEtatFavoris_();
+  if (!etat.charges) {
+    afficherToast('Les favoris sont encore en cours de chargement.', true);
+    return;
+  }
+
+  const type = String(bouton?.dataset.favoriType || '').trim();
+  const identifiant = String(
+    bouton?.dataset.favoriIdentifiant || ''
+  ).trim();
+  const cle = creerCleFavoriClient_(type, identifiant);
+  if (!type || !identifiant || etat.mutations[cle]) {
+    return;
+  }
+
+  const favoriAvant = etat.parCle[cle] || null;
+  const favoriTemporaire = favoriAvant ||
+    construireFavoriTemporaireClient_(type, identifiant);
+  etat.mutations[cle] = true;
+  definirFavoriClient_(cle, favoriAvant ? null : favoriTemporaire);
+  synchroniserInterfaceFavoris_();
+
+  const succes = function (favoriServeur) {
+    delete etat.mutations[cle];
+    definirFavoriClient_(
+      cle,
+      favoriAvant ? null : favoriServeur
+    );
+    synchroniserInterfaceFavoris_();
+  };
+  const echec = function (erreur) {
+    delete etat.mutations[cle];
+    definirFavoriClient_(cle, favoriAvant);
+    synchroniserInterfaceFavoris_();
+    afficherToast(extraireMessageErreur(erreur), true);
+  };
+  const appel = google.script.run
+    .withSuccessHandler(succes)
+    .withFailureHandler(echec);
+
+  if (favoriAvant) {
+    appel.supprimerFavori(type, identifiant, etat.utilisateurCle);
+  } else {
+    appel.ajouterFavori(type, identifiant, etat.utilisateurCle);
+  }
+}
+
+
+function construireFavoriTemporaireClient_(type, identifiant) {
+  const resultatRecherche = ((obtenirEtatRechercheGlobale_().resultat || {})
+    .groupes || []).reduce(function (trouve, groupe) {
+      return trouve || (groupe.resultats || []).find(function (resultat) {
+        return creerCleFavoriClient_(
+          resultat.type,
+          resultat.id || resultat.uuid || resultat.idSession ||
+            resultat.idFormateur || resultat.idFormation ||
+            resultat.idItem
+        ) === creerCleFavoriClient_(type, identifiant);
+      });
+    }, null);
+  let libelle = identifiant;
+  let sousLibelle = '';
+
+  if (resultatRecherche) {
+    libelle = resultatRecherche.item || resultatRecherche.libelle ||
+      [resultatRecherche.nom, resultatRecherche.prenom]
+        .filter(Boolean).join(' ') ||
+      (type === 'SESSION'
+        ? 'Séance du ' + afficherDateFrancaise(resultatRecherche.date)
+        : identifiant);
+    sousLibelle = resultatRecherche.categorie ||
+      resultatRecherche.formation || '';
+  }
+
+  return {
+    idFavori: 'temporaire:' + creerCleFavoriClient_(type, identifiant),
+    type: type,
+    identifiant: identifiant,
+    cleResultat: creerCleFavoriClient_(type, identifiant),
+    libelle: libelle,
+    sousLibelle: sousLibelle,
+    disponible: true,
+    actif: true,
+    dateCreation: new Date().toISOString(),
+    temporaire: true
+  };
+}
+
+
+function synchroniserInterfaceFavoris_() {
+  synchroniserBoutonsFavoris_();
+  afficherPanneauFavoris_();
+  const compteur = document.getElementById('compteurFavorisTopbar');
+  if (compteur) {
+    const nombre = obtenirEtatFavoris_().liste.length;
+    compteur.textContent = String(nombre);
+    compteur.classList.toggle('masque', nombre === 0);
+  }
+}
+
+
+function synchroniserBoutonsFavoris_() {
+  const etat = obtenirEtatFavoris_();
+  document.querySelectorAll('[data-favori-cle]').forEach(function (bouton) {
+    const cle = bouton.dataset.favoriCle;
+    const actif = Boolean(etat.parCle[cle]);
+    const mutation = Boolean(etat.mutations[cle]);
+    const libelle = actif ? 'Retirer des favoris' : 'Ajouter aux favoris';
+    bouton.classList.toggle('est-favori', actif);
+    bouton.textContent = actif ? '★' : '☆';
+    bouton.setAttribute('aria-pressed', actif ? 'true' : 'false');
+    bouton.setAttribute('aria-label', libelle);
+    bouton.title = libelle;
+    bouton.disabled = !etat.charges || mutation;
+  });
+}
+
+
+function basculerPanneauFavoris() {
+  const panneau = document.getElementById('panneauFavoris');
+  if (!panneau) {
+    return;
+  }
+  if (panneau.classList.contains('masque')) {
+    afficherPanneauFavoris_();
+    panneau.classList.remove('masque');
+    document.getElementById('boutonOuvrirFavoris')
+      ?.setAttribute('aria-expanded', 'true');
+    return;
+  }
+  fermerPanneauFavoris();
+}
+
+
+function fermerPanneauFavoris() {
+  document.getElementById('panneauFavoris')?.classList.add('masque');
+  document.getElementById('boutonOuvrirFavoris')
+    ?.setAttribute('aria-expanded', 'false');
+}
+
+
+function gererClicExterieurFavoris(evenement) {
+  const conteneur = document.getElementById('conteneurFavoris');
+  if (conteneur && !conteneur.contains(evenement.target)) {
+    fermerPanneauFavoris();
+  }
+}
+
+
+function afficherPanneauFavoris_(message, erreur) {
+  const zone = document.getElementById('contenuFavoris');
+  const etat = obtenirEtatFavoris_();
+  if (!zone) {
+    return;
+  }
+
+  if (message) {
+    zone.innerHTML = `<div class="etat-favoris ${erreur ? 'erreur' : ''}">${echapperHtml(message)}</div>`;
+    return;
+  }
+  if (etat.chargement && !etat.charges) {
+    zone.innerHTML = '<div class="etat-favoris">Chargement des favoris…</div>';
+    return;
+  }
+  if (!etat.liste.length) {
+    zone.innerHTML = '<div class="etat-favoris">Aucun favori pour le moment</div>';
+    return;
+  }
+
+  const groupes = [
+    ['STAGIAIRE', 'Stagiaires', '👨‍🚒'],
+    ['SESSION', 'Séances', '📅'],
+    ['FORMATEUR', 'Formateurs', '👨‍🏫'],
+    ['FORMATION', 'Formations', '🎓'],
+    ['ITEM', 'Items pédagogiques', '📚']
+  ];
+  zone.innerHTML = groupes.map(function (configuration) {
+    const favoris = etat.liste.filter(function (favori) {
+      return favori.type === configuration[0];
+    });
+    if (!favoris.length) {
+      return '';
+    }
+    return `
+      <section class="groupe-favoris">
+        <h3><span aria-hidden="true">${configuration[2]}</span>${configuration[1]}</h3>
+        <div>${favoris.map(creerLignePanneauFavori_).join('')}</div>
+      </section>
+    `;
+  }).join('');
+}
+
+
+function creerLignePanneauFavori_(favori) {
+  const restriction = favori.type === 'ITEM' &&
+    !estAdministrateurApplication();
+  const ouvrable = favori.disponible && !restriction && !favori.temporaire;
+  const badge = !favori.disponible
+    ? '<span class="badge-favori badge-favori-indisponible">Indisponible</span>'
+    : (!favori.actif
+      ? '<span class="badge-favori">Inactif</span>'
+      : (restriction
+        ? '<span class="badge-favori">Lecture seule</span>'
+        : ''));
+
+  return `
+    <div class="ligne-panneau-favori ${favori.disponible ? '' : 'favori-indisponible'}">
+      <button
+        type="button"
+        class="ouvrir-favori"
+        data-id-favori="${echapperHtml(favori.idFavori)}"
+        onclick="ouvrirFavoriDepuisPanneau(this.dataset.idFavori)"
+        ${ouvrable ? '' : 'disabled'}
+      >
+        <strong>${echapperHtml(favori.libelle)}</strong>
+        <small>${echapperHtml(favori.sousLibelle || '')}</small>
+        ${badge}
+      </button>
+      <button
+        type="button"
+        class="retirer-favori"
+        data-favori-type="${echapperHtml(favori.type)}"
+        data-favori-identifiant="${echapperHtml(favori.identifiant)}"
+        onclick="basculerFavoriDepuisBouton(event, this)"
+        aria-label="Retirer ${echapperHtml(favori.libelle)} des favoris"
+        title="Retirer des favoris"
+      >×</button>
+    </div>
+  `;
+}
+
+
+function ouvrirFavoriDepuisPanneau(idFavori) {
+  const favori = obtenirEtatFavoris_().liste.find(function (element) {
+    return element.idFavori === idFavori;
+  });
+  if (!favori || !favori.disponible) {
+    afficherToast('Ce favori est indisponible.', true);
+    return;
+  }
+  if (favori.type === 'ITEM' && !estAdministrateurApplication()) {
+    afficherToast(
+      'La gestion du Référentiel est réservée à l’administrateur.',
+      true
+    );
+    return;
+  }
+  fermerPanneauFavoris();
+  ouvrirObjetApplication_(favori.type, favori.identifiant, {
+    formation: favori.formation,
+    libelle: favori.libelle
+  });
+}
+
+
+function rechargerFavorisApresRestauration_() {
+  const etat = obtenirEtatFavoris_();
+  if (etat.rechargementRestaurationEffectue) {
+    return;
+  }
+  etat.rechargementRestaurationEffectue = true;
+  chargerFavorisUtilisateur_(true);
 }
 
 /* =====================================================
@@ -785,26 +1308,33 @@ function creerLigneResultatRechercheGlobale_(resultat, index, accessible) {
   const contenu = creerContenuResultatRechercheGlobale_(resultat);
   const classe = 'resultat-recherche-globale' +
     (accessible ? '' : ' resultat-recherche-non-accessible');
+  const identifiant = resultat.uuid || resultat.idSession ||
+    resultat.idFormateur || resultat.idFormation || resultat.idItem || '';
+  const boutonFavori = creerBoutonFavori_(
+    resultat.type,
+    identifiant,
+    'bouton-favori-recherche'
+  );
 
   if (!accessible) {
     return `
       <div class="${classe}" aria-disabled="true">
         ${contenu}
+        ${boutonFavori}
         <span class="restriction-resultat-recherche">Consultation du Référentiel réservée à l’administrateur</span>
       </div>
     `;
   }
 
   return `
-    <button
-      type="button"
+    <div
       id="resultatRechercheGlobale${index}"
       class="${classe}"
       data-index-recherche="${index}"
       role="option"
       aria-selected="false"
       onclick="ouvrirResultatRechercheGlobale(${index})"
-    >${contenu}</button>
+    >${contenu}${boutonFavori}</div>
   `;
 }
 
@@ -909,38 +1439,65 @@ function ouvrirResultatRechercheGlobale(index) {
   }
 
   fermerRechercheGlobale();
+  ouvrirObjetApplication_(
+    resultat.type,
+    resultat.uuid || resultat.idSession || resultat.idFormateur ||
+      resultat.idFormation || resultat.idItem || resultat.idCategorie ||
+      resultat.id,
+    {
+      formation: resultat.formation,
+      libelle: resultat.libelle
+    }
+  );
+}
 
-  if (resultat.type === 'STAGIAIRE') {
-    etatApplication.stagiaireAConsulterDepuisAccueil = resultat.uuid;
+
+function ouvrirObjetApplication_(type, identifiant, contexte) {
+  const typeNormalise = String(type || '').trim().toUpperCase();
+  const id = String(identifiant || '').trim();
+  const donnees = contexte || {};
+
+  if (!id) {
+    afficherToast('Élément introuvable.', true);
+    return;
+  }
+
+  if (typeNormalise === 'STAGIAIRE') {
+    etatApplication.stagiaireAConsulterDepuisAccueil = id;
     chargerPage('Stagiaires');
     return;
   }
 
-  if (resultat.type === 'SESSION') {
-    consulterSession(resultat.idSession);
+  if (typeNormalise === 'SESSION') {
+    consulterSession(id);
     return;
   }
 
-  if (resultat.type === 'FORMATEUR') {
-    etatApplication.formateurDepuisRechercheGlobale =
-      resultat.idFormateur;
+  if (typeNormalise === 'FORMATEUR') {
+    etatApplication.formateurDepuisRechercheGlobale = id;
     chargerPage('Formateurs');
     return;
   }
 
-  if (resultat.type === 'FORMATION') {
+  if (typeNormalise === 'FORMATION') {
     etatApplication.formationStagiairesDepuisRechercheGlobale =
-      resultat.libelle;
+      donnees.libelle || donnees.formation || id;
     chargerPage('Stagiaires');
     return;
   }
 
-  if (
-    ['ITEM', 'CATEGORIE'].includes(resultat.type) &&
-    estAdministrateurApplication()
-  ) {
+  if (['ITEM', 'CATEGORIE'].includes(typeNormalise)) {
+    if (!estAdministrateurApplication()) {
+      afficherToast(
+        'La gestion du Référentiel est réservée à l’administrateur.',
+        true
+      );
+      return;
+    }
     etatApplication.referentielFormationDepuisRechercheGlobale =
-      resultat.formation;
+      donnees.formation || '';
+    etatApplication.referentielItemASelectionner =
+      typeNormalise === 'ITEM' ? id : '';
     chargerPage('Referentiel');
   }
 }
@@ -1359,7 +1916,7 @@ function afficherDernieresSessionsAccueil(sessions) {
   if (!sessions.length) {
     corps.innerHTML = `
       <tr>
-        <td colspan="6" class="etat-vide">
+        <td colspan="7" class="etat-vide">
           Aucune séance réalisée pour le moment.
         </td>
       </tr>
@@ -1676,7 +2233,7 @@ function afficherListeStagiaires() {
   if (stagiaires.length === 0) {
     corps.innerHTML = `
       <tr>
-        <td colspan="6" class="etat-vide">
+        <td colspan="7" class="etat-vide">
           Aucun stagiaire ne correspond aux critères.
         </td>
       </tr>
@@ -2003,14 +2560,21 @@ function consulterStagiaire(uuid) {
           </div>
         </div>
 
-        <button
-          type="button"
-          class="bouton-fermer-modal bouton-fermer-fiche"
-          onclick="fermerFicheStagiaire()"
-          aria-label="Fermer"
-        >
-          ×
-        </button>
+        <div class="actions-fiche-consultation">
+          ${creerBoutonFavori_(
+            'STAGIAIRE',
+            uuid,
+            'bouton-favori-fiche'
+          )}
+          <button
+            type="button"
+            class="bouton-fermer-modal bouton-fermer-fiche"
+            onclick="fermerFicheStagiaire()"
+            aria-label="Fermer"
+          >
+            ×
+          </button>
+        </div>
 
       </header>
 
@@ -2394,6 +2958,7 @@ function consulterStagiaire(uuid) {
   `;
 
   document.body.appendChild(modal);
+  preparerErgonomieResponsivePage_(modal);
   document.body.classList.add('modal-ouverte');
 
   etatApplication.analysePedagogiqueFicheStagiaire = {
@@ -5829,7 +6394,7 @@ function afficherListeFormateurs() {
             ✎
           </button>
         `
-        : '—';
+        : '';
 
       return `
         <tr data-formateur-id="${echapperHtml(formateur.idFormateur)}">
@@ -5843,6 +6408,11 @@ function afficherListeFormateurs() {
             </span>
           </td>
           <td class="colonne-actions">
+            ${creerBoutonFavori_(
+              'FORMATEUR',
+              formateur.idFormateur,
+              'bouton-favori-tableau'
+            )}
             ${actionModifier}
           </td>
         </tr>
@@ -6214,6 +6784,7 @@ function chargerDonneesReferentiel() {
     ) {
       afficherListeCategoriesReferentiel();
       afficherListeItemsReferentiel();
+      mettreEnEvidenceItemReferentielFavori_();
 
       const boutonItem = document.getElementById(
         'boutonNouvelItemReferentiel'
@@ -6381,6 +6952,28 @@ function afficherListeCategoriesReferentiel() {
     .join('');
 }
 
+
+function mettreEnEvidenceItemReferentielFavori_() {
+  const idItem = etatApplication.referentielItemASelectionner;
+  if (!idItem) {
+    return;
+  }
+  const ligne = Array.from(
+    document.querySelectorAll('[data-item-favori-id]')
+  ).find(function (element) {
+    return element.dataset.itemFavoriId === idItem;
+  });
+  if (!ligne) {
+    return;
+  }
+  etatApplication.referentielItemASelectionner = '';
+  ligne.classList.add('resultat-recherche-surligne');
+  ligne.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  window.setTimeout(function () {
+    ligne.classList.remove('resultat-recherche-surligne');
+  }, 2200);
+}
+
 function afficherListeItemsReferentiel() {
   const corps = document.getElementById(
     'corpsTableauReferentiel'
@@ -6418,7 +7011,7 @@ function afficherListeItemsReferentiel() {
   if (!formation) {
     corps.innerHTML = `
       <tr>
-        <td colspan="6" class="etat-vide">
+        <td colspan="7" class="etat-vide">
           Sélectionne une formation pour afficher ses items.
         </td>
       </tr>
@@ -6429,7 +7022,7 @@ function afficherListeItemsReferentiel() {
   if (!items.length) {
     corps.innerHTML = `
       <tr>
-        <td colspan="6" class="etat-vide">
+        <td colspan="7" class="etat-vide">
           Aucun item pédagogique configuré pour cette formation.
         </td>
       </tr>
@@ -6481,7 +7074,7 @@ function afficherListeItemsReferentiel() {
           : 'Inactif';
 
       return `
-        <tr>
+        <tr data-item-favori-id="${echapperHtml(item.idItem)}">
           <td class="colonne-ordre-referentiel">
             <span class="ordre-item-referentiel">
               ${item.ordre}
@@ -6502,6 +7095,11 @@ function afficherListeItemsReferentiel() {
             ${echapperHtml(item.description || '—')}
           </td>
           <td>
+            ${item.nature
+              ? `<span class="badge-categorie-referentiel">${echapperHtml(item.nature)}</span>`
+              : '—'}
+          </td>
+          <td>
             <span class="badge-statut ${itemDisponible ? 'badge-vert' : 'badge-gris'}">
               ${libelleStatut}
             </span>
@@ -6511,6 +7109,11 @@ function afficherListeItemsReferentiel() {
             data-colonne="actions-items"
             data-item-id="${echapperHtml(item.idItem)}"
           >
+            ${creerBoutonFavori_(
+              'ITEM',
+              item.idItem,
+              'bouton-favori-tableau'
+            )}
             <button
               type="button"
               class="bouton-icone action-referentiel"
@@ -6766,6 +7369,10 @@ function nouvelItemReferentiel() {
   ).checked = true;
 
   document.getElementById(
+    'itemReferentielNature'
+  ).value = '';
+
+  document.getElementById(
     'titreModalItemReferentiel'
   ).textContent = 'Nouvel item pédagogique';
 
@@ -6817,6 +7424,10 @@ function modifierItemReferentiel(idItem) {
   document.getElementById(
     'itemReferentielOrdre'
   ).value = item.ordre;
+
+  document.getElementById(
+    'itemReferentielNature'
+  ).value = item.nature || '';
 
   document.getElementById(
     'itemReferentielActif'
@@ -6916,6 +7527,9 @@ function soumettreItemReferentiel(evenement) {
     ).value,
     description: document.getElementById(
       'itemReferentielDescription'
+    ).value,
+    nature: document.getElementById(
+      'itemReferentielNature'
     ).value,
     actif: document.getElementById(
       'itemReferentielActif'
@@ -7176,6 +7790,552 @@ function executerActionReferentiel(nomFonction, parametres) {
   );
 }
 
+
+function ouvrirImportReferentiel() {
+  etatApplication.importReferentiel = {
+    etape: 1,
+    fichier: null,
+    analyse: null,
+    correspondances: [],
+    previsualisation: null,
+    resultat: null,
+    enCours: false
+  };
+
+  const modal = document.getElementById('modalImportReferentiel');
+  if (!modal) {
+    return;
+  }
+
+  document.getElementById('fichierImportReferentiel').value = '';
+  document.getElementById('resumeFichierImportReferentiel').innerHTML = '';
+  document.getElementById('confirmationTexteImportReferentiel').value = '';
+  document.getElementById('contenuAnalyseImportReferentiel').innerHTML = '';
+  document.getElementById('listeCorrespondancesImportReferentiel').innerHTML = '';
+  document.getElementById('contenuPrevisualisationImportReferentiel').innerHTML = '';
+  document.getElementById('resumeConfirmationImportReferentiel').innerHTML = '';
+  document.getElementById('conflitsNatureImportReferentiel').innerHTML = '';
+  document.getElementById('contenuResultatImportReferentiel').innerHTML = '';
+
+  initialiserDepotImportReferentiel_();
+  afficherEtapeImportReferentiel_(1);
+  modal.classList.remove('masque');
+  document.body.classList.add('modal-ouverte');
+}
+
+
+function fermerImportReferentiel() {
+  const etat = etatApplication.importReferentiel;
+  if (etat && etat.enCours) {
+    afficherToast('Attends la fin de l’opération en cours.', true);
+    return;
+  }
+
+  const modal = document.getElementById('modalImportReferentiel');
+  if (modal) {
+    modal.classList.add('masque');
+  }
+  document.body.classList.remove('modal-ouverte');
+  etatApplication.importReferentiel = null;
+}
+
+
+function initialiserDepotImportReferentiel_() {
+  const zone = document.getElementById('zoneDepotImportReferentiel');
+  if (!zone || zone.dataset.initialise === 'true') {
+    return;
+  }
+
+  zone.dataset.initialise = 'true';
+  ['dragenter', 'dragover'].forEach(function (nomEvenement) {
+    zone.addEventListener(nomEvenement, function (evenement) {
+      evenement.preventDefault();
+      zone.classList.add('depot-actif');
+    });
+  });
+  ['dragleave', 'drop'].forEach(function (nomEvenement) {
+    zone.addEventListener(nomEvenement, function (evenement) {
+      evenement.preventDefault();
+      zone.classList.remove('depot-actif');
+    });
+  });
+  zone.addEventListener('drop', function (evenement) {
+    const fichier = evenement.dataTransfer &&
+      evenement.dataTransfer.files[0];
+    selectionnerFichierImportReferentiel(fichier);
+  });
+}
+
+
+function selectionnerFichierImportReferentiel(fichier) {
+  const etat = etatApplication.importReferentiel;
+  if (!etat || etat.enCours || !fichier) {
+    return;
+  }
+
+  const nom = String(fichier.name || '');
+  const typeAttendu =
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  const resume = document.getElementById('resumeFichierImportReferentiel');
+
+  if (!/\.xlsx$/i.test(nom)) {
+    etat.fichier = null;
+    resume.innerHTML = '<span class="message-erreur">Seuls les fichiers .xlsx sont autorisés.</span>';
+    mettreAJourBoutonImportReferentiel();
+    return;
+  }
+  if (fichier.type && fichier.type !== typeAttendu) {
+    etat.fichier = null;
+    resume.innerHTML = '<span class="message-erreur">Le type du fichier Excel est invalide.</span>';
+    mettreAJourBoutonImportReferentiel();
+    return;
+  }
+  if (!fichier.size || fichier.size > 5 * 1024 * 1024) {
+    etat.fichier = null;
+    resume.innerHTML = '<span class="message-erreur">Le fichier doit être non vide et ne pas dépasser 5 Mo.</span>';
+    mettreAJourBoutonImportReferentiel();
+    return;
+  }
+
+  etat.fichier = fichier;
+  resume.innerHTML = `
+    <span>✓ ${echapperHtml(nom)} · ${formaterTailleImportReferentiel_(fichier.size)}</span>
+  `;
+  mettreAJourBoutonImportReferentiel();
+}
+
+
+function executerEtapeImportReferentiel() {
+  const etat = etatApplication.importReferentiel;
+  if (!etat || etat.enCours) {
+    return;
+  }
+
+  if (etat.etape === 1) {
+    analyserFichierImportReferentiel_();
+  } else if (etat.etape === 2) {
+    afficherEtapeImportReferentiel_(3);
+  } else if (etat.etape === 3) {
+    demanderPrevisualisationImportReferentiel_();
+  } else if (etat.etape === 4) {
+    afficherConfirmationImportReferentiel_();
+    afficherEtapeImportReferentiel_(5);
+  } else if (etat.etape === 5) {
+    confirmerImportReferentiel_();
+  } else if (etat.etape === 6) {
+    voirReferentielApresImport_();
+  }
+}
+
+
+function reculerImportReferentiel() {
+  const etat = etatApplication.importReferentiel;
+  if (!etat || etat.enCours || etat.etape <= 1 || etat.etape >= 6) {
+    return;
+  }
+  afficherEtapeImportReferentiel_(etat.etape - 1);
+}
+
+
+function afficherEtapeImportReferentiel_(etape) {
+  const etat = etatApplication.importReferentiel;
+  if (!etat) return;
+  etat.etape = etape;
+
+  document.querySelectorAll('[data-panneau-import]').forEach(
+    function (panneau) {
+      panneau.classList.toggle(
+        'masque',
+        Number(panneau.dataset.panneauImport) !== etape
+      );
+    }
+  );
+  document.querySelectorAll('[data-etape-import]').forEach(
+    function (indicateur) {
+      const numero = Number(indicateur.dataset.etapeImport);
+      indicateur.classList.toggle('etape-active', numero === etape);
+      indicateur.classList.toggle('etape-terminee', numero < etape);
+    }
+  );
+
+  if (etape === 3) {
+    afficherCorrespondancesImportReferentiel_();
+  }
+  mettreAJourBoutonImportReferentiel();
+}
+
+
+function mettreAJourBoutonImportReferentiel() {
+  const etat = etatApplication.importReferentiel;
+  const bouton = document.getElementById('boutonActionImportReferentiel');
+  const retour = document.getElementById('boutonRetourImportReferentiel');
+  if (!etat || !bouton || !retour) return;
+
+  const libelles = {
+    1: 'Analyser le fichier',
+    2: 'Continuer',
+    3: 'Prévisualiser',
+    4: 'Continuer',
+    5: 'Importer',
+    6: 'Voir le référentiel'
+  };
+  bouton.textContent = etat.enCours
+    ? 'Traitement en cours…'
+    : libelles[etat.etape];
+
+  let autorise = !etat.enCours;
+  if (etat.etape === 1) autorise = autorise && Boolean(etat.fichier);
+  if (etat.etape === 2) autorise = autorise && Boolean(etat.analyse);
+  if (etat.etape === 3) {
+    const selects = Array.from(
+      document.querySelectorAll('[data-correspondance-formation]')
+    );
+    autorise = autorise && selects.length > 0 &&
+      selects.every(function (select) { return Boolean(select.value); });
+  }
+  if (etat.etape === 4) {
+    autorise = autorise && Boolean(etat.previsualisation);
+  }
+  if (etat.etape === 5) {
+    autorise = autorise &&
+      document.getElementById('confirmationTexteImportReferentiel').value
+        .trim() === 'IMPORTER';
+  }
+  bouton.disabled = !autorise;
+  retour.disabled = etat.enCours;
+  retour.classList.toggle('masque', etat.etape === 1 || etat.etape === 6);
+}
+
+
+function analyserFichierImportReferentiel_() {
+  const etat = etatApplication.importReferentiel;
+  if (!etat || !etat.fichier) return;
+
+  const fichier = etat.fichier;
+  const lecteur = new FileReader();
+  etat.enCours = true;
+  mettreAJourBoutonImportReferentiel();
+
+  lecteur.onerror = function () {
+    etat.enCours = false;
+    mettreAJourBoutonImportReferentiel();
+    afficherToast('Impossible de lire le fichier sélectionné.', true);
+  };
+  lecteur.onload = function () {
+    const contenu = String(lecteur.result || '');
+    const base64 = contenu.includes(',') ? contenu.split(',')[1] : contenu;
+
+    google.script.run
+      .withSuccessHandler(function (analyse) {
+        if (!etatApplication.importReferentiel) return;
+        etat.fichier = null;
+        etat.analyse = analyse;
+        etat.enCours = false;
+        afficherAnalyseImportReferentiel_(analyse);
+        afficherEtapeImportReferentiel_(2);
+      })
+      .withFailureHandler(function (erreur) {
+        if (!etatApplication.importReferentiel) return;
+        etat.enCours = false;
+        mettreAJourBoutonImportReferentiel();
+        afficherToast(extraireMessageErreur(erreur), true);
+      })
+      .analyserFichierXlsxReferentiel(
+        {
+          nom: fichier.name,
+          type: fichier.type,
+          taille: fichier.size,
+          base64: base64
+        },
+        obtenirJetonAdministrateurApplication()
+      );
+  };
+  lecteur.readAsDataURL(fichier);
+}
+
+
+function afficherAnalyseImportReferentiel_(analyse) {
+  const cible = document.getElementById('contenuAnalyseImportReferentiel');
+  const anomalies = Array.isArray(analyse.anomalies) ? analyse.anomalies : [];
+  cible.innerHTML = `
+    <div class="bloc-import-referentiel">
+      <strong>${echapperHtml(analyse.nomFichier)}</strong><br>
+      <span>${echapperHtml(analyse.nomFeuille)} · ${formaterTailleImportReferentiel_(analyse.tailleOctets)}</span>
+    </div>
+    <div class="grille-indicateurs-import-referentiel">
+      ${indicateurImportReferentiel_('Lignes', analyse.nombreLignes)}
+      ${indicateurImportReferentiel_('Lignes valides', analyse.nombreLignesValides)}
+      ${indicateurImportReferentiel_('Formations', analyse.typesFormation.length)}
+      ${indicateurImportReferentiel_('Catégories', analyse.nombreCategories)}
+      ${indicateurImportReferentiel_('Items', analyse.nombreItems)}
+      ${indicateurImportReferentiel_('Théorie', analyse.theories)}
+      ${indicateurImportReferentiel_('Technique', analyse.techniques)}
+      ${indicateurImportReferentiel_('Anomalies', anomalies.length)}
+    </div>
+    ${construireListeAnomaliesImportReferentiel_(anomalies)}
+  `;
+}
+
+
+function afficherCorrespondancesImportReferentiel_() {
+  const etat = etatApplication.importReferentiel;
+  if (!etat || !etat.analyse) return;
+  const cible = document.getElementById('listeCorrespondancesImportReferentiel');
+  const formations = etat.analyse.formationsActives || [];
+
+  cible.innerHTML = etat.analyse.typesFormation.map(function (source, index) {
+    const correspondanceExistante = etat.correspondances.find(
+      function (element) {
+        return element.source === source;
+      }
+    );
+    const options = formations.map(function (formation) {
+      const selectionnee = correspondanceExistante &&
+        !correspondanceExistante.ignore &&
+        correspondanceExistante.cible === formation;
+      return `<option value="${echapperHtml(formation)}" ${selectionnee ? 'selected' : ''}>${echapperHtml(formation)}</option>`;
+    }).join('');
+    return `
+      <div class="ligne-correspondance-import-referentiel">
+        <strong>${echapperHtml(source)}</strong>
+        <span>→</span>
+        <select
+          class="champ"
+          data-correspondance-formation
+          data-source-index="${index}"
+          onchange="mettreAJourBoutonImportReferentiel()"
+        >
+          <option value="">Choisir une formation</option>
+          ${options}
+          <option value="__IGNORER__" ${correspondanceExistante && correspondanceExistante.ignore ? 'selected' : ''}>Ignorer ce type</option>
+        </select>
+      </div>
+    `;
+  }).join('');
+  mettreAJourBoutonImportReferentiel();
+}
+
+
+function lireCorrespondancesImportReferentiel_() {
+  const etat = etatApplication.importReferentiel;
+  return Array.from(
+    document.querySelectorAll('[data-correspondance-formation]')
+  ).map(function (select) {
+    const source = etat.analyse.typesFormation[
+      Number(select.dataset.sourceIndex)
+    ];
+    return {
+      source: source,
+      cible: select.value === '__IGNORER__' ? '' : select.value,
+      ignore: select.value === '__IGNORER__'
+    };
+  });
+}
+
+
+function demanderPrevisualisationImportReferentiel_() {
+  const etat = etatApplication.importReferentiel;
+  if (!etat || !etat.analyse) return;
+  etat.correspondances = lireCorrespondancesImportReferentiel_();
+  etat.enCours = true;
+  mettreAJourBoutonImportReferentiel();
+
+  google.script.run
+    .withSuccessHandler(function (previsualisation) {
+      if (!etatApplication.importReferentiel) return;
+      etat.previsualisation = previsualisation;
+      etat.enCours = false;
+      afficherPrevisualisationImportReferentiel_(previsualisation);
+      afficherEtapeImportReferentiel_(4);
+    })
+    .withFailureHandler(function (erreur) {
+      if (!etatApplication.importReferentiel) return;
+      etat.enCours = false;
+      mettreAJourBoutonImportReferentiel();
+      afficherToast(extraireMessageErreur(erreur), true);
+    })
+    .previsualiserImportReferentiel(
+      etat.analyse.idAnalyse,
+      etat.correspondances,
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+
+function afficherPrevisualisationImportReferentiel_(preview) {
+  const cible = document.getElementById('contenuPrevisualisationImportReferentiel');
+  const totaux = preview.totaux;
+  const detailsFormations = preview.detailsFormations || [];
+  cible.innerHTML = `
+    <div class="grille-indicateurs-import-referentiel">
+      ${indicateurImportReferentiel_('Catégories à créer', totaux.categoriesACreer)}
+      ${indicateurImportReferentiel_('Catégories présentes', totaux.categoriesReutilisees)}
+      ${indicateurImportReferentiel_('Items à créer', totaux.itemsACreer)}
+      ${indicateurImportReferentiel_('Items existants', totaux.itemsExistants)}
+      ${indicateurImportReferentiel_('Natures à compléter', totaux.naturesACompleter)}
+      ${indicateurImportReferentiel_('Conflits de Nature', totaux.conflitsNature)}
+      ${indicateurImportReferentiel_('Lignes ignorées', totaux.lignesIgnorees)}
+      ${indicateurImportReferentiel_('Anomalies', totaux.anomalies)}
+    </div>
+    <div class="liste-formations-preview-import">
+      ${detailsFormations.map(function (detail) {
+        return `
+          <div class="bloc-import-referentiel">
+            <strong>${detail.sources.map(echapperHtml).join(' + ')} → ${echapperHtml(detail.formation)}</strong>
+            <p>${detail.nombreLignes} ligne(s) valide(s)</p>
+            <small>
+              Catégories : ${detail.categoriesACreer} à créer / ${detail.categoriesReutilisees} présentes<br>
+              Items : ${detail.itemsACreer} à créer / ${detail.itemsExistants} existants<br>
+              Natures : ${detail.naturesACompleter} à compléter / ${detail.conflitsNature} conflit(s)<br>
+              ${detail.lignesIgnorees} ligne(s) ignorée(s) · ${detail.anomalies} anomalie(s)
+            </small>
+          </div>
+        `;
+      }).join('')}
+    </div>
+    ${construireListeAnomaliesImportReferentiel_(preview.anomalies || [])}
+  `;
+}
+
+
+function afficherConfirmationImportReferentiel_() {
+  const etat = etatApplication.importReferentiel;
+  const preview = etat.previsualisation;
+  const totaux = preview.totaux;
+  document.getElementById('confirmationTexteImportReferentiel').value = '';
+  document.getElementById('resumeConfirmationImportReferentiel').innerHTML = `
+    <div class="bloc-import-referentiel">
+      Cette opération va créer <strong>${totaux.categoriesACreer} catégorie(s)</strong>
+      et <strong>${totaux.itemsACreer} item(s)</strong> dans le référentiel.
+      Aucun élément existant ne sera supprimé ou désactivé. Une sauvegarde complète
+      vérifiée sera créée avant la première écriture.
+    </div>
+  `;
+  const conflits = preview.conflitsNature || [];
+  document.getElementById('conflitsNatureImportReferentiel').innerHTML =
+    conflits.length
+      ? `<h4>Confirmations spécifiques de Nature</h4>${conflits.map(function (conflit) {
+        return `
+          <label class="conflit-nature-import-referentiel">
+            <input type="checkbox" data-confirmer-nature-id="${echapperHtml(conflit.idItem)}">
+            <span>
+              <strong>${echapperHtml(conflit.intitule)}</strong><br>
+              Remplacer « ${echapperHtml(conflit.natureExistante)} » par
+              « ${echapperHtml(conflit.natureImportee)} ».
+              Si cette case reste décochée, la valeur existante est conservée.
+            </span>
+          </label>
+        `;
+      }).join('')}`
+      : '';
+}
+
+
+function confirmerImportReferentiel_() {
+  const etat = etatApplication.importReferentiel;
+  if (!etat || !etat.previsualisation) return;
+  const confirmation = document.getElementById(
+    'confirmationTexteImportReferentiel'
+  ).value.trim();
+  const idsNatures = Array.from(
+    document.querySelectorAll('[data-confirmer-nature-id]:checked')
+  ).map(function (caseCochee) {
+    return caseCochee.dataset.confirmerNatureId;
+  });
+
+  etat.enCours = true;
+  mettreAJourBoutonImportReferentiel();
+  google.script.run
+    .withSuccessHandler(function (resultat) {
+      if (!etatApplication.importReferentiel) return;
+      etat.resultat = resultat;
+      etat.enCours = false;
+      afficherResultatImportReferentiel_(resultat);
+      afficherEtapeImportReferentiel_(6);
+      actualiserReferentielApresImport_(resultat);
+    })
+    .withFailureHandler(function (erreur) {
+      if (!etatApplication.importReferentiel) return;
+      etat.enCours = false;
+      mettreAJourBoutonImportReferentiel();
+      afficherToast(extraireMessageErreur(erreur), true);
+    })
+    .importerReferentielXlsx(
+      etat.previsualisation.idPlan,
+      confirmation,
+      idsNatures,
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+
+function afficherResultatImportReferentiel_(resultat) {
+  document.getElementById('contenuResultatImportReferentiel').innerHTML = `
+    <div class="grille-indicateurs-import-referentiel">
+      ${indicateurImportReferentiel_('Formations traitées', resultat.formationsTraitees)}
+      ${indicateurImportReferentiel_('Catégories créées', resultat.categoriesCreees)}
+      ${indicateurImportReferentiel_('Catégories réutilisées', resultat.categoriesReutilisees)}
+      ${indicateurImportReferentiel_('Items créés', resultat.itemsCrees)}
+      ${indicateurImportReferentiel_('Items existants', resultat.itemsExistants)}
+      ${indicateurImportReferentiel_('Natures renseignées', resultat.naturesRenseignees)}
+      ${indicateurImportReferentiel_('Lignes ignorées', resultat.lignesIgnorees)}
+      ${indicateurImportReferentiel_('Anomalies', resultat.anomalies)}
+    </div>
+    <div class="validation-ok">✓ Import ${echapperHtml(resultat.idImport)} validé après écriture.</div>
+  `;
+}
+
+
+function actualiserReferentielApresImport_(resultat) {
+  const formation = Array.isArray(resultat.formations) && resultat.formations[0];
+  if (!formation) return;
+  etatApplication.formationReferentielActive = formation;
+  const select = document.getElementById('formationReferentiel');
+  if (select) select.value = formation;
+  chargerDonneesReferentiel();
+}
+
+
+function voirReferentielApresImport_() {
+  const resultat = etatApplication.importReferentiel &&
+    etatApplication.importReferentiel.resultat;
+  fermerImportReferentiel();
+  if (resultat) actualiserReferentielApresImport_(resultat);
+}
+
+
+function indicateurImportReferentiel_(libelle, valeur) {
+  return `
+    <div class="indicateur-import-referentiel">
+      <span>${echapperHtml(libelle)}</span>
+      <strong>${Number(valeur) || 0}</strong>
+    </div>
+  `;
+}
+
+
+function construireListeAnomaliesImportReferentiel_(anomalies) {
+  if (!anomalies.length) {
+    return '<div class="validation-ok">✓ Aucune anomalie détectée.</div>';
+  }
+  return `
+    <h4>Anomalies signalées</h4>
+    <ul class="liste-anomalies-import-referentiel">
+      ${anomalies.map(function (anomalie) {
+        return `<li>Ligne ${Number(anomalie.ligne) || '—'} — ${echapperHtml(anomalie.message || anomalie.code || 'Anomalie')}</li>`;
+      }).join('')}
+    </ul>
+  `;
+}
+
+
+function formaterTailleImportReferentiel_(octets) {
+  const valeur = Number(octets) || 0;
+  if (valeur < 1024) return valeur + ' o';
+  if (valeur < 1024 * 1024) return (valeur / 1024).toFixed(1) + ' Ko';
+  return (valeur / (1024 * 1024)).toFixed(2) + ' Mo';
+}
+
 /* =====================================================
    SESSIONS
 ===================================================== */
@@ -7268,8 +8428,11 @@ function afficherListeSessions() {
   const corps = document.getElementById(
     'corpsTableauSessions'
   );
+  const listeCartes = document.getElementById(
+    'listeCartesSessions'
+  );
 
-  if (!corps) {
+  if (!corps && !listeCartes) {
     return;
   }
 
@@ -7287,80 +8450,146 @@ function afficherListeSessions() {
   }
 
   if (!sessions.length) {
-    corps.innerHTML = `
-      <tr>
-        <td colspan="8" class="etat-vide">
-          Aucune séance enregistrée pour le moment.
-        </td>
-      </tr>
-    `;
-    return;
-  }
-
-  corps.innerHTML = sessions
-    .map(function (session) {
-      const horaires = [
-        session.heureDebut,
-        session.heureFin
-      ]
-        .filter(Boolean)
-        .join(' – ');
-
-      const formateurs = Array.isArray(
-        session.formateurs
-      ) && session.formateurs.length
-        ? session.formateurs
-          .map(echapperHtml)
-          .join('<br>')
-        : '—';
-
-      return `
+    if (corps) {
+      corps.innerHTML = `
         <tr>
-          <td>
-            <strong>
-              ${echapperHtml(
-                afficherDateFrancaise(session.date) || '—'
-              )}
-            </strong>
-          </td>
-          <td>${echapperHtml(horaires || '—')}</td>
-          <td>
-            <span class="badge-formation-session">
-              ${echapperHtml(session.formation || '—')}
-            </span>
-          </td>
-          <td>${formateurs}</td>
-          <td>
-            <span class="nombre-participants-session">
-              ${Number(session.nombreStagiaires) || 0}
-            </span>
-          </td>
-          <td>
-            ${echapperHtml(
-              formaterHeuresFormation(
-                session.dureeHeures
-              )
-            )}
-          </td>
-          <td class="remarques-tableau-session">
-            ${echapperHtml(session.remarques || '—')}
-          </td>
-          <td class="colonne-actions-session">
-            <button
-              type="button"
-              class="bouton-consulter-session"
-              data-session-id="${echapperHtml(session.idSession)}"
-              onclick="consulterSession(this.dataset.sessionId)"
-              aria-label="Consulter la séance du ${echapperHtml(afficherDateFrancaise(session.date) || '')}"
-            >
-              <span aria-hidden="true">👁</span>
-              Consulter
-            </button>
+          <td colspan="8" class="etat-vide">
+            Aucune séance enregistrée pour le moment.
           </td>
         </tr>
       `;
-    })
-    .join('');
+    }
+    if (listeCartes) {
+      listeCartes.innerHTML = `
+        <div class="etat-vide">
+          Aucune séance enregistrée pour le moment.
+        </div>
+      `;
+    }
+    return;
+  }
+
+  if (corps) {
+    corps.innerHTML = sessions
+      .map(function (session) {
+        const horaires = [
+          session.heureDebut,
+          session.heureFin
+        ]
+          .filter(Boolean)
+          .join(' – ');
+
+        const formateurs = Array.isArray(
+          session.formateurs
+        ) && session.formateurs.length
+          ? session.formateurs
+            .map(echapperHtml)
+            .join('<br>')
+          : '—';
+
+        return `
+          <tr>
+            <td>
+              <strong>
+                ${echapperHtml(
+                  afficherDateFrancaise(session.date) || '—'
+                )}
+              </strong>
+            </td>
+            <td>${echapperHtml(horaires || '—')}</td>
+            <td>
+              <span class="badge-formation-session">
+                ${echapperHtml(session.formation || '—')}
+              </span>
+            </td>
+            <td>${formateurs}</td>
+            <td>
+              <span class="nombre-participants-session">
+                ${Number(session.nombreStagiaires) || 0}
+              </span>
+            </td>
+            <td>
+              ${echapperHtml(
+                formaterHeuresFormation(
+                  session.dureeHeures
+                )
+              )}
+            </td>
+            <td class="remarques-tableau-session">
+              ${echapperHtml(session.remarques || '—')}
+            </td>
+            <td class="colonne-actions-session">
+              <button
+                type="button"
+                class="bouton-consulter-session"
+                data-session-id="${echapperHtml(session.idSession)}"
+                onclick="consulterSession(this.dataset.sessionId)"
+                aria-label="Consulter la séance du ${echapperHtml(afficherDateFrancaise(session.date) || '')}"
+              >
+                <span aria-hidden="true">👁</span>
+                Consulter
+              </button>
+            </td>
+          </tr>
+        `;
+      })
+      .join('');
+  }
+
+  if (listeCartes) {
+    listeCartes.innerHTML = sessions
+      .map(function (session) {
+        const horaires = [
+          session.heureDebut,
+          session.heureFin
+        ]
+          .filter(Boolean)
+          .join(' – ');
+
+        const date = afficherDateFrancaise(session.date) || '—';
+        const duree = formaterHeuresFormation(
+          session.dureeHeures
+        );
+
+        return `
+          <article class="carte-session-mobile">
+            <header class="entete-carte-session-mobile">
+              <strong>${echapperHtml(date)}</strong>
+              <span class="badge-formation-session">
+                ${echapperHtml(session.formation || '—')}
+              </span>
+            </header>
+            <div class="informations-carte-session-mobile">
+              <div>
+                <span>Horaires</span>
+                <strong>${echapperHtml(horaires || '—')}</strong>
+              </div>
+              <div>
+                <span>Durée</span>
+                <strong>${echapperHtml(duree || '—')}</strong>
+              </div>
+              <div>
+                <span>Stagiaires</span>
+                <strong>${Number(session.nombreStagiaires) || 0}</strong>
+              </div>
+            </div>
+            <footer>
+              <button
+                type="button"
+                class="bouton-consulter-session"
+                data-session-id="${echapperHtml(session.idSession)}"
+                onclick="consulterSession(this.dataset.sessionId)"
+                aria-label="Consulter la séance du ${echapperHtml(date)}"
+              >
+                <span aria-hidden="true">👁</span>
+                Consulter
+              </button>
+            </footer>
+          </article>
+        `;
+      })
+      .join('');
+  }
 }
 
 function consulterSession(idSession) {
@@ -7498,6 +8727,11 @@ function afficherFicheSession(session) {
         </div>
 
         <div class="actions-fiche-session">
+          ${creerBoutonFavori_(
+            'SESSION',
+            session.idSession,
+            'bouton-favori-fiche'
+          )}
           ${actionsEditionSession}
           <button
             type="button"
@@ -7563,6 +8797,7 @@ function afficherFicheSession(session) {
   `;
 
   document.body.appendChild(modal);
+  preparerErgonomieResponsivePage_(modal);
   document.body.classList.add('modal-ouverte');
 }
 
@@ -13070,6 +14305,7 @@ function ouvrirModalPreparationRestaurationAdministration_() {
 
   etatApplication.restaurationModaleFermable = false;
   etatApplication.rafraichirRestaurationApresFermeture = false;
+  obtenirEtatFavoris_().rechargementRestaurationEffectue = false;
 
   if (contenu) {
     contenu.innerHTML = `
@@ -13631,6 +14867,7 @@ function terminerInterfaceRestaurationAdministration_() {
   etatApplication.restaurationAdministration = etat;
   etatApplication.restaurationModaleFermable = true;
   etatApplication.rafraichirRestaurationApresFermeture = true;
+  rechargerFavorisApresRestauration_();
 
   basculerInterfacePendantRestauration_(false);
   afficherEtatRestaurationAdministration(etat);
@@ -13836,6 +15073,11 @@ function afficherFormationsAdministration() {
             : '<span class="badge-statut badge-gris">Non utilisée</span>'}
         </td>
         <td class="colonne-actions">
+          ${creerBoutonFavori_(
+            'FORMATION',
+            formation.idFormation,
+            'bouton-favori-tableau'
+          )}
           <button
             type="button"
             class="bouton-icone"

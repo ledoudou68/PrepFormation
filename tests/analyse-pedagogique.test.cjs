@@ -680,9 +680,9 @@ test('le calcul reste rapide avec plusieurs milliers de séances', () => {
   );
 });
 
-test('la version applicative est centralisée à 1.9.0', () => {
+test('la version applicative est centralisée à 1.9.3', () => {
   assert(metadonnees.includes(
-    "VERSION_APPLICATION_PREPFORMATION_ = '1.9.0'"
+    "VERSION_APPLICATION_PREPFORMATION_ = '1.9.3'"
   ));
 });
 
