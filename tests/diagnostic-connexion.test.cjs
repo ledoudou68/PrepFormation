@@ -99,7 +99,8 @@ function creerEnvironnementClient() {
     'contenu',
     'loader',
     'toast',
-    'resultatDiagnosticConnexionAdministration'
+    'resultatDiagnosticConnexionAdministration',
+    'resultatDiagnosticChargementAccueilAdministration'
   ].forEach(id => ajouterElement(id, []));
   elements.formulairePremiereConnexionFormateur.classList.add('masque');
   elements.motDePasseConnexionFormateur.type = 'password';
@@ -135,6 +136,14 @@ function creerEnvironnementClient() {
       getDonneesTableauBordAccueil(...parametres) {
         appels.push({
           nom: 'getDonneesTableauBordAccueil',
+          parametres,
+          succes: this.succes,
+          echec: this.echec
+        });
+      },
+      getFavoris(...parametres) {
+        appels.push({
+          nom: 'getFavoris',
           parametres,
           succes: this.succes,
           echec: this.echec
@@ -200,7 +209,6 @@ function creerEnvironnementClient() {
     filename: 'JavaScript.html'
   });
 
-  contexte.initialiserFavorisInterface_ = () => { horloge += 2; };
   contexte.appliquerDroitsInterface = () => { horloge += 2; };
   contexte.demarrerSurveillanceAdministration = () => { horloge += 1; };
   contexte.afficherLoader = () => { horloge += 1; };
@@ -234,6 +242,7 @@ assert(sourceInterface.includes(
   'const MODE_DIAGNOSTIC_CONNEXION_CLIENT_ = false;'
 ));
 assert(administrationHtml.includes('Diagnostic connexion'));
+assert(administrationHtml.includes('Diagnostic chargement accueil'));
 assert(administrationHtml.includes('Activer pour la prochaine connexion'));
 
 
@@ -251,6 +260,34 @@ assert(administrationHtml.includes('Activer pour la prochaine connexion'));
   assert.strictEqual(appel.parametres.length, 2);
   assert.strictEqual(
     vm.runInContext('etatApplication.diagnosticConnexionEnCours',
+      environnement.contexte),
+    null
+  );
+  appel.succes({
+    authentifie: true,
+    changementMotDePasseRequis: false,
+    jeton: 'JETON_NORMAL',
+    sessionUtilisateur: {
+      contexte: 'FORMATEUR',
+      estAdministrateur: false,
+      estFormateur: true,
+      droits: {}
+    }
+  });
+  const favoris = trouverDernierAppel(environnement, 'getFavoris');
+  const page = trouverDernierAppel(environnement, 'getPage');
+  assert.strictEqual(favoris.parametres.length, 2);
+  assert.strictEqual(page.parametres.length, 2);
+  page.succes('<section>Accueil</section>');
+  const accueil = trouverDernierAppel(
+    environnement,
+    'getDonneesTableauBordAccueil'
+  );
+  assert.strictEqual(accueil.parametres.length, 1);
+  accueil.succes({ indicateurs: {} });
+  favoris.succes([]);
+  assert.strictEqual(
+    vm.runInContext('etatApplication.dernierDiagnosticConnexion',
       environnement.contexte),
     null
   );
@@ -312,18 +349,84 @@ assert(administrationHtml.includes('Activer pour la prochaine connexion'));
     }
   });
 
+  const chargementFavoris = trouverDernierAppel(
+    environnement,
+    'getFavoris'
+  );
+  assert(chargementFavoris);
+  assert.strictEqual(chargementFavoris.parametres.length, 3);
   const chargementPage = trouverDernierAppel(environnement, 'getPage');
   assert(chargementPage);
+  assert.strictEqual(chargementPage.parametres.length, 3);
   environnement.fixerHorloge(250);
-  chargementPage.succes('<section>Accueil</section>');
+  chargementPage.succes({
+    html: '<section>Accueil</section>',
+    diagnosticAccueil: {
+      operation: 'CHARGEMENT_FRAGMENT_HTML',
+      verificationAccesMs: 15,
+      constructionHtmlMs: 25,
+      totalServeurMs: 40,
+      appelsAutresServices: [{
+        operation: 'VERIFICATION_ACCES_PAGE',
+        totalServeurMs: 15
+      }]
+    }
+  });
 
   const chargementAccueil = trouverDernierAppel(
     environnement,
     'getDonneesTableauBordAccueil'
   );
   assert(chargementAccueil);
+  assert.strictEqual(chargementAccueil.parametres.length, 2);
   environnement.fixerHorloge(600);
-  chargementAccueil.succes({ indicateurs: {} });
+  chargementAccueil.succes({
+    indicateurs: {},
+    diagnosticAccueil: {
+      operation: 'DONNEES_TABLEAU_BORD_ACCUEIL',
+      ouvertureSpreadsheetMs: 30,
+      recherchesMs: 20,
+      filtragesMs: 10,
+      trisMs: 5,
+      transformationsMs: 35,
+      totalServeurMs: 180,
+      lecturesFeuilles: [{
+        feuille: 'SESSIONS',
+        getSheetByNameMs: 5,
+        getDataRangeMs: 8,
+        getValuesMs: 50,
+        constructionTableMs: 2,
+        totalLectureMs: 65
+      }],
+      appelsAutresServices: [{
+        operation: 'SYNCHRONISATION_STATUTS_STAGIAIRES',
+        totalServeurMs: 70,
+        lecturesFeuilles: [{
+          feuille: 'STAGIAIRES',
+          totalLectureMs: 40
+        }]
+      }],
+      etapesTraitement: [{
+        operation: 'Tri des séances réalisées',
+        categorie: 'trisMs',
+        dureeMs: 5
+      }]
+    }
+  });
+
+  environnement.fixerHorloge(680);
+  chargementFavoris.succes({
+    favoris: [],
+    diagnosticAccueil: {
+      operation: 'CHARGEMENT_FAVORIS',
+      ouvertureSpreadsheetMs: 10,
+      totalServeurMs: 90,
+      lecturesFeuilles: [{
+        feuille: 'FAVORIS',
+        totalLectureMs: 55
+      }]
+    }
+  });
 
   const rapport = vm.runInContext(
     'etatApplication.dernierDiagnosticConnexion',
@@ -351,6 +454,47 @@ assert(administrationHtml.includes('Activer pour la prochaine connexion'));
     vm.runInContext('etatApplication.diagnosticConnexionEnCours',
       environnement.contexte),
     null
+  );
+  assert.strictEqual(rapport.accueil.operations.length, 3);
+  assert.deepStrictEqual(
+    Array.from(rapport.accueil.operations, operation => operation.ordre),
+    [1, 2, 3]
+  );
+  assert.deepStrictEqual(
+    Array.from(rapport.accueil.operations, operation => operation.nom),
+    [
+      'Chargement des favoris',
+      'Chargement du fragment HTML Accueil',
+      'Chargement des données du tableau de bord'
+    ]
+  );
+  assert.strictEqual(
+    rapport.accueil.operations[0].modeExecution,
+    'PARALLELE_AVEC_ACCUEIL'
+  );
+  assert.strictEqual(
+    rapport.accueil.operations[1].modeExecution,
+    'SEQUENTIEL_ETAPE_1'
+  );
+  assert.strictEqual(
+    rapport.accueil.operations[2].modeExecution,
+    'SEQUENTIEL_APRES_FRAGMENT_HTML'
+  );
+  assert.strictEqual(
+    rapport.accueil.operations[2].serveur.lecturesFeuilles[0].feuille,
+    'SESSIONS'
+  );
+  assert.strictEqual(
+    rapport.accueil.tempsServeurCumuleMs,
+    310
+  );
+  assert(rapport.accueil.tempsGoogleScriptRunCumuleMs > 0);
+  assert(rapport.accueil.tempsTraitementsClientMs > 0);
+  assert(rapport.accueil.tempsTotalChargementAccueilMs > 0);
+  assert(
+    environnement.elements
+      .resultatDiagnosticChargementAccueilAdministration
+      .innerHTML.includes('Temps serveur cumulé')
   );
 
   const traceJson = JSON.stringify(environnement.traces);

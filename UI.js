@@ -23,7 +23,14 @@ function include(nomFichier) {
     .getContent();
 }
 
-function getPage(nomPage, jetonUtilisateur) {
+function getPage(nomPage, jetonUtilisateur, optionsDiagnostic) {
+  const diagnosticActif =
+    typeof diagnosticChargementAccueilAutorise_ === 'function' &&
+    diagnosticChargementAccueilAutorise_(optionsDiagnostic);
+  const diagnostic = diagnosticActif
+    ? creerDiagnosticServeurChargementAccueil_('CHARGEMENT_FRAGMENT_HTML')
+    : null;
+  const debutTotal = diagnostic ? Date.now() : 0;
   const pagesAutorisees = [
     'Accueil',
     'Stagiaires',
@@ -41,10 +48,28 @@ function getPage(nomPage, jetonUtilisateur) {
     throw new Error('Page inconnue.');
   }
 
+  const debutVerificationAcces = diagnostic ? Date.now() : 0;
   verifierAccesPage_(nomPage, jetonUtilisateur);
+  if (diagnostic) {
+    diagnostic.verificationAccesMs =
+      Date.now() - debutVerificationAcces;
+    diagnostic.appelsAutresServices.push({
+      operation: 'VERIFICATION_ACCES_PAGE',
+      totalServeurMs: diagnostic.verificationAccesMs
+    });
+  }
 
-  return HtmlService
+  const debutConstructionHtml = diagnostic ? Date.now() : 0;
+  const html = HtmlService
     .createTemplateFromFile(nomPage)
     .evaluate()
     .getContent();
+  if (!diagnostic) return html;
+
+  diagnostic.constructionHtmlMs = Date.now() - debutConstructionHtml;
+  diagnostic.totalServeurMs = Date.now() - debutTotal;
+  return {
+    html: html,
+    diagnosticAccueil: diagnostic
+  };
 }

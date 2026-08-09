@@ -167,8 +167,12 @@ function lireStagiairesSansSynchronisation_() {
  * automatiquement. La feuille est modifiée uniquement lorsque
  * le statut calculé change ou que la date initiale manque.
  */
-function synchroniserStatutsStagiaires_() {
+function synchroniserStatutsStagiaires_(diagnostic) {
+  const debutTotalDiagnostic = diagnostic ? Date.now() : 0;
   if (restaurationBloqueEcritures_()) {
+    if (diagnostic) {
+      diagnostic.totalServeurMs = Date.now() - debutTotalDiagnostic;
+    }
     return {
       migres: 0,
       automatiquesMisAJour: 0,
@@ -176,9 +180,29 @@ function synchroniserStatutsStagiaires_() {
     };
   }
 
-  return executerMutationMetier_(function () {
-    const feuille = obtenirFeuilleStagiaires_();
-    const donnees = feuille.getDataRange().getValues();
+  const resultat = executerMutationMetier_(function () {
+    let debutEtape = diagnostic ? Date.now() : 0;
+    const feuille = obtenirFeuilleStagiaires_(diagnostic);
+
+    debutEtape = diagnostic ? Date.now() : 0;
+    const plageDonnees = feuille.getDataRange();
+    if (diagnostic) {
+      diagnostic.getDataRangeMs += Date.now() - debutEtape;
+    }
+    debutEtape = diagnostic ? Date.now() : 0;
+    const donnees = plageDonnees.getValues();
+    if (diagnostic) {
+      diagnostic.getValuesMs += Date.now() - debutEtape;
+      diagnostic.lecturesFeuilles.push({
+        feuille: 'STAGIAIRES',
+        getSheetByNameMs: 0,
+        getDataRangeMs: diagnostic.getDataRangeMs,
+        getValuesMs: diagnostic.getValuesMs,
+        constructionTableMs: 0,
+        totalLectureMs:
+          diagnostic.getDataRangeMs + diagnostic.getValuesMs
+      });
+    }
 
     if (donnees.length <= 1) {
       return {
@@ -187,9 +211,19 @@ function synchroniserStatutsStagiaires_() {
       };
     }
 
+    debutEtape = diagnostic ? Date.now() : 0;
     const index = creerIndexEntetes_(donnees[0]);
+    if (diagnostic) {
+      const dureeIndex = Date.now() - debutEtape;
+      diagnostic.recherchesMs += dureeIndex;
+      diagnostic.etapesTraitement.push({
+        operation: 'Indexation des colonnes STAGIAIRES',
+        categorie: 'recherchesMs',
+        dureeMs: dureeIndex
+      });
+    }
     const nombreSessionsParStagiaire =
-      compterSessionsRealiseesParStagiaire_();
+      compterSessionsRealiseesParStagiaire_(diagnostic);
     const maintenant = new Date();
     const aujourdHui = obtenirDateSansHeure_(maintenant);
     let migres = 0;
@@ -197,6 +231,7 @@ function synchroniserStatutsStagiaires_() {
     let modification = false;
     const changementsStatuts = [];
 
+    debutEtape = diagnostic ? Date.now() : 0;
     donnees.slice(1).forEach(function (ligne) {
       const uuid = String(ligne[index.UUID] || '').trim();
 
@@ -248,8 +283,18 @@ function synchroniserStatutsStagiaires_() {
         automatiquesMisAJour++;
       }
     });
+    if (diagnostic) {
+      const dureeTransformation = Date.now() - debutEtape;
+      diagnostic.transformationsMs += dureeTransformation;
+      diagnostic.etapesTraitement.push({
+        operation: 'Calcul des statuts automatiques',
+        categorie: 'transformationsMs',
+        dureeMs: dureeTransformation
+      });
+    }
 
     if (modification) {
+      debutEtape = diagnostic ? Date.now() : 0;
       feuille
         .getRange(
           2,
@@ -280,7 +325,11 @@ function synchroniserStatutsStagiaires_() {
         .setNumberFormat('dd/mm/yyyy hh:mm');
 
       SpreadsheetApp.flush();
+      if (diagnostic) {
+        diagnostic.ecrituresMs += Date.now() - debutEtape;
+      }
 
+      debutEtape = diagnostic ? Date.now() : 0;
       changementsStatuts.forEach(function (changement) {
         journaliserActionSensible_(
           changement.migrationManuelle
@@ -294,6 +343,9 @@ function synchroniserStatutsStagiaires_() {
           }
         );
       });
+      if (diagnostic) {
+        diagnostic.journalisationMs += Date.now() - debutEtape;
+      }
     }
 
     return {
@@ -301,21 +353,32 @@ function synchroniserStatutsStagiaires_() {
       automatiquesMisAJour: automatiquesMisAJour
     };
   });
+  if (diagnostic) {
+    diagnostic.totalServeurMs = Date.now() - debutTotalDiagnostic;
+  }
+  return resultat;
 }
 
 
-function compterSessionsRealiseesParStagiaire_() {
+function compterSessionsRealiseesParStagiaire_(diagnostic) {
+  const debutOuverture = diagnostic ? Date.now() : 0;
   const classeur = SpreadsheetApp.getActiveSpreadsheet();
+  if (diagnostic) {
+    diagnostic.ouvertureSpreadsheetMs += Date.now() - debutOuverture;
+  }
   const tableSessions = lireFeuillePourSuivi_(
     classeur,
-    'SESSIONS'
+    'SESSIONS',
+    diagnostic
   );
   const tablePresences = lireFeuillePourSuivi_(
     classeur,
-    'PRESENCES_STAGIAIRES'
+    'PRESENCES_STAGIAIRES',
+    diagnostic
   );
   const datesSessions = {};
   const aujourdHui = obtenirDateSansHeure_(new Date());
+  let debutEtape = diagnostic ? Date.now() : 0;
 
   if (
     Number.isInteger(tableSessions.index.ID_SESSION) &&
@@ -338,8 +401,18 @@ function compterSessionsRealiseesParStagiaire_() {
       }
     });
   }
+  if (diagnostic) {
+    const dureeIndexSessions = Date.now() - debutEtape;
+    diagnostic.recherchesMs += dureeIndexSessions;
+    diagnostic.etapesTraitement.push({
+      operation: 'Indexation des séances réalisées',
+      categorie: 'recherchesMs',
+      dureeMs: dureeIndexSessions
+    });
+  }
 
   const sessionsParStagiaire = {};
+  debutEtape = diagnostic ? Date.now() : 0;
 
   if (
     Number.isInteger(tablePresences.index.ID_SESSION) &&
@@ -364,8 +437,18 @@ function compterSessionsRealiseesParStagiaire_() {
       sessionsParStagiaire[idStagiaire].add(idSession);
     });
   }
+  if (diagnostic) {
+    const dureeIndexPresences = Date.now() - debutEtape;
+    diagnostic.recherchesMs += dureeIndexPresences;
+    diagnostic.etapesTraitement.push({
+      operation: 'Comptage des présences par stagiaire',
+      categorie: 'recherchesMs',
+      dureeMs: dureeIndexPresences
+    });
+  }
 
-  return Object.keys(sessionsParStagiaire).reduce(
+  debutEtape = diagnostic ? Date.now() : 0;
+  const compteur = Object.keys(sessionsParStagiaire).reduce(
     function (resultat, idStagiaire) {
       resultat[idStagiaire] =
         sessionsParStagiaire[idStagiaire].size;
@@ -373,6 +456,16 @@ function compterSessionsRealiseesParStagiaire_() {
     },
     {}
   );
+  if (diagnostic) {
+    const dureeTransformationCompteur = Date.now() - debutEtape;
+    diagnostic.transformationsMs += dureeTransformationCompteur;
+    diagnostic.etapesTraitement.push({
+      operation: 'Construction du compteur de séances',
+      categorie: 'transformationsMs',
+      dureeMs: dureeTransformationCompteur
+    });
+  }
+  return compteur;
 }
 
 
@@ -1943,22 +2036,38 @@ function getStatutsStagiaires(jetonUtilisateur) {
 /**
  * Crée la feuille et ses entêtes si nécessaire.
  */
-function obtenirFeuilleStagiaires_() {
+function obtenirFeuilleStagiaires_(diagnostic) {
+  const debutOuverture = diagnostic ? Date.now() : 0;
   const classeur =
     SpreadsheetApp.getActiveSpreadsheet();
+  if (diagnostic) {
+    diagnostic.ouvertureSpreadsheetMs += Date.now() - debutOuverture;
+  }
+  const debutPreparation = diagnostic ? Date.now() : 0;
   const feuille = assurerFeuilleMigration_(
     classeur,
     CONFIG_STAGIAIRES.feuille
   );
+  if (diagnostic) {
+    diagnostic.preparationFeuilleMs +=
+      Date.now() - debutPreparation;
+  }
 
-  const entetes = feuille
-    .getRange(
-      1,
-      1,
-      1,
-      feuille.getLastColumn()
-    )
-    .getValues()[0];
+  let debutPlageEntetes = diagnostic ? Date.now() : 0;
+  const plageEntetes = feuille.getRange(
+    1,
+    1,
+    1,
+    feuille.getLastColumn()
+  );
+  if (diagnostic) {
+    diagnostic.getRangeMs += Date.now() - debutPlageEntetes;
+  }
+  debutPlageEntetes = diagnostic ? Date.now() : 0;
+  const entetes = plageEntetes.getValues()[0];
+  if (diagnostic) {
+    diagnostic.getValuesMs += Date.now() - debutPlageEntetes;
+  }
 
   CONFIG_STAGIAIRES.colonnes.forEach(
     function (colonne) {
@@ -2227,22 +2336,55 @@ function nettoyerTelephone_(valeur) {
 /**
  * Lit une feuille facultative utilisée par la synthèse.
  */
-function lireFeuillePourSuivi_(classeur, nomFeuille) {
+function lireFeuillePourSuivi_(classeur, nomFeuille, diagnostic) {
+  const lecture = diagnostic ? {
+    feuille: String(nomFeuille || ''),
+    getSheetByNameMs: 0,
+    getDataRangeMs: 0,
+    getValuesMs: 0,
+    constructionTableMs: 0,
+    totalLectureMs: 0
+  } : null;
+  const debutTotal = lecture ? Date.now() : 0;
+  let debutEtape = lecture ? Date.now() : 0;
   const feuille = classeur.getSheetByName(nomFeuille);
+  if (lecture) {
+    lecture.getSheetByNameMs = Date.now() - debutEtape;
+  }
 
   if (!feuille || feuille.getLastRow() < 1) {
+    if (lecture) {
+      lecture.totalLectureMs = Date.now() - debutTotal;
+      diagnostic.lecturesFeuilles.push(lecture);
+    }
     return {
       index: {},
       lignes: []
     };
   }
 
-  const donnees = feuille.getDataRange().getValues();
+  debutEtape = lecture ? Date.now() : 0;
+  const plage = feuille.getDataRange();
+  if (lecture) {
+    lecture.getDataRangeMs = Date.now() - debutEtape;
+  }
+  debutEtape = lecture ? Date.now() : 0;
+  const donnees = plage.getValues();
+  if (lecture) {
+    lecture.getValuesMs = Date.now() - debutEtape;
+  }
 
-  return {
+  debutEtape = lecture ? Date.now() : 0;
+  const table = {
     index: creerIndexEntetes_(donnees[0]),
     lignes: donnees.slice(1)
   };
+  if (lecture) {
+    lecture.constructionTableMs = Date.now() - debutEtape;
+    lecture.totalLectureMs = Date.now() - debutTotal;
+    diagnostic.lecturesFeuilles.push(lecture);
+  }
+  return table;
 }
 
 

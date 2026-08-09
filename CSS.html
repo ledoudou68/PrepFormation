@@ -4650,6 +4650,69 @@ body:not(.application-authentifiee) > .application {
   margin-top: 12px;
 }
 
+.diagnostic-chargement-accueil-administration {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--bordure);
+}
+
+.diagnostic-chargement-accueil-administration h4 {
+  margin: 0 0 12px;
+}
+
+.liste-operations-diagnostic-accueil {
+  display: grid;
+  gap: 12px;
+}
+
+.operation-diagnostic-accueil {
+  padding: 14px;
+  border: 1px solid var(--bordure);
+  border-radius: 10px;
+  background: var(--fond-secondaire, #f8fafc);
+}
+
+.entete-operation-diagnostic-accueil {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.entete-operation-diagnostic-accueil > div {
+  display: grid;
+  gap: 3px;
+}
+
+.entete-operation-diagnostic-accueil span {
+  color: var(--texte-secondaire);
+  font-size: 0.88rem;
+}
+
+.synthese-operation-diagnostic-accueil {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.synthese-operation-diagnostic-accueil > div {
+  display: grid;
+  gap: 3px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--fond-principal, #fff);
+}
+
+.synthese-operation-diagnostic-accueil span {
+  color: var(--texte-secondaire);
+  font-size: 0.82rem;
+}
+
+.resume-diagnostic-accueil {
+  margin-top: 12px;
+}
+
 .details-diagnostic-connexion-administration summary {
   cursor: pointer;
   font-weight: 600;
@@ -4667,6 +4730,10 @@ body:not(.application-authentifiee) > .application {
   gap: 16px;
   padding: 7px 0;
   border-bottom: 1px solid var(--bordure);
+}
+
+.liste-diagnostic-connexion-administration h5 {
+  margin: 8px 0 2px;
 }
 
 .entete-diagnostic-administration h2,
@@ -5801,6 +5868,15 @@ body:not(.application-authentifiee) > .application {
 
   .entete-diagnostic-connexion-administration button {
     width: 100%;
+  }
+
+  .entete-operation-diagnostic-accueil {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .synthese-operation-diagnostic-accueil {
+    grid-template-columns: 1fr;
   }
 
   .entete-sauvegardes-administration,

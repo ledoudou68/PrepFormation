@@ -24,30 +24,84 @@ const COLONNES_FAVORIS_ = [
  * exclusivement depuis sa session serveur. La clé locale reste utilisée
  * pour l'administrateur et pour une migration volontaire des anciens favoris.
  */
-function getFavoris(utilisateurCle, jetonUtilisateur) {
+function getFavoris(
+  utilisateurCle,
+  jetonUtilisateur,
+  optionsDiagnostic
+) {
+  const diagnosticActif =
+    typeof diagnosticChargementAccueilAutorise_ === 'function' &&
+    diagnosticChargementAccueilAutorise_(optionsDiagnostic);
+  const diagnostic = diagnosticActif
+    ? creerDiagnosticServeurChargementAccueil_('CHARGEMENT_FAVORIS')
+    : null;
+  const debutTotal = diagnostic ? Date.now() : 0;
+  let debutEtape = diagnostic ? Date.now() : 0;
   const session = exigerUtilisateurAuthentifie_(jetonUtilisateur);
+  if (diagnostic) {
+    diagnostic.authentificationMs = Date.now() - debutEtape;
+  }
+
+  debutEtape = diagnostic ? Date.now() : 0;
   const cle = resoudreCleProprietaireFavoris_(session, utilisateurCle);
+  ajouterDureeDiagnosticFavorisAccueil_(
+    diagnostic,
+    'recherchesMs',
+    debutEtape,
+    'Résolution du propriétaire des favoris'
+  );
+
+  debutEtape = diagnostic ? Date.now() : 0;
   const classeur = SpreadsheetApp.getActiveSpreadsheet();
-  const tableFavoris = lireTableFavoris_(classeur, 'FAVORIS', true);
+  if (diagnostic) {
+    diagnostic.ouvertureSpreadsheetMs = Date.now() - debutEtape;
+  }
+  const tableFavoris = lireTableFavoris_(
+    classeur,
+    'FAVORIS',
+    true,
+    diagnostic
+  );
+
+  debutEtape = diagnostic ? Date.now() : 0;
   const lignes = tableFavoris.lignes.filter(function (ligne) {
     return valeurFavoris_(tableFavoris, ligne, 'UTILISATEUR_CLE') === cle;
   });
+  ajouterDureeDiagnosticFavorisAccueil_(
+    diagnostic,
+    'filtragesMs',
+    debutEtape,
+    'Filtrage des favoris du propriétaire'
+  );
 
   if (!lignes.length) {
-    return [];
+    return finaliserFavorisAvecDiagnosticAccueil_(
+      [],
+      diagnostic,
+      debutTotal
+    );
   }
 
+  debutEtape = diagnostic ? Date.now() : 0;
   const typesNecessaires = new Set(lignes.map(function (ligne) {
     return normaliserTypeFavori_(
       valeurFavoris_(tableFavoris, ligne, 'TYPE')
     );
   }).filter(Boolean));
+  ajouterDureeDiagnosticFavorisAccueil_(
+    diagnostic,
+    'recherchesMs',
+    debutEtape,
+    'Identification des types de favoris'
+  );
   const indexObjets = construireIndexObjetsFavoris_(
     classeur,
-    typesNecessaires
+    typesNecessaires,
+    diagnostic
   );
 
-  return lignes.map(function (ligne) {
+  debutEtape = diagnostic ? Date.now() : 0;
+  const favorisPublics = lignes.map(function (ligne) {
     const type = normaliserTypeFavori_(
       valeurFavoris_(tableFavoris, ligne, 'TYPE')
     );
@@ -77,10 +131,64 @@ function getFavoris(utilisateurCle, jetonUtilisateur) {
       },
       objet
     );
-  }).sort(function (a, b) {
+  });
+  ajouterDureeDiagnosticFavorisAccueil_(
+    diagnostic,
+    'transformationsMs',
+    debutEtape,
+    'Construction des favoris publics'
+  );
+
+  debutEtape = diagnostic ? Date.now() : 0;
+  favorisPublics.sort(function (a, b) {
     return String(b.dateCreation || '').localeCompare(
       String(a.dateCreation || '')
     ) || String(a.idFavori).localeCompare(String(b.idFavori));
+  });
+  ajouterDureeDiagnosticFavorisAccueil_(
+    diagnostic,
+    'trisMs',
+    debutEtape,
+    'Tri des favoris'
+  );
+  return finaliserFavorisAvecDiagnosticAccueil_(
+    favorisPublics,
+    diagnostic,
+    debutTotal
+  );
+}
+
+
+function finaliserFavorisAvecDiagnosticAccueil_(
+  favoris,
+  diagnostic,
+  debutTotal
+) {
+  if (!diagnostic) return favoris;
+  const debutConstruction = Date.now();
+  diagnostic.constructionReponseMs =
+    Date.now() - debutConstruction;
+  diagnostic.totalServeurMs = Date.now() - debutTotal;
+  return {
+    favoris: favoris,
+    diagnosticAccueil: diagnostic
+  };
+}
+
+
+function ajouterDureeDiagnosticFavorisAccueil_(
+  diagnostic,
+  propriete,
+  debut,
+  libelle
+) {
+  if (!diagnostic) return;
+  const duree = Math.max(0, Date.now() - debut);
+  diagnostic[propriete] = Number(diagnostic[propriete] || 0) + duree;
+  diagnostic.etapesTraitement.push({
+    operation: String(libelle || propriete),
+    categorie: String(propriete || ''),
+    dureeMs: duree
   });
 }
 
@@ -377,7 +485,7 @@ function trouverObjetFavori_(classeur, type, identifiant) {
 }
 
 
-function construireIndexObjetsFavoris_(classeur, types) {
+function construireIndexObjetsFavoris_(classeur, types, diagnostic) {
   const indexObjets = {};
   const besoins = types || new Set();
   const besoinFormations = ['STAGIAIRE', 'SESSION', 'FORMATION', 'ITEM']
@@ -385,12 +493,17 @@ function construireIndexObjetsFavoris_(classeur, types) {
       return besoins.has(type);
     });
   const tableFormations = besoinFormations
-    ? lireTableFavoris_(classeur, 'FORMATIONS', false)
+    ? lireTableFavoris_(classeur, 'FORMATIONS', false, diagnostic)
     : tableFavorisVide_();
   const formations = construireIndexFormationsFavoris_(tableFormations);
 
   if (besoins.has('STAGIAIRE')) {
-    const table = lireTableFavoris_(classeur, 'STAGIAIRES', false);
+    const table = lireTableFavoris_(
+      classeur,
+      'STAGIAIRES',
+      false,
+      diagnostic
+    );
     table.lignes.forEach(function (ligne) {
       const id = valeurFavoris_(table, ligne, 'UUID');
       if (!id) {
@@ -412,7 +525,12 @@ function construireIndexObjetsFavoris_(classeur, types) {
   }
 
   if (besoins.has('FORMATEUR')) {
-    const table = lireTableFavoris_(classeur, 'FORMATEURS', false);
+    const table = lireTableFavoris_(
+      classeur,
+      'FORMATEURS',
+      false,
+      diagnostic
+    );
     table.lignes.forEach(function (ligne) {
       const id = valeurFavoris_(table, ligne, 'ID_FORMATEUR');
       if (!id) {
@@ -445,7 +563,12 @@ function construireIndexObjetsFavoris_(classeur, types) {
   }
 
   if (besoins.has('SESSION')) {
-    const table = lireTableFavoris_(classeur, 'SESSIONS', false);
+    const table = lireTableFavoris_(
+      classeur,
+      'SESSIONS',
+      false,
+      diagnostic
+    );
     table.lignes.forEach(function (ligne) {
       const id = valeurFavoris_(table, ligne, 'ID_SESSION');
       if (!id) {
@@ -480,7 +603,8 @@ function construireIndexObjetsFavoris_(classeur, types) {
     const tableCategories = lireTableFavoris_(
       classeur,
       'CATEGORIES',
-      false
+      false,
+      diagnostic
     );
     const categories = {};
     tableCategories.lignes.forEach(function (ligne) {
@@ -497,7 +621,12 @@ function construireIndexObjetsFavoris_(classeur, types) {
         );
       }
     });
-    const table = lireTableFavoris_(classeur, 'REFERENTIEL', false);
+    const table = lireTableFavoris_(
+      classeur,
+      'REFERENTIEL',
+      false,
+      diagnostic
+    );
     table.lignes.forEach(function (ligne) {
       const id = valeurFavoris_(table, ligne, 'ID_ITEM');
       if (!id) {
@@ -563,8 +692,26 @@ function resoudreFormationFavoris_(formations, valeur) {
 }
 
 
-function lireTableFavoris_(classeur, nomFeuille, obligatoire) {
+function lireTableFavoris_(
+  classeur,
+  nomFeuille,
+  obligatoire,
+  diagnostic
+) {
+  const lecture = diagnostic ? {
+    feuille: String(nomFeuille || ''),
+    getSheetByNameMs: 0,
+    getDataRangeMs: 0,
+    getValuesMs: 0,
+    constructionTableMs: 0,
+    totalLectureMs: 0
+  } : null;
+  const debutTotal = lecture ? Date.now() : 0;
+  let debutEtape = lecture ? Date.now() : 0;
   const feuille = classeur.getSheetByName(nomFeuille);
+  if (lecture) {
+    lecture.getSheetByNameMs = Date.now() - debutEtape;
+  }
   if (!feuille || feuille.getLastRow() < 1 || feuille.getLastColumn() < 1) {
     if (obligatoire) {
       throw new Error(
@@ -572,10 +719,25 @@ function lireTableFavoris_(classeur, nomFeuille, obligatoire) {
         ' est absente. Exécute les migrations de schéma.'
       );
     }
+    if (lecture) {
+      lecture.totalLectureMs = Date.now() - debutTotal;
+      diagnostic.lecturesFeuilles.push(lecture);
+    }
     return tableFavorisVide_();
   }
 
-  const valeurs = feuille.getDataRange().getValues();
+  debutEtape = lecture ? Date.now() : 0;
+  const plage = feuille.getDataRange();
+  if (lecture) {
+    lecture.getDataRangeMs = Date.now() - debutEtape;
+  }
+  debutEtape = lecture ? Date.now() : 0;
+  const valeurs = plage.getValues();
+  if (lecture) {
+    lecture.getValuesMs = Date.now() - debutEtape;
+  }
+
+  debutEtape = lecture ? Date.now() : 0;
   const entetes = valeurs[0].map(function (entete) {
     return normaliserFavoris_(entete).toUpperCase().replace(/ /g, '_');
   });
@@ -598,11 +760,17 @@ function lireTableFavoris_(classeur, nomFeuille, obligatoire) {
     }
   }
 
-  return {
+  const table = {
     feuille: feuille,
     index: index,
     lignes: valeurs.slice(1)
   };
+  if (lecture) {
+    lecture.constructionTableMs = Date.now() - debutEtape;
+    lecture.totalLectureMs = Date.now() - debutTotal;
+    diagnostic.lecturesFeuilles.push(lecture);
+  }
+  return table;
 }
 
 

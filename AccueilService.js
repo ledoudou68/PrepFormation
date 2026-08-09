@@ -4,13 +4,47 @@
  * Construit en une seule lecture le tableau de bord d'accueil.
  * Aucune donnée n'est créée ou modifiée par cette fonction.
  */
-function getDonneesTableauBordAccueil(jetonUtilisateur) {
+function getDonneesTableauBordAccueil(
+  jetonUtilisateur,
+  optionsDiagnostic
+) {
+  const diagnosticActif = diagnosticChargementAccueilAutorise_(
+    optionsDiagnostic
+  );
+  const diagnostic = diagnosticActif
+    ? creerDiagnosticServeurChargementAccueil_(
+      'DONNEES_TABLEAU_BORD_ACCUEIL'
+    )
+    : null;
+  const debutTotal = diagnostic ? Date.now() : 0;
+  const debutAuthentification = diagnostic ? Date.now() : 0;
   const sessionUtilisateur = exigerUtilisateurAuthentifie_(
     jetonUtilisateur
   );
-  synchroniserStatutsStagiaires_();
+  if (diagnostic) {
+    diagnostic.authentificationMs =
+      Date.now() - debutAuthentification;
+  }
 
+  const diagnosticSynchronisation = diagnostic
+    ? creerDiagnosticServiceAccueil_('SYNCHRONISATION_STATUTS_STAGIAIRES')
+    : null;
+  const debutSynchronisation = diagnostic ? Date.now() : 0;
+  synchroniserStatutsStagiaires_(diagnosticSynchronisation);
+  if (diagnostic) {
+    diagnostic.synchronisationStatutsMs =
+      Date.now() - debutSynchronisation;
+    diagnostic.appelsAutresServices.push(
+      diagnosticSynchronisation
+    );
+  }
+
+  const debutOuvertureSpreadsheet = diagnostic ? Date.now() : 0;
   const classeur = SpreadsheetApp.getActiveSpreadsheet();
+  if (diagnostic) {
+    diagnostic.ouvertureSpreadsheetMs =
+      Date.now() - debutOuvertureSpreadsheet;
+  }
   const tables = {};
 
   [
@@ -25,7 +59,8 @@ function getDonneesTableauBordAccueil(jetonUtilisateur) {
   ].forEach(function (nomFeuille) {
     tables[nomFeuille] = lireTableAccueil_(
       classeur,
-      nomFeuille
+      nomFeuille,
+      diagnostic
     );
   });
 
@@ -41,51 +76,115 @@ function getDonneesTableauBordAccueil(jetonUtilisateur) {
     0
   );
 
+  let debutEtape = diagnostic ? Date.now() : 0;
   const stagiaires = lireStagiairesAccueil_(
     tables.STAGIAIRES
   );
+  ajouterDureeDiagnosticAccueil_(
+    diagnostic,
+    'transformationsMs',
+    debutEtape,
+    'Transformation des stagiaires'
+  );
 
+  debutEtape = diagnostic ? Date.now() : 0;
   const stagiairesParId = {};
 
   stagiaires.forEach(function (stagiaire) {
     stagiairesParId[stagiaire.idStagiaire] = stagiaire;
   });
+  ajouterDureeDiagnosticAccueil_(
+    diagnostic,
+    'recherchesMs',
+    debutEtape,
+    'Indexation des stagiaires'
+  );
 
+  debutEtape = diagnostic ? Date.now() : 0;
   const formateursParId = lireFormateursAccueil_(
     tables.FORMATEURS
   );
+  ajouterDureeDiagnosticAccueil_(
+    diagnostic,
+    'transformationsMs',
+    debutEtape,
+    'Indexation des formateurs'
+  );
 
+  debutEtape = diagnostic ? Date.now() : 0;
   const sessions = lireSessionsAccueil_(
     tables.SESSIONS,
     aujourdHui
   );
+  ajouterDureeDiagnosticAccueil_(
+    diagnostic,
+    'transformationsMs',
+    debutEtape,
+    'Transformation des séances'
+  );
 
+  debutEtape = diagnostic ? Date.now() : 0;
   const sessionsParId = {};
 
   sessions.forEach(function (session) {
     sessionsParId[session.idSession] = session;
   });
+  ajouterDureeDiagnosticAccueil_(
+    diagnostic,
+    'recherchesMs',
+    debutEtape,
+    'Indexation des séances'
+  );
 
+  debutEtape = diagnostic ? Date.now() : 0;
   const presences = lirePresencesAccueil_(
     tables.PRESENCES_STAGIAIRES,
     sessionsParId
   );
+  ajouterDureeDiagnosticAccueil_(
+    diagnostic,
+    'transformationsMs',
+    debutEtape,
+    'Indexation des présences'
+  );
 
+  debutEtape = diagnostic ? Date.now() : 0;
   const prestations = lirePrestationsAccueil_(
     tables.PRESTATIONS_FORMATEURS,
     sessionsParId
   );
+  ajouterDureeDiagnosticAccueil_(
+    diagnostic,
+    'transformationsMs',
+    debutEtape,
+    'Transformation des prestations'
+  );
 
+  debutEtape = diagnostic ? Date.now() : 0;
   const itemsActifsParFormation =
     lireItemsActifsParFormationAccueil_(
       tables.CATEGORIES,
       tables.REFERENTIEL
     );
+  ajouterDureeDiagnosticAccueil_(
+    diagnostic,
+    'transformationsMs',
+    debutEtape,
+    'Indexation du référentiel actif'
+  );
 
+  debutEtape = diagnostic ? Date.now() : 0;
   const acquisParStagiaire = lireAcquisAccueil_(
     tables.EVALUATIONS
   );
+  ajouterDureeDiagnosticAccueil_(
+    diagnostic,
+    'transformationsMs',
+    debutEtape,
+    'Indexation des acquisitions'
+  );
 
+  debutEtape = diagnostic ? Date.now() : 0;
   const progressionParStagiaire = {};
 
   stagiaires.forEach(function (stagiaire) {
@@ -113,9 +212,16 @@ function getDonneesTableauBordAccueil(jetonUtilisateur) {
         : 0
     };
   });
+  ajouterDureeDiagnosticAccueil_(
+    diagnostic,
+    'transformationsMs',
+    debutEtape,
+    'Calcul des progressions'
+  );
 
-  const echeancesProches = stagiaires
-    .filter(function (stagiaire) {
+  debutEtape = diagnostic ? Date.now() : 0;
+  const stagiairesAvecEcheanceProche = stagiaires.filter(
+    function (stagiaire) {
       if (
         !preparationOuverteAccueil_(stagiaire.statut) ||
         !stagiaire.dateStageObjet
@@ -129,8 +235,18 @@ function getDonneesTableauBordAccueil(jetonUtilisateur) {
       );
 
       return jours >= 0 && jours < 30;
-    })
-    .map(function (stagiaire) {
+    }
+  );
+  ajouterDureeDiagnosticAccueil_(
+    diagnostic,
+    'filtragesMs',
+    debutEtape,
+    'Filtrage des échéances proches'
+  );
+
+  debutEtape = diagnostic ? Date.now() : 0;
+  const echeancesProches = stagiairesAvecEcheanceProche.map(
+    function (stagiaire) {
       const progression = progressionParStagiaire[
         stagiaire.idStagiaire
       ];
@@ -149,8 +265,17 @@ function getDonneesTableauBordAccueil(jetonUtilisateur) {
         ),
         progression: progression.pourcentage
       };
-    })
-    .sort(function (a, b) {
+    }
+  );
+  ajouterDureeDiagnosticAccueil_(
+    diagnostic,
+    'transformationsMs',
+    debutEtape,
+    'Construction des échéances proches'
+  );
+
+  debutEtape = diagnostic ? Date.now() : 0;
+  echeancesProches.sort(function (a, b) {
       return (
         a.joursRestants - b.joursRestants ||
         a.nom.localeCompare(
@@ -160,14 +285,30 @@ function getDonneesTableauBordAccueil(jetonUtilisateur) {
         )
       );
     });
+  ajouterDureeDiagnosticAccueil_(
+    diagnostic,
+    'trisMs',
+    debutEtape,
+    'Tri des échéances proches'
+  );
 
   const alertesPedagogiques = [];
 
-  stagiaires
-    .filter(function (stagiaire) {
+  debutEtape = diagnostic ? Date.now() : 0;
+  const stagiairesPreparationOuverte = stagiaires.filter(
+    function (stagiaire) {
       return preparationOuverteAccueil_(stagiaire.statut);
-    })
-    .forEach(function (stagiaire) {
+    }
+  );
+  ajouterDureeDiagnosticAccueil_(
+    diagnostic,
+    'filtragesMs',
+    debutEtape,
+    'Filtrage des préparations ouvertes'
+  );
+
+  debutEtape = diagnostic ? Date.now() : 0;
+  stagiairesPreparationOuverte.forEach(function (stagiaire) {
       const progression = progressionParStagiaire[
         stagiaire.idStagiaire
       ];
@@ -240,6 +381,12 @@ function getDonneesTableauBordAccueil(jetonUtilisateur) {
         );
       }
     });
+  ajouterDureeDiagnosticAccueil_(
+    diagnostic,
+    'transformationsMs',
+    debutEtape,
+    'Construction des alertes pédagogiques'
+  );
 
   const prioritesAlertes = {
     progression: 0,
@@ -247,6 +394,7 @@ function getDonneesTableauBordAccueil(jetonUtilisateur) {
     aucun_acquis: 2
   };
 
+  debutEtape = diagnostic ? Date.now() : 0;
   alertesPedagogiques.sort(function (a, b) {
     return (
       prioritesAlertes[a.type] -
@@ -258,7 +406,14 @@ function getDonneesTableauBordAccueil(jetonUtilisateur) {
       )
     );
   });
+  ajouterDureeDiagnosticAccueil_(
+    diagnostic,
+    'trisMs',
+    debutEtape,
+    'Tri des alertes pédagogiques'
+  );
 
+  debutEtape = diagnostic ? Date.now() : 0;
   const prestationsParSession = {};
 
   prestations.lignes.forEach(function (prestation) {
@@ -270,19 +425,42 @@ function getDonneesTableauBordAccueil(jetonUtilisateur) {
       prestation
     );
   });
+  ajouterDureeDiagnosticAccueil_(
+    diagnostic,
+    'recherchesMs',
+    debutEtape,
+    'Indexation des prestations par séance'
+  );
 
-  const dernieresSessions = sessions
-    .filter(function (session) {
+  debutEtape = diagnostic ? Date.now() : 0;
+  const sessionsRealisees = sessions.filter(function (session) {
       return session.realisee;
-    })
-    .sort(function (a, b) {
+    });
+  ajouterDureeDiagnosticAccueil_(
+    diagnostic,
+    'filtragesMs',
+    debutEtape,
+    'Filtrage des séances réalisées'
+  );
+
+  debutEtape = diagnostic ? Date.now() : 0;
+  sessionsRealisees.sort(function (a, b) {
       return (
         b.dateObjet - a.dateObjet ||
         String(b.heureDebut).localeCompare(
           String(a.heureDebut)
         )
       );
-    })
+    });
+  ajouterDureeDiagnosticAccueil_(
+    diagnostic,
+    'trisMs',
+    debutEtape,
+    'Tri des séances réalisées'
+  );
+
+  debutEtape = diagnostic ? Date.now() : 0;
+  const dernieresSessions = sessionsRealisees
     .slice(0, 5)
     .map(function (session) {
       const idsStagiaires = presences.idsParSession[
@@ -333,14 +511,30 @@ function getDonneesTableauBordAccueil(jetonUtilisateur) {
         dureeHeures: session.dureeHeures
       };
     });
+  ajouterDureeDiagnosticAccueil_(
+    diagnostic,
+    'transformationsMs',
+    debutEtape,
+    'Construction des dernières séances'
+  );
 
   const indemnisationsParFormateur = {};
 
-  prestations.lignes
-    .filter(function (prestation) {
+  debutEtape = diagnostic ? Date.now() : 0;
+  const prestationsADemander = prestations.lignes.filter(
+    function (prestation) {
       return prestation.statut === 'À demander';
-    })
-    .forEach(function (prestation) {
+    }
+  );
+  ajouterDureeDiagnosticAccueil_(
+    diagnostic,
+    'filtragesMs',
+    debutEtape,
+    'Filtrage des prestations à demander'
+  );
+
+  debutEtape = diagnostic ? Date.now() : 0;
+  prestationsADemander.forEach(function (prestation) {
       const idFormateur = prestation.idFormateur ||
         'formateur-inconnu';
 
@@ -359,10 +553,17 @@ function getDonneesTableauBordAccueil(jetonUtilisateur) {
       ].nombrePrestations++;
 
       indemnisationsParFormateur[
-        idFormateur
-      ].totalHeures += prestation.dureeHeures;
-    });
+      idFormateur
+    ].totalHeures += prestation.dureeHeures;
+  });
+  ajouterDureeDiagnosticAccueil_(
+    diagnostic,
+    'transformationsMs',
+    debutEtape,
+    'Regroupement des indemnisations'
+  );
 
+  debutEtape = diagnostic ? Date.now() : 0;
   const indemnisationsEnAttente = Object.keys(
     indemnisationsParFormateur
   ).map(function (idFormateur) {
@@ -373,7 +574,16 @@ function getDonneesTableauBordAccueil(jetonUtilisateur) {
     ) / 100;
 
     return groupe;
-  }).sort(function (a, b) {
+  });
+  ajouterDureeDiagnosticAccueil_(
+    diagnostic,
+    'transformationsMs',
+    debutEtape,
+    'Construction des indemnisations en attente'
+  );
+
+  debutEtape = diagnostic ? Date.now() : 0;
+  indemnisationsEnAttente.sort(function (a, b) {
     return (
       b.nombrePrestations - a.nombrePrestations ||
       a.formateur.localeCompare(
@@ -383,7 +593,14 @@ function getDonneesTableauBordAccueil(jetonUtilisateur) {
       )
     );
   });
+  ajouterDureeDiagnosticAccueil_(
+    diagnostic,
+    'trisMs',
+    debutEtape,
+    'Tri des indemnisations en attente'
+  );
 
+  debutEtape = diagnostic ? Date.now() : 0;
   const sessionsDuMois = sessions.filter(
     function (session) {
       return (
@@ -392,13 +609,27 @@ function getDonneesTableauBordAccueil(jetonUtilisateur) {
       );
     }
   );
+  ajouterDureeDiagnosticAccueil_(
+    diagnostic,
+    'filtragesMs',
+    debutEtape,
+    'Filtrage des séances du mois'
+  );
 
+  debutEtape = diagnostic ? Date.now() : 0;
   const idsSessionsDuMois = new Set(
     sessionsDuMois.map(function (session) {
       return session.idSession;
     })
   );
+  ajouterDureeDiagnosticAccueil_(
+    diagnostic,
+    'recherchesMs',
+    debutEtape,
+    'Indexation des séances du mois'
+  );
 
+  debutEtape = diagnostic ? Date.now() : 0;
   const heuresFormateursMois = prestations.lignes.reduce(
     function (total, prestation) {
       return idsSessionsDuMois.has(prestation.idSession)
@@ -407,47 +638,61 @@ function getDonneesTableauBordAccueil(jetonUtilisateur) {
     },
     0
   );
+  ajouterDureeDiagnosticAccueil_(
+    diagnostic,
+    'transformationsMs',
+    debutEtape,
+    'Calcul des heures formateurs du mois'
+  );
 
-  return {
+  debutEtape = diagnostic ? Date.now() : 0;
+  const indicateursStagiaires = {
+    aPreparer: stagiaires.filter(function (stagiaire) {
+      return normaliserTexteAccueil_(stagiaire.statut) ===
+        'A_PREPARER';
+    }).length,
+    enPreparation: stagiaires.filter(function (stagiaire) {
+      return normaliserTexteAccueil_(stagiaire.statut) ===
+        'EN_PREPARATION';
+    }).length,
+    stageAujourdhui: stagiaires.filter(function (stagiaire) {
+      return normaliserTexteAccueil_(stagiaire.statut) ===
+        'STAGE_AUJOURD_HUI';
+    }).length,
+    stagePasse: stagiaires.filter(function (stagiaire) {
+      return normaliserTexteAccueil_(stagiaire.statut) ===
+        'STAGE_PASSE';
+    }).length
+  };
+  const nombrePrestationsADemander = prestations.lignes.filter(
+    function (prestation) {
+      return (
+        sessionUtilisateur.estAdministrateur &&
+        prestation.statut === 'À demander'
+      );
+    }
+  ).length;
+  ajouterDureeDiagnosticAccueil_(
+    diagnostic,
+    'filtragesMs',
+    debutEtape,
+    'Calcul des indicateurs filtrés'
+  );
+
+  debutEtape = diagnostic ? Date.now() : 0;
+  const reponse = {
     indicateurs: {
-      stagiairesAPreparer: stagiaires.filter(
-        function (stagiaire) {
-          return normaliserTexteAccueil_(stagiaire.statut) ===
-            'A_PREPARER';
-        }
-      ).length,
-      stagiairesEnPreparation: stagiaires.filter(
-        function (stagiaire) {
-          return normaliserTexteAccueil_(stagiaire.statut) ===
-            'EN_PREPARATION';
-        }
-      ).length,
-      stagesAujourdhui: stagiaires.filter(
-        function (stagiaire) {
-          return normaliserTexteAccueil_(stagiaire.statut) ===
-            'STAGE_AUJOURD_HUI';
-        }
-      ).length,
-      stagesPassesNonClotures: stagiaires.filter(
-        function (stagiaire) {
-          return normaliserTexteAccueil_(stagiaire.statut) ===
-            'STAGE_PASSE';
-        }
-      ).length,
+      stagiairesAPreparer: indicateursStagiaires.aPreparer,
+      stagiairesEnPreparation: indicateursStagiaires.enPreparation,
+      stagesAujourdhui: indicateursStagiaires.stageAujourdhui,
+      stagesPassesNonClotures: indicateursStagiaires.stagePasse,
       sessionsMois: sessionsDuMois.length,
       heuresFormateursMois: Math.round(
         (sessionUtilisateur.estAdministrateur
           ? heuresFormateursMois
           : 0) * 100
       ) / 100,
-      prestationsADemander: prestations.lignes.filter(
-        function (prestation) {
-          return (
-            sessionUtilisateur.estAdministrateur &&
-            prestation.statut === 'À demander'
-          );
-        }
-      ).length
+      prestationsADemander: nombrePrestationsADemander
     },
     echeancesProches: echeancesProches,
     alertesPedagogiques: alertesPedagogiques,
@@ -458,6 +703,94 @@ function getDonneesTableauBordAccueil(jetonUtilisateur) {
         : [],
     dateActualisation: convertirDateHeureAccueil_(new Date())
   };
+
+  ajouterDureeDiagnosticAccueil_(
+    diagnostic,
+    'constructionReponseMs',
+    debutEtape,
+    'Construction de la réponse Accueil'
+  );
+  if (diagnostic) {
+    diagnostic.totalServeurMs = Date.now() - debutTotal;
+    reponse.diagnosticAccueil = diagnostic;
+  }
+  return reponse;
+}
+
+
+function diagnosticChargementAccueilAutorise_(optionsDiagnostic) {
+  const options = optionsDiagnostic || {};
+  if (options.actif !== true) return false;
+  if (options.modeClientExplicite === true) return true;
+
+  const jetonAdministrateur = String(
+    options.jetonAdministrateur || ''
+  ).trim();
+  if (!jetonAdministrateur) return false;
+
+  try {
+    exigerAdministrateurLectureSeule_(jetonAdministrateur);
+    return true;
+  } catch (erreur) {
+    return false;
+  }
+}
+
+
+function creerDiagnosticServeurChargementAccueil_(operation) {
+  return {
+    operation: String(operation || ''),
+    authentificationMs: 0,
+    ouvertureSpreadsheetMs: 0,
+    synchronisationStatutsMs: 0,
+    recherchesMs: 0,
+    filtragesMs: 0,
+    trisMs: 0,
+    transformationsMs: 0,
+    constructionReponseMs: 0,
+    totalServeurMs: 0,
+    lecturesFeuilles: [],
+    appelsAutresServices: [],
+    etapesTraitement: []
+  };
+}
+
+
+function creerDiagnosticServiceAccueil_(operation) {
+  return {
+    operation: String(operation || ''),
+    ouvertureSpreadsheetMs: 0,
+    preparationFeuilleMs: 0,
+    getRangeMs: 0,
+    getDataRangeMs: 0,
+    getValuesMs: 0,
+    recherchesMs: 0,
+    filtragesMs: 0,
+    trisMs: 0,
+    transformationsMs: 0,
+    ecrituresMs: 0,
+    journalisationMs: 0,
+    totalServeurMs: 0,
+    lecturesFeuilles: [],
+    etapesTraitement: []
+  };
+}
+
+
+function ajouterDureeDiagnosticAccueil_(
+  diagnostic,
+  propriete,
+  debut,
+  libelle
+) {
+  if (!diagnostic) return;
+  const duree = Math.max(0, Date.now() - debut);
+  diagnostic[propriete] = Number(diagnostic[propriete] || 0) + duree;
+  diagnostic.etapesTraitement.push({
+    operation: String(libelle || propriete),
+    categorie: String(propriete || ''),
+    dureeMs: duree
+  });
 }
 
 
@@ -839,19 +1172,52 @@ function creerAlerteAccueil_(
 }
 
 
-function lireTableAccueil_(classeur, nomFeuille) {
+function lireTableAccueil_(classeur, nomFeuille, diagnostic) {
+  const lecture = diagnostic ? {
+    feuille: String(nomFeuille || ''),
+    getSheetByNameMs: 0,
+    getDataRangeMs: 0,
+    getValuesMs: 0,
+    constructionTableMs: 0,
+    totalLectureMs: 0
+  } : null;
+  const debutTotal = lecture ? Date.now() : 0;
+  let debutEtape = lecture ? Date.now() : 0;
   const feuille = classeur.getSheetByName(nomFeuille);
+  if (lecture) {
+    lecture.getSheetByNameMs = Date.now() - debutEtape;
+  }
 
   if (!feuille || feuille.getLastRow() < 1) {
+    if (lecture) {
+      lecture.totalLectureMs = Date.now() - debutTotal;
+      diagnostic.lecturesFeuilles.push(lecture);
+    }
     return { index: {}, lignes: [] };
   }
 
-  const donnees = feuille.getDataRange().getValues();
+  debutEtape = lecture ? Date.now() : 0;
+  const plage = feuille.getDataRange();
+  if (lecture) {
+    lecture.getDataRangeMs = Date.now() - debutEtape;
+  }
+  debutEtape = lecture ? Date.now() : 0;
+  const donnees = plage.getValues();
+  if (lecture) {
+    lecture.getValuesMs = Date.now() - debutEtape;
+  }
 
-  return {
+  debutEtape = lecture ? Date.now() : 0;
+  const table = {
     index: creerIndexAccueil_(donnees[0]),
     lignes: donnees.slice(1)
   };
+  if (lecture) {
+    lecture.constructionTableMs = Date.now() - debutEtape;
+    lecture.totalLectureMs = Date.now() - debutTotal;
+    diagnostic.lecturesFeuilles.push(lecture);
+  }
+  return table;
 }
 
 

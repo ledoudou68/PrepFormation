@@ -220,8 +220,11 @@ function demarrerApplicationAuthentifiee_(
     etatApplication.derniereActiviteAdministration = Date.now();
   }
 
+  if (diagnosticConnexion) {
+    etatApplication.diagnosticConnexionEnCours = diagnosticConnexion;
+  }
   etatApplication.favoris = null;
-  initialiserFavorisInterface_();
+  initialiserFavorisInterface_(diagnosticConnexion);
   appliquerDroitsInterface();
   demarrerSurveillanceAdministration();
   masquerLoader();
@@ -231,7 +234,6 @@ function demarrerApplicationAuthentifiee_(
       maintenantDiagnosticConnexionClient_() - debutContexte;
     diagnosticConnexion.debutChargementAccueil =
       maintenantDiagnosticConnexionClient_();
-    etatApplication.diagnosticConnexionEnCours = diagnosticConnexion;
   }
 
   if (!etatApplication.interfaceAuthentifieeInitialisee) {
@@ -347,6 +349,11 @@ function demarrerDiagnosticConnexionClient_() {
     debutChargementAccueil: 0,
     serveur: {},
     client: {},
+    accueil: {
+      prochainOrdre: 1,
+      operations: []
+    },
+    finalise: false,
     interfaceUtilisable: false
   };
 }
@@ -389,14 +396,214 @@ function normaliserMetriquesDiagnosticConnexion_(metriques, origine) {
 }
 
 
-function finaliserDiagnosticConnexionClient_(
+function creerOptionsDiagnosticAccueilClient_(diagnosticConnexion) {
+  if (!diagnosticConnexion) return null;
+  return {
+    actif: true,
+    modeClientExplicite: true,
+    jetonAdministrateur: obtenirJetonAdministrateurApplication()
+  };
+}
+
+
+function demarrerOperationDiagnosticAccueil_(
   diagnosticConnexion,
-  interfaceUtilisable
+  nom,
+  modeExecution
 ) {
-  if (!diagnosticConnexion) return;
-  diagnosticConnexion.interfaceUtilisable = Boolean(interfaceUtilisable);
+  if (!diagnosticConnexion || !diagnosticConnexion.accueil) return null;
+  const operation = {
+    ordre: diagnosticConnexion.accueil.prochainOrdre++,
+    nom: String(nom || 'Opération Accueil'),
+    modeExecution: String(modeExecution || 'SEQUENTIEL'),
+    debutAppel: maintenantDiagnosticConnexionClient_(),
+    dureeGoogleScriptRunMs: 0,
+    traitementClientMs: 0,
+    dureeTotaleOperationMs: 0,
+    terminee: false,
+    serveur: {}
+  };
+  diagnosticConnexion.accueil.operations.push(operation);
+  return operation;
+}
+
+
+function recevoirOperationDiagnosticAccueil_(
+  diagnosticConnexion,
+  operation,
+  diagnosticServeur
+) {
+  if (!diagnosticConnexion || !operation) return;
+  operation.dureeGoogleScriptRunMs = Math.max(
+    0,
+    maintenantDiagnosticConnexionClient_() - operation.debutAppel
+  );
+  operation.serveur = normaliserDiagnosticServeurAccueil_(
+    diagnosticServeur
+  );
+}
+
+
+function terminerOperationDiagnosticAccueil_(
+  diagnosticConnexion,
+  operation,
+  debutTraitementClient
+) {
+  if (!diagnosticConnexion || !operation) return;
+  const maintenant = maintenantDiagnosticConnexionClient_();
+  operation.traitementClientMs = Math.max(
+    0,
+    maintenant - Number(debutTraitementClient || maintenant)
+  );
+  operation.dureeTotaleOperationMs = Math.max(
+    0,
+    maintenant - operation.debutAppel
+  );
+  operation.terminee = true;
+  if (diagnosticConnexion.finalise) {
+    publierRapportDiagnosticConnexion_(diagnosticConnexion, false);
+  }
+}
+
+
+function normaliserDiagnosticServeurAccueil_(diagnosticServeur) {
+  const source = diagnosticServeur || {};
+  const resultat = {
+    operation: String(source.operation || '').slice(0, 100)
+  };
+  [
+    'authentificationMs',
+    'verificationAccesMs',
+    'ouvertureSpreadsheetMs',
+    'synchronisationStatutsMs',
+    'preparationFeuilleMs',
+    'getRangeMs',
+    'getDataRangeMs',
+    'getValuesMs',
+    'recherchesMs',
+    'filtragesMs',
+    'trisMs',
+    'transformationsMs',
+    'ecrituresMs',
+    'journalisationMs',
+    'constructionHtmlMs',
+    'constructionReponseMs',
+    'totalServeurMs'
+  ].forEach(function (cle) {
+    const valeur = Number(source[cle]);
+    if (Number.isFinite(valeur) && valeur >= 0) {
+      resultat[cle] = Math.round(valeur * 100) / 100;
+    }
+  });
+
+  resultat.lecturesFeuilles = (source.lecturesFeuilles || [])
+    .map(normaliserLectureFeuilleDiagnosticAccueil_)
+    .filter(Boolean);
+  resultat.lecturesIndirectes = (source.lecturesIndirectes || [])
+    .map(function (nomFeuille) {
+      return String(nomFeuille || '').trim();
+    })
+    .filter(function (nomFeuille) {
+      return /^[A-Z0-9_]{1,80}$/.test(nomFeuille);
+    });
+  resultat.appelsAutresServices = (source.appelsAutresServices || [])
+    .map(normaliserDiagnosticServeurAccueil_);
+  resultat.etapesTraitement = (source.etapesTraitement || []).map(
+    function (etape) {
+      const duree = Number(etape.dureeMs);
+      return {
+        operation: String(etape.operation || '').slice(0, 120),
+        categorie: String(etape.categorie || '').slice(0, 60),
+        dureeMs: Number.isFinite(duree) && duree >= 0 ? duree : 0
+      };
+    }
+  );
+  return resultat;
+}
+
+
+function normaliserLectureFeuilleDiagnosticAccueil_(lecture) {
+  const nom = String(lecture && lecture.feuille || '').trim();
+  if (!/^[A-Z0-9_]{1,80}$/.test(nom)) return null;
+  const resultat = { feuille: nom };
+  [
+    'getSheetByNameMs',
+    'getRangeMs',
+    'getDataRangeMs',
+    'getValuesMs',
+    'constructionTableMs',
+    'totalLectureMs'
+  ].forEach(function (cle) {
+    const valeur = Number(lecture[cle]);
+    if (Number.isFinite(valeur) && valeur >= 0) {
+      resultat[cle] = Math.round(valeur * 100) / 100;
+    }
+  });
+  return resultat;
+}
+
+
+function construireDiagnosticAccueilClient_(diagnosticConnexion) {
+  const operations = (
+    diagnosticConnexion.accueil &&
+    diagnosticConnexion.accueil.operations || []
+  ).map(function (operation) {
+    return {
+      ordre: Number(operation.ordre || 0),
+      nom: String(operation.nom || '').slice(0, 100),
+      modeExecution: String(operation.modeExecution || '').slice(0, 80),
+      dureeGoogleScriptRunMs: Math.max(
+        0,
+        Number(operation.dureeGoogleScriptRunMs || 0)
+      ),
+      traitementClientMs: Math.max(
+        0,
+        Number(operation.traitementClientMs || 0)
+      ),
+      dureeTotaleOperationMs: Math.max(
+        0,
+        Number(operation.dureeTotaleOperationMs || 0)
+      ),
+      terminee: Boolean(operation.terminee),
+      serveur: normaliserDiagnosticServeurAccueil_(operation.serveur)
+    };
+  }).sort(function (a, b) {
+    return a.ordre - b.ordre;
+  });
+
+  return {
+    operations: operations,
+    tempsServeurCumuleMs: operations.reduce(function (total, operation) {
+      return total + Number(operation.serveur.totalServeurMs || 0);
+    }, 0),
+    tempsGoogleScriptRunCumuleMs: operations.reduce(
+      function (total, operation) {
+        return total + Number(operation.dureeGoogleScriptRunMs || 0);
+      },
+      0
+    ),
+    tempsTraitementsClientMs: operations.reduce(
+      function (total, operation) {
+        return total + Number(operation.traitementClientMs || 0);
+      },
+      0
+    ),
+    tempsTotalChargementAccueilMs: Math.max(
+      0,
+      Number(
+        diagnosticConnexion.client.chargementAccueilMs || 0
+      )
+    )
+  };
+}
+
+
+function publierRapportDiagnosticConnexion_(
+  diagnosticConnexion,
+  afficherConsole
+) {
   const rapport = {
-    date: new Date().toISOString(),
+    date: diagnosticConnexion.dateRapport || new Date().toISOString(),
     interfaceUtilisable: diagnosticConnexion.interfaceUtilisable,
     serveur: normaliserMetriquesDiagnosticConnexion_(
       diagnosticConnexion.serveur,
@@ -405,19 +612,35 @@ function finaliserDiagnosticConnexionClient_(
     client: normaliserMetriquesDiagnosticConnexion_(
       diagnosticConnexion.client,
       'client'
-    )
+    ),
+    accueil: construireDiagnosticAccueilClient_(diagnosticConnexion)
   };
-
+  diagnosticConnexion.dateRapport = rapport.date;
   etatApplication.dernierDiagnosticConnexion = rapport;
-  if (etatApplication.diagnosticConnexionEnCours === diagnosticConnexion) {
-    etatApplication.diagnosticConnexionEnCours = null;
-  }
 
-  if (typeof console !== 'undefined' && console.info) {
+  if (
+    afficherConsole &&
+    typeof console !== 'undefined' &&
+    console.info
+  ) {
     console.info('Diagnostic connexion PrepFormation', rapport);
   }
   if (typeof afficherDiagnosticConnexionAdministration_ === 'function') {
     afficherDiagnosticConnexionAdministration_();
+  }
+}
+
+
+function finaliserDiagnosticConnexionClient_(
+  diagnosticConnexion,
+  interfaceUtilisable
+) {
+  if (!diagnosticConnexion) return;
+  diagnosticConnexion.interfaceUtilisable = Boolean(interfaceUtilisable);
+  diagnosticConnexion.finalise = true;
+  publierRapportDiagnosticConnexion_(diagnosticConnexion, true);
+  if (etatApplication.diagnosticConnexionEnCours === diagnosticConnexion) {
+    etatApplication.diagnosticConnexionEnCours = null;
   }
 }
 
@@ -595,8 +818,28 @@ function chargerPage(nomPage) {
 
   afficherLoader();
 
-  google.script.run
-    .withSuccessHandler(function (html) {
+  const diagnosticConnexion = nomPage === 'Accueil'
+    ? etatApplication.diagnosticConnexionEnCours
+    : null;
+  const operationDiagnostic = demarrerOperationDiagnosticAccueil_(
+    diagnosticConnexion,
+    'Chargement du fragment HTML Accueil',
+    'SEQUENTIEL_ETAPE_1'
+  );
+  const execution = google.script.run
+    .withSuccessHandler(function (resultatPage) {
+      recevoirOperationDiagnosticAccueil_(
+        diagnosticConnexion,
+        operationDiagnostic,
+        resultatPage && resultatPage.diagnosticAccueil
+      );
+      const debutTraitementClient = operationDiagnostic
+        ? maintenantDiagnosticConnexionClient_()
+        : 0;
+      const html = resultatPage &&
+        typeof resultatPage.html === 'string'
+        ? resultatPage.html
+        : resultatPage;
       document.getElementById('contenu').innerHTML = html;
 
       etatApplication.pageActive = nomPage;
@@ -609,8 +852,23 @@ function chargerPage(nomPage) {
       preparerErgonomieResponsivePage_(
         document.getElementById('contenu')
       );
+      terminerOperationDiagnosticAccueil_(
+        diagnosticConnexion,
+        operationDiagnostic,
+        debutTraitementClient
+      );
     })
     .withFailureHandler(function (erreur) {
+      recevoirOperationDiagnosticAccueil_(
+        diagnosticConnexion,
+        operationDiagnostic,
+        null
+      );
+      terminerOperationDiagnosticAccueil_(
+        diagnosticConnexion,
+        operationDiagnostic,
+        maintenantDiagnosticConnexionClient_()
+      );
       if (
         nomPage === 'Accueil' &&
         etatApplication.diagnosticConnexionEnCours
@@ -621,11 +879,20 @@ function chargerPage(nomPage) {
         );
       }
       gererErreurServeur(erreur);
-    })
-    .getPage(
+    });
+
+  if (diagnosticConnexion) {
+    execution.getPage(
+      nomPage,
+      obtenirJetonUtilisateurApplication(),
+      creerOptionsDiagnosticAccueilClient_(diagnosticConnexion)
+    );
+  } else {
+    execution.getPage(
       nomPage,
       obtenirJetonUtilisateurApplication()
     );
+  }
 }
 
 function initialiserPageActive(nomPage) {
@@ -1300,10 +1567,10 @@ function obtenirEtatFavoris_() {
 }
 
 
-function initialiserFavorisInterface_() {
+function initialiserFavorisInterface_(diagnosticConnexion) {
   const etat = obtenirEtatFavoris_();
   etat.utilisateurCle = obtenirOuCreerCleUtilisateurFavoris_();
-  chargerFavorisUtilisateur_(false);
+  chargerFavorisUtilisateur_(false, diagnosticConnexion);
 }
 
 
@@ -1350,7 +1617,7 @@ function obtenirOuCreerCleUtilisateurFavoris_() {
 }
 
 
-function chargerFavorisUtilisateur_(forcer) {
+function chargerFavorisUtilisateur_(forcer, diagnosticConnexion) {
   const etat = obtenirEtatFavoris_();
   if (etat.chargement || (etat.charges && !forcer)) {
     return;
@@ -1359,24 +1626,65 @@ function chargerFavorisUtilisateur_(forcer) {
   etat.chargement = true;
   afficherPanneauFavoris_();
 
-  google.script.run
-    .withSuccessHandler(function (favoris) {
+  const operationDiagnostic = demarrerOperationDiagnosticAccueil_(
+    diagnosticConnexion,
+    'Chargement des favoris',
+    'PARALLELE_AVEC_ACCUEIL'
+  );
+  const execution = google.script.run
+    .withSuccessHandler(function (resultatFavoris) {
+      recevoirOperationDiagnosticAccueil_(
+        diagnosticConnexion,
+        operationDiagnostic,
+        resultatFavoris && resultatFavoris.diagnosticAccueil
+      );
+      const debutTraitementClient = operationDiagnostic
+        ? maintenantDiagnosticConnexionClient_()
+        : 0;
+      const favoris = resultatFavoris &&
+        Array.isArray(resultatFavoris.favoris)
+        ? resultatFavoris.favoris
+        : resultatFavoris;
       etat.chargement = false;
       etat.charges = true;
       remplacerFavorisClient_(favoris);
+      terminerOperationDiagnosticAccueil_(
+        diagnosticConnexion,
+        operationDiagnostic,
+        debutTraitementClient
+      );
     })
     .withFailureHandler(function (erreur) {
+      recevoirOperationDiagnosticAccueil_(
+        diagnosticConnexion,
+        operationDiagnostic,
+        null
+      );
       etat.chargement = false;
       etat.charges = false;
       afficherPanneauFavoris_(
         'Favoris indisponibles : ' + extraireMessageErreur(erreur),
         true
       );
-    })
-    .getFavoris(
+      terminerOperationDiagnosticAccueil_(
+        diagnosticConnexion,
+        operationDiagnostic,
+        maintenantDiagnosticConnexionClient_()
+      );
+    });
+
+  if (diagnosticConnexion) {
+    execution.getFavoris(
+      etat.utilisateurCle,
+      obtenirJetonUtilisateurApplication(),
+      creerOptionsDiagnosticAccueilClient_(diagnosticConnexion)
+    );
+  } else {
+    execution.getFavoris(
       etat.utilisateurCle,
       obtenirJetonUtilisateurApplication()
     );
+  }
 }
 
 
@@ -2327,9 +2635,26 @@ function afficherMessageRechercheGlobale_(message, erreur) {
 function initialiserPageAccueil() {
   afficherLoader();
 
-  google.script.run
+  const diagnosticConnexion =
+    etatApplication.diagnosticConnexionEnCours;
+  const operationDiagnostic = demarrerOperationDiagnosticAccueil_(
+    diagnosticConnexion,
+    'Chargement des données du tableau de bord',
+    'SEQUENTIEL_APRES_FRAGMENT_HTML'
+  );
+  const execution = google.script.run
     .withSuccessHandler(function (donnees) {
+      recevoirOperationDiagnosticAccueil_(
+        diagnosticConnexion,
+        operationDiagnostic,
+        donnees && donnees.diagnosticAccueil
+      );
       if (etatApplication.pageActive !== 'Accueil') {
+        terminerOperationDiagnosticAccueil_(
+          diagnosticConnexion,
+          operationDiagnostic,
+          maintenantDiagnosticConnexionClient_()
+        );
         if (etatApplication.diagnosticConnexionEnCours) {
           finaliserDiagnosticConnexionClient_(
             etatApplication.diagnosticConnexionEnCours,
@@ -2339,6 +2664,9 @@ function initialiserPageAccueil() {
         return;
       }
 
+      const debutTraitementClient = operationDiagnostic
+        ? maintenantDiagnosticConnexionClient_()
+        : 0;
       etatApplication.donneesAccueil = donnees || {};
       const debutRenduDiagnostic =
         etatApplication.diagnosticConnexionEnCours
@@ -2348,6 +2676,11 @@ function initialiserPageAccueil() {
         etatApplication.donneesAccueil
       );
       masquerLoader();
+      terminerOperationDiagnosticAccueil_(
+        diagnosticConnexion,
+        operationDiagnostic,
+        debutTraitementClient
+      );
       if (etatApplication.diagnosticConnexionEnCours) {
         const diagnosticConnexion =
           etatApplication.diagnosticConnexionEnCours;
@@ -2370,6 +2703,16 @@ function initialiserPageAccueil() {
       }
     })
     .withFailureHandler(function (erreur) {
+      recevoirOperationDiagnosticAccueil_(
+        diagnosticConnexion,
+        operationDiagnostic,
+        null
+      );
+      terminerOperationDiagnosticAccueil_(
+        diagnosticConnexion,
+        operationDiagnostic,
+        maintenantDiagnosticConnexionClient_()
+      );
       if (etatApplication.pageActive === 'Accueil') {
         if (etatApplication.diagnosticConnexionEnCours) {
           finaliserDiagnosticConnexionClient_(
@@ -2379,10 +2722,18 @@ function initialiserPageAccueil() {
         }
         gererErreurServeur(erreur);
       }
-    })
-    .getDonneesTableauBordAccueil(
+    });
+
+  if (diagnosticConnexion) {
+    execution.getDonneesTableauBordAccueil(
+      obtenirJetonUtilisateurApplication(),
+      creerOptionsDiagnosticAccueilClient_(diagnosticConnexion)
+    );
+  } else {
+    execution.getDonneesTableauBordAccueil(
       obtenirJetonUtilisateurApplication()
     );
+  }
 }
 
 function afficherTableauBordAccueil(donnees) {
@@ -13461,13 +13812,19 @@ function afficherDiagnosticConnexionAdministration_() {
   const zone = document.getElementById(
     'resultatDiagnosticConnexionAdministration'
   );
-  if (!zone) return;
+  const zoneAccueil = document.getElementById(
+    'resultatDiagnosticChargementAccueilAdministration'
+  );
+  if (!zone && !zoneAccueil) return;
 
   const rapport = etatApplication.dernierDiagnosticConnexion;
   if (!rapport) {
-    zone.className = 'etat-vide';
-    zone.textContent =
-      'Aucune mesure de connexion disponible dans cette session navigateur.';
+    if (zone) {
+      zone.className = 'etat-vide';
+      zone.textContent =
+        'Aucune mesure de connexion disponible dans cette session navigateur.';
+    }
+    afficherDiagnosticChargementAccueilAdministration_(null);
     return;
   }
 
@@ -13479,42 +13836,238 @@ function afficherDiagnosticConnexionAdministration_() {
     serveur.constructionContexteUtilisateurMs || 0
   ) + Number(client.chargementContexteUtilisateurMs || 0);
 
+  if (zone) {
+    zone.className = '';
+    zone.innerHTML = `
+      <div class="grille-diagnostic-administration">
+        ${creerCarteDiagnosticConnexion_(
+          'PBKDF2 + pepper',
+          serveur.derivationPbkdf2PepperMs
+        )}
+        ${creerCarteDiagnosticConnexion_(
+          'Session serveur',
+          sessionServeur
+        )}
+        ${creerCarteDiagnosticConnexion_(
+          'Contexte utilisateur',
+          contexte
+        )}
+        ${creerCarteDiagnosticConnexion_(
+          'Chargement accueil',
+          client.chargementAccueilMs
+        )}
+        ${creerCarteDiagnosticConnexion_(
+          'Rendu client',
+          client.renduClientMs
+        )}
+        ${creerCarteDiagnosticConnexion_(
+          'Total interface utilisable',
+          client.totalJusquaInterfaceUtilisableMs
+        )}
+      </div>
+      <details class="details-diagnostic-connexion-administration">
+        <summary>Détail complet des mesures de connexion</summary>
+        <div class="liste-diagnostic-connexion-administration">
+          ${creerLignesDiagnosticConnexion_(serveur, 'Serveur')}
+          ${creerLignesDiagnosticConnexion_(client, 'Client')}
+        </div>
+      </details>
+    `;
+  }
+  afficherDiagnosticChargementAccueilAdministration_(rapport.accueil);
+}
+
+
+function afficherDiagnosticChargementAccueilAdministration_(diagnostic) {
+  const zone = document.getElementById(
+    'resultatDiagnosticChargementAccueilAdministration'
+  );
+  if (!zone) return;
+
+  const operations = diagnostic && Array.isArray(diagnostic.operations)
+    ? diagnostic.operations
+    : [];
+  if (!operations.length) {
+    zone.className = 'etat-vide';
+    zone.textContent =
+      'Aucune mesure détaillée du chargement de l’accueil disponible.';
+    return;
+  }
+
   zone.className = '';
   zone.innerHTML = `
-    <div class="grille-diagnostic-administration">
+    <div class="liste-operations-diagnostic-accueil">
+      ${operations.map(creerOperationDiagnosticAccueilAdministration_).join('')}
+    </div>
+    <div class="grille-diagnostic-administration resume-diagnostic-accueil">
       ${creerCarteDiagnosticConnexion_(
-        'PBKDF2 + pepper',
-        serveur.derivationPbkdf2PepperMs
+        'Temps serveur cumulé',
+        diagnostic.tempsServeurCumuleMs
       )}
       ${creerCarteDiagnosticConnexion_(
-        'Session serveur',
-        sessionServeur
+        'Temps google.script.run cumulé',
+        diagnostic.tempsGoogleScriptRunCumuleMs
       )}
       ${creerCarteDiagnosticConnexion_(
-        'Contexte utilisateur',
-        contexte
+        'Traitements client',
+        diagnostic.tempsTraitementsClientMs
       )}
       ${creerCarteDiagnosticConnexion_(
-        'Chargement accueil',
-        client.chargementAccueilMs
-      )}
-      ${creerCarteDiagnosticConnexion_(
-        'Rendu client',
-        client.renduClientMs
-      )}
-      ${creerCarteDiagnosticConnexion_(
-        'Total interface utilisable',
-        client.totalJusquaInterfaceUtilisableMs
+        'Total chargement accueil',
+        diagnostic.tempsTotalChargementAccueilMs
       )}
     </div>
-    <details class="details-diagnostic-connexion-administration">
-      <summary>Détail complet des mesures</summary>
-      <div class="liste-diagnostic-connexion-administration">
-        ${creerLignesDiagnosticConnexion_(serveur, 'Serveur')}
-        ${creerLignesDiagnosticConnexion_(client, 'Client')}
-      </div>
-    </details>
   `;
+}
+
+
+function creerOperationDiagnosticAccueilAdministration_(operation) {
+  const serveur = operation && operation.serveur || {};
+  const lectures = serveur.lecturesFeuilles || [];
+  const services = serveur.appelsAutresServices || [];
+  const etapes = serveur.etapesTraitement || [];
+  const details = [];
+  const mesuresServeur = creerMesuresServeurDiagnosticAccueil_(serveur);
+
+  if (mesuresServeur) {
+    details.push(`
+      <h5>Répartition serveur</h5>
+      ${mesuresServeur}
+    `);
+  }
+
+  if (lectures.length) {
+    details.push(`
+      <h5>Lectures Google Sheets</h5>
+      ${lectures.map(function (lecture) {
+        return creerLigneDiagnosticAccueil_(
+          lecture.feuille,
+          lecture.totalLectureMs
+        );
+      }).join('')}
+    `);
+  }
+  services.forEach(function (service) {
+    const mesuresService = creerMesuresServeurDiagnosticAccueil_(service);
+    details.push(`
+      <h5>Service · ${echapperHtml(service.operation || 'Service interne')}</h5>
+      ${creerLigneDiagnosticAccueil_(
+        'Durée totale',
+        service.totalServeurMs
+      )}
+      ${mesuresService}
+      ${(service.lecturesFeuilles || []).map(function (lecture) {
+        return creerLigneDiagnosticAccueil_(
+          'Feuille ' + lecture.feuille,
+          lecture.totalLectureMs
+        );
+      }).join('')}
+      ${(service.lecturesIndirectes || []).map(function (feuille) {
+        return creerLigneDiagnosticAccueil_(
+          'Lecture indirecte ' + feuille,
+          service.totalServeurMs
+        );
+      }).join('')}
+    `);
+  });
+  if (etapes.length) {
+    details.push(`
+      <h5>Traitements serveur</h5>
+      ${etapes.map(function (etape) {
+        return creerLigneDiagnosticAccueil_(
+          etape.operation,
+          etape.dureeMs
+        );
+      }).join('')}
+    `);
+  }
+
+  return `
+    <article class="operation-diagnostic-accueil">
+      <div class="entete-operation-diagnostic-accueil">
+        <div>
+          <strong>${echapperHtml(
+            String(operation.ordre || '') + '. ' + String(operation.nom || '')
+          )}</strong>
+          <span>${echapperHtml(
+            formaterModeExecutionDiagnosticAccueil_(operation.modeExecution)
+          )}</span>
+        </div>
+        <strong>${formaterDureeDiagnosticConnexion_(
+          operation.dureeGoogleScriptRunMs
+        )}</strong>
+      </div>
+      <div class="synthese-operation-diagnostic-accueil">
+        ${creerLigneDiagnosticAccueil_(
+          'Serveur',
+          serveur.totalServeurMs
+        )}
+        ${creerLigneDiagnosticAccueil_(
+          'google.script.run',
+          operation.dureeGoogleScriptRunMs
+        )}
+        ${creerLigneDiagnosticAccueil_(
+          'Traitement client',
+          operation.traitementClientMs
+        )}
+      </div>
+      ${details.length ? `
+        <details class="details-diagnostic-connexion-administration">
+          <summary>Voir les mesures internes</summary>
+          <div class="liste-diagnostic-connexion-administration">
+            ${details.join('')}
+          </div>
+        </details>
+      ` : ''}
+    </article>
+  `;
+}
+
+
+function creerMesuresServeurDiagnosticAccueil_(serveur) {
+  const libelles = {
+    authentificationMs: 'Validation de la session',
+    verificationAccesMs: 'Vérification des droits de page',
+    ouvertureSpreadsheetMs: 'Récupération du classeur',
+    synchronisationStatutsMs: 'Synchronisation des statuts',
+    preparationFeuilleMs: 'Préparation / contrôle de feuille',
+    getRangeMs: 'getRange',
+    getDataRangeMs: 'getDataRange',
+    getValuesMs: 'getValues',
+    recherchesMs: 'Recherches et indexations',
+    filtragesMs: 'Filtrages',
+    trisMs: 'Tris',
+    transformationsMs: 'Transformations',
+    ecrituresMs: 'Écritures existantes de synchronisation',
+    journalisationMs: 'Journalisation existante',
+    constructionHtmlMs: 'Construction du HTML',
+    constructionReponseMs: 'Construction de la réponse'
+  };
+  return Object.keys(libelles).filter(function (cle) {
+    return Object.prototype.hasOwnProperty.call(serveur || {}, cle);
+  }).map(function (cle) {
+    return creerLigneDiagnosticAccueil_(libelles[cle], serveur[cle]);
+  }).join('');
+}
+
+
+function creerLigneDiagnosticAccueil_(libelle, duree) {
+  return `
+    <div>
+      <span>${echapperHtml(String(libelle || 'Opération'))}</span>
+      <strong>${formaterDureeDiagnosticConnexion_(duree)}</strong>
+    </div>
+  `;
+}
+
+
+function formaterModeExecutionDiagnosticAccueil_(mode) {
+  const libelles = {
+    PARALLELE_AVEC_ACCUEIL: 'Parallèle au chargement de l’accueil',
+    SEQUENTIEL_ETAPE_1: 'Séquentiel · étape 1',
+    SEQUENTIEL_APRES_FRAGMENT_HTML: 'Séquentiel · après le fragment HTML'
+  };
+  return libelles[String(mode || '')] || String(mode || 'Séquentiel');
 }
 
 
