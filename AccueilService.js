@@ -18,12 +18,17 @@ function getDonneesTableauBordAccueil(
     : null;
   const debutTotal = diagnostic ? Date.now() : 0;
   const debutAuthentification = diagnostic ? Date.now() : 0;
+  const diagnosticValidationSession = diagnostic ? {} : null;
   const sessionUtilisateur = exigerUtilisateurAuthentifie_(
-    jetonUtilisateur
+    jetonUtilisateur,
+    diagnosticValidationSession
   );
   if (diagnostic) {
     diagnostic.authentificationMs =
       Date.now() - debutAuthentification;
+    diagnostic.appelsAutresServices.push(
+      diagnosticValidationSession
+    );
   }
 
   const diagnosticSynchronisation = diagnostic

@@ -25,6 +25,9 @@ const PROPRIETE_PEPPER_MOT_DE_PASSE_FORMATEUR_ =
   'FORMATEUR_PASSWORD_PEPPER';
 const PREFIXE_CACHE_ACTIVITE_SESSION_FORMATEUR_ =
   'FORMATEUR_LAST_ACTIVITY_';
+const PREFIXE_CACHE_AUTORISATION_SESSION_FORMATEUR_ =
+  'FORMATEUR_SESSION_AUTHORIZATION_';
+const DUREE_CACHE_AUTORISATION_SESSION_FORMATEUR_SECONDES_ = 30;
 const LIMITE_IDENTIFIANTS_INCONNUS_MEMORISES_ = 100;
 const NOMBRE_MAX_SESSIONS_PAR_UTILISATEUR_FORMATEUR_ = 5;
 const NOMBRE_MAX_SESSIONS_FORMATEURS_ = 200;
@@ -788,115 +791,340 @@ function obtenirSessionFormateurValide_(
   jetonFormateur,
   renouveler,
   erreur,
-  forcerEcritureActivite
+  forcerEcritureActivite,
+  diagnostic
 ) {
-  const jeton = String(jetonFormateur || '').trim();
-  if (!/^[A-Za-z0-9_-]{40,200}$/.test(jeton)) {
-    if (erreur) throw new Error('Authentification requise.');
-    return null;
-  }
-
-  const proprietes = PropertiesService.getScriptProperties();
-  const verrou = LockService.getScriptLock();
-  const verrouDejaDetenu = typeof verrou.hasLock === 'function' &&
-    verrou.hasLock();
-  if (!verrouDejaDetenu && !verrou.tryLock(10000)) {
-    if (erreur) throw new Error('Authentification requise.');
-    return null;
-  }
-
+  const debutTotal = diagnostic ? Date.now() : 0;
   try {
+    initialiserDiagnosticValidationFormateur_(diagnostic);
+    const jeton = String(jetonFormateur || '').trim();
+    if (!/^[A-Za-z0-9_-]{40,200}$/.test(jeton)) {
+      if (erreur) throw new Error('Authentification requise.');
+      return null;
+    }
+
+    let debutEtape = diagnostic ? Date.now() : 0;
+    const proprietes = PropertiesService.getScriptProperties();
+    ajouterDureeDiagnosticValidationFormateur_(
+      diagnostic,
+      'accesPropertiesServiceMs',
+      debutEtape
+    );
     const maintenant = Date.now();
     const cle = PREFIXE_SESSION_FORMATEUR_ +
       hacherJetonFormateur_(jeton);
-    nettoyerSessionsFormateursDansProprietes_(proprietes, maintenant);
+
+    debutEtape = diagnostic ? Date.now() : 0;
     const valeur = proprietes.getProperty(cle);
+    ajouterDureeDiagnosticValidationFormateur_(
+      diagnostic,
+      'lectureSessionPersistanteMs',
+      debutEtape
+    );
     if (!valeur) {
       if (erreur) throw new Error('Authentification requise.');
       return null;
     }
 
     let session;
+    debutEtape = diagnostic ? Date.now() : 0;
     try {
       session = JSON.parse(valeur);
     } catch (erreurJson) {
-      proprietes.deleteProperty(cle);
+      supprimerSessionFormateurCibleInvalide_(cle, '');
       if (erreur) throw new Error('Authentification requise.');
       return null;
+    } finally {
+      ajouterDureeDiagnosticValidationFormateur_(
+        diagnostic,
+        'parsingSessionMs',
+        debutEtape
+      );
     }
 
     const derniereActivitePersistante = Number(
       session.derniereActivite || 0
     );
+    debutEtape = diagnostic ? Date.now() : 0;
     const derniereActiviteEffective = Math.max(
       derniereActivitePersistante,
       lireActiviteSessionFormateurCache_(cle)
     );
-    if (
+    ajouterDureeDiagnosticValidationFormateur_(
+      diagnostic,
+      'lectureCacheActiviteMs',
+      debutEtape
+    );
+
+    debutEtape = diagnostic ? Date.now() : 0;
+    const sessionExpiree = Boolean(
       !session.idSession ||
       !session.idUtilisateur ||
       !session.idFormateur ||
       Number(session.expireAbsolueA || 0) <= maintenant ||
       maintenant - derniereActiviteEffective >=
         DUREE_INACTIVITE_SESSION_FORMATEUR_MS_
-    ) {
-      proprietes.deleteProperty(cle);
-      supprimerActiviteSessionFormateurCache_(cle);
+    );
+    ajouterDureeDiagnosticValidationFormateur_(
+      diagnostic,
+      'controleExpirationMs',
+      debutEtape
+    );
+    if (sessionExpiree) {
+      supprimerSessionFormateurCibleInvalide_(cle, session.idSession);
       if (erreur) throw new Error('Authentification requise.');
       return null;
     }
 
-    const table = lireTableUtilisateursAuthentification_();
-    const compte = trouverCompteParIdUtilisateur_(
-      table,
-      session.idUtilisateur
+    debutEtape = diagnostic ? Date.now() : 0;
+    const autorisationEnCache =
+      lireAutorisationSessionFormateurCache_(cle, session);
+    ajouterDureeDiagnosticValidationFormateur_(
+      diagnostic,
+      'lectureCacheAutorisationMs',
+      debutEtape
     );
-    const formateur = trouverFormateurCompteAuthentification_(
-      session.idFormateur
-    );
-    const autorise = compte && formateur &&
-      convertirBooleenAuthentification_(formateur.actif) &&
-      convertirBooleenAuthentification_(
-        valeurBruteCompteAuthentification_(table, compte.ligne, 'ACTIF')
-      ) &&
-      !convertirBooleenAuthentification_(
-        valeurBruteCompteAuthentification_(
-          table,
-          compte.ligne,
-          'DOIT_CHANGER_MOT_DE_PASSE'
-        )
+
+    if (!autorisationEnCache) {
+      debutEtape = diagnostic ? Date.now() : 0;
+      const table = lireTableUtilisateursAuthentification_();
+      const compte = trouverCompteParIdUtilisateur_(
+        table,
+        session.idUtilisateur
+      );
+      const formateur = trouverFormateurCompteAuthentification_(
+        session.idFormateur
+      );
+      ajouterDureeDiagnosticValidationFormateur_(
+        diagnostic,
+        'recuperationUtilisateurMs',
+        debutEtape
       );
 
-    if (!autorise) {
-      proprietes.deleteProperty(cle);
-      supprimerActiviteSessionFormateurCache_(cle);
-      if (erreur) throw new Error('Authentification requise.');
-      return null;
+      debutEtape = diagnostic ? Date.now() : 0;
+      const autorise = compte && formateur &&
+        convertirBooleenAuthentification_(formateur.actif) &&
+        convertirBooleenAuthentification_(
+          valeurBruteCompteAuthentification_(table, compte.ligne, 'ACTIF')
+        ) &&
+        !convertirBooleenAuthentification_(
+          valeurBruteCompteAuthentification_(
+            table,
+            compte.ligne,
+            'DOIT_CHANGER_MOT_DE_PASSE'
+          )
+        );
+      ajouterDureeDiagnosticValidationFormateur_(
+        diagnostic,
+        'controleStatutMs',
+        debutEtape
+      );
+
+      if (!autorise) {
+        supprimerSessionFormateurCibleInvalide_(cle, session.idSession);
+        if (erreur) throw new Error('Authentification requise.');
+        return null;
+      }
+
+      session.nom = formateur.nom;
+      session.prenom = formateur.prenom;
+      session.identifiant = valeurCompteAuthentification_(
+        table,
+        compte.ligne,
+        'IDENTIFIANT'
+      );
+      enregistrerAutorisationSessionFormateurCache_(cle, session);
     }
 
-    session.nom = formateur.nom;
-    session.prenom = formateur.prenom;
-    session.identifiant = valeurCompteAuthentification_(
-      table,
-      compte.ligne,
-      'IDENTIFIANT'
-    );
-
     if (renouveler) {
+      debutEtape = diagnostic ? Date.now() : 0;
       enregistrerActiviteSessionFormateurCache_(cle, maintenant);
       if (
         forcerEcritureActivite ||
         maintenant - derniereActivitePersistante >=
           DUREE_THROTTLE_ACTIVITE_SESSION_FORMATEUR_MS_
       ) {
-        session.derniereActivite = maintenant;
-        proprietes.setProperty(cle, JSON.stringify(session));
+        const sessionRenouvelee = renouvelerSessionFormateurPersistante_(
+          proprietes,
+          cle,
+          session,
+          maintenant
+        );
+        if (!sessionRenouvelee) {
+          if (erreur) throw new Error('Authentification requise.');
+          return null;
+        }
+        session = sessionRenouvelee;
       }
+      ajouterDureeDiagnosticValidationFormateur_(
+        diagnostic,
+        'renouvellementActiviteMs',
+        debutEtape
+      );
     }
     return session;
   } finally {
-    if (!verrouDejaDetenu) verrou.releaseLock();
+    if (diagnostic) {
+      diagnostic.totalValidationSessionMs = Number(
+        diagnostic.totalValidationSessionMs || 0
+      ) + Math.max(0, Date.now() - debutTotal);
+    }
   }
+}
+
+
+function initialiserDiagnosticValidationFormateur_(diagnostic) {
+  if (!diagnostic) return;
+  [
+    'accesPropertiesServiceMs',
+    'lectureSessionPersistanteMs',
+    'parsingSessionMs',
+    'lectureCacheActiviteMs',
+    'controleExpirationMs',
+    'lectureCacheAutorisationMs',
+    'recuperationUtilisateurMs',
+    'controleStatutMs',
+    'renouvellementActiviteMs',
+    'totalValidationSessionMs'
+  ].forEach(function (cle) {
+    diagnostic[cle] = Number(diagnostic[cle] || 0);
+  });
+}
+
+
+function ajouterDureeDiagnosticValidationFormateur_(
+  diagnostic,
+  propriete,
+  debut
+) {
+  if (!diagnostic) return;
+  diagnostic[propriete] = Number(diagnostic[propriete] || 0) +
+    Math.max(0, Date.now() - debut);
+}
+
+
+function lireAutorisationSessionFormateurCache_(cleSession, session) {
+  try {
+    const valeur = CacheService.getScriptCache().get(
+      PREFIXE_CACHE_AUTORISATION_SESSION_FORMATEUR_ + cleSession
+    );
+    if (!valeur) return false;
+    const autorisation = JSON.parse(valeur);
+    return Boolean(
+      autorisation &&
+      String(autorisation.idSession || '') ===
+        String(session.idSession || '') &&
+      String(autorisation.idUtilisateur || '') ===
+        String(session.idUtilisateur || '') &&
+      String(autorisation.idFormateur || '') ===
+        String(session.idFormateur || '')
+    );
+  } catch (erreur) {
+    return false;
+  }
+}
+
+
+function enregistrerAutorisationSessionFormateurCache_(cleSession, session) {
+  try {
+    CacheService.getScriptCache().put(
+      PREFIXE_CACHE_AUTORISATION_SESSION_FORMATEUR_ + cleSession,
+      JSON.stringify({
+        idSession: String(session.idSession || ''),
+        idUtilisateur: String(session.idUtilisateur || ''),
+        idFormateur: String(session.idFormateur || '')
+      }),
+      DUREE_CACHE_AUTORISATION_SESSION_FORMATEUR_SECONDES_
+    );
+  } catch (erreur) {
+    // Sans cache, la validation relit immédiatement les feuilles de référence.
+  }
+}
+
+
+function supprimerAutorisationSessionFormateurCache_(cleSession) {
+  try {
+    CacheService.getScriptCache().remove(
+      PREFIXE_CACHE_AUTORISATION_SESSION_FORMATEUR_ + cleSession
+    );
+  } catch (erreur) {
+    // La propriété de session persistante reste la source d'autorisation.
+  }
+}
+
+
+function supprimerSessionFormateurCibleInvalide_(cleSession, idSession) {
+  try {
+    executerSousVerrouSessionsFormateur_(function () {
+      const proprietes = PropertiesService.getScriptProperties();
+      const valeurCourante = proprietes.getProperty(cleSession);
+      if (valeurCourante && idSession) {
+        try {
+          const sessionCourante = JSON.parse(valeurCourante);
+          if (
+            String(sessionCourante.idSession || '') !== String(idSession)
+          ) {
+            return;
+          }
+        } catch (erreurJson) {
+          // Une valeur illisible portant la même clé doit être retirée.
+        }
+      }
+      proprietes.deleteProperty(cleSession);
+    });
+  } catch (erreur) {
+    // La validation est déjà refusée ; le nettoyage sera repris ultérieurement.
+  }
+  supprimerActiviteSessionFormateurCache_(cleSession);
+  supprimerAutorisationSessionFormateurCache_(cleSession);
+}
+
+
+function renouvelerSessionFormateurPersistante_(
+  proprietes,
+  cleSession,
+  sessionValidee,
+  maintenant
+) {
+  let resultat = null;
+  try {
+    resultat = executerSousVerrouSessionsFormateur_(function () {
+      const valeurCourante = proprietes.getProperty(cleSession);
+      if (!valeurCourante) return null;
+      let sessionCourante;
+      try {
+        sessionCourante = JSON.parse(valeurCourante);
+      } catch (erreurJson) {
+        proprietes.deleteProperty(cleSession);
+        return null;
+      }
+      if (
+        String(sessionCourante.idSession || '') !==
+          String(sessionValidee.idSession || '') ||
+        Number(sessionCourante.expireAbsolueA || 0) <= maintenant
+      ) {
+        return null;
+      }
+      sessionCourante.derniereActivite = maintenant;
+      sessionCourante.identifiant = String(
+        sessionValidee.identifiant || sessionCourante.identifiant || ''
+      );
+      sessionCourante.nom = String(
+        sessionValidee.nom || sessionCourante.nom || ''
+      );
+      sessionCourante.prenom = String(
+        sessionValidee.prenom || sessionCourante.prenom || ''
+      );
+      proprietes.setProperty(
+        cleSession,
+        JSON.stringify(sessionCourante)
+      );
+      return sessionCourante;
+    });
+  } catch (erreur) {
+    return null;
+  }
+  return resultat;
 }
 
 
@@ -934,6 +1162,7 @@ function creerSessionFormateur_(compte, table, formateur, metriques) {
   const debutEcritureProprietes = Date.now();
   const proprietes = PropertiesService.getScriptProperties();
   const verrou = LockService.getScriptLock();
+  let cleSession = '';
   if (!verrou.tryLock(10000)) {
     throw new Error('Le service de session est momentanément occupé.');
   }
@@ -944,6 +1173,7 @@ function creerSessionFormateur_(compte, table, formateur, metriques) {
       sessionServeur.idUtilisateur
     );
     const cle = PREFIXE_SESSION_FORMATEUR_ + hacherJetonFormateur_(jeton);
+    cleSession = cle;
     proprietes.setProperty(
       cle,
       JSON.stringify(sessionServeur)
@@ -955,6 +1185,13 @@ function creerSessionFormateur_(compte, table, formateur, metriques) {
   if (metriques) {
     metriques.ecritureScriptPropertiesMs =
       Date.now() - debutEcritureProprietes;
+  }
+  enregistrerAutorisationSessionFormateurCache_(
+    cleSession,
+    sessionServeur
+  );
+  if (typeof enregistrerTypeSessionUtilisateurCache_ === 'function') {
+    enregistrerTypeSessionUtilisateurCache_(jeton, 'FORMATEUR');
   }
   return { jeton: jeton, sessionServeur: sessionServeur };
 }
@@ -968,6 +1205,9 @@ function supprimerSessionFormateurParJeton_(jetonFormateur) {
     PropertiesService.getScriptProperties().deleteProperty(cle);
     supprimerActiviteSessionFormateurCache_(cle);
   });
+  if (typeof supprimerTypeSessionUtilisateurCache_ === 'function') {
+    supprimerTypeSessionUtilisateurCache_(jetonFormateur);
+  }
 }
 
 
@@ -1129,6 +1369,7 @@ function supprimerActiviteSessionFormateurCache_(cleSession) {
   } catch (erreur) {
     // Le cache est une optimisation : l'expiration persistante reste active.
   }
+  supprimerAutorisationSessionFormateurCache_(cleSession);
 }
 
 

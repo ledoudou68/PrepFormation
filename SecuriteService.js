@@ -5,6 +5,10 @@ const PROPRIETE_HASH_ADMIN = 'ADMIN_PASSWORD_HASH';
 const PROPRIETE_TENTATIVES_ADMIN = 'ADMIN_AUTH_ATTEMPTS';
 const PREFIXE_SESSION_ADMIN = 'ADMIN_SESSION_';
 const PREFIXE_CACHE_ACTIVITE_SESSION_ADMIN_ = 'ADMIN_LAST_ACTIVITY_';
+const PREFIXE_CACHE_TYPE_SESSION_UTILISATEUR_ = 'SESSION_TYPE_';
+const DUREE_CACHE_TYPE_SESSION_UTILISATEUR_SECONDES_ = 10 * 60;
+const CLE_CACHE_CONFIGURATION_ADMIN_ = 'ADMIN_PASSWORD_CONFIGURED';
+const DUREE_CACHE_CONFIGURATION_ADMIN_SECONDES_ = 5 * 60;
 const DUREE_SESSION_ADMIN_MS = 30 * 60 * 1000;
 const DUREE_THROTTLE_ACTIVITE_SESSION_ADMIN_MS_ = 5 * 60 * 1000;
 const NOMBRE_MAX_SESSIONS_ADMIN_ = 10;
@@ -32,21 +36,15 @@ const COLONNES_HISTORIQUE_SECURITE = [
  * lorsqu'elle est disponible, reste purement informative.
  */
 function getSessionUtilisateur(jetonUtilisateur) {
-  const sessionAdministration = jetonUtilisateur
-    ? obtenirSessionAdministrationValide_(
-      jetonUtilisateur,
-      true,
-      false
-    )
-    : null;
-  const sessionFormateur = !sessionAdministration && jetonUtilisateur &&
-    typeof obtenirSessionFormateurValide_ === 'function'
-    ? obtenirSessionFormateurValide_(jetonUtilisateur, true, false)
-    : null;
+  const sessions = obtenirSessionsUtilisateurValides_(
+    jetonUtilisateur,
+    true,
+    null
+  );
 
   return construireSessionUtilisateur_(
-    sessionAdministration,
-    sessionFormateur
+    sessions.sessionAdministration,
+    sessions.sessionFormateur
   );
 }
 
@@ -202,13 +200,17 @@ function construireIdentifiantHistoriqueAdministrationDepuisContexte_(
 }
 
 
-function exigerUtilisateurAuthentifie_(jetonUtilisateur) {
-  const sessionAdministration = obtenirSessionAdministrationValide_(
+function exigerUtilisateurAuthentifie_(jetonUtilisateur, diagnostic) {
+  const debutTotal = diagnostic ? Date.now() : 0;
+  initialiserDiagnosticValidationUtilisateur_(diagnostic);
+  const sessions = obtenirSessionsUtilisateurValides_(
     jetonUtilisateur,
     true,
-    false
+    diagnostic
   );
+  const sessionAdministration = sessions.sessionAdministration;
   if (sessionAdministration) {
+    const debutContexte = diagnostic ? Date.now() : 0;
     const contexteAdministration = construireSessionUtilisateur_(
       sessionAdministration,
       null
@@ -217,24 +219,160 @@ function exigerUtilisateurAuthentifie_(jetonUtilisateur) {
       construireIdentifiantHistoriqueAdministration_(
         sessionAdministration
       );
+    ajouterDureeDiagnosticValidationUtilisateur_(
+      diagnostic,
+      'constructionContexteMs',
+      debutContexte
+    );
+    finaliserDiagnosticValidationUtilisateur_(diagnostic, debutTotal);
     return contexteAdministration;
   }
 
-  const sessionFormateur = typeof obtenirSessionFormateurValide_ ===
-    'function'
-    ? obtenirSessionFormateurValide_(jetonUtilisateur, true, false)
-    : null;
+  const sessionFormateur = sessions.sessionFormateur;
   if (!sessionFormateur) {
+    finaliserDiagnosticValidationUtilisateur_(diagnostic, debutTotal);
     throw new Error('Authentification requise.');
   }
 
+  const debutContexte = diagnostic ? Date.now() : 0;
   const contexteFormateur = construireSessionUtilisateur_(
     null,
     sessionFormateur
   );
   contexteFormateur.identifiantHistorique =
     construireIdentifiantHistoriqueFormateur_(sessionFormateur);
+  ajouterDureeDiagnosticValidationUtilisateur_(
+    diagnostic,
+    'constructionContexteMs',
+    debutContexte
+  );
+  finaliserDiagnosticValidationUtilisateur_(diagnostic, debutTotal);
   return contexteFormateur;
+}
+
+
+function obtenirSessionsUtilisateurValides_(
+  jetonUtilisateur,
+  renouveler,
+  diagnostic
+) {
+  const resultat = {
+    sessionAdministration: null,
+    sessionFormateur: null
+  };
+  const jeton = String(jetonUtilisateur || '').trim();
+  if (!/^[A-Za-z0-9_-]{40,200}$/.test(jeton)) return resultat;
+
+  const debutRoutage = diagnostic ? Date.now() : 0;
+  const typeEnCache = lireTypeSessionUtilisateurCache_(jeton);
+  ajouterDureeDiagnosticValidationUtilisateur_(
+    diagnostic,
+    'determinationTypeSessionMs',
+    debutRoutage
+  );
+
+  if (typeEnCache === 'ADMINISTRATEUR') {
+    resultat.sessionAdministration =
+      obtenirSessionAdministrationValide_(
+        jeton,
+        renouveler,
+        false,
+        false,
+        diagnostic
+      );
+    if (resultat.sessionAdministration) return resultat;
+    supprimerTypeSessionUtilisateurCache_(jeton);
+  }
+
+  if (
+    typeEnCache === 'FORMATEUR' &&
+    typeof obtenirSessionFormateurValide_ === 'function'
+  ) {
+    resultat.sessionFormateur = obtenirSessionFormateurValide_(
+      jeton,
+      renouveler,
+      false,
+      false,
+      diagnostic
+    );
+    if (resultat.sessionFormateur) return resultat;
+    supprimerTypeSessionUtilisateurCache_(jeton);
+  }
+
+  if (
+    typeEnCache !== 'FORMATEUR' &&
+    typeof obtenirSessionFormateurValide_ === 'function'
+  ) {
+    resultat.sessionFormateur = obtenirSessionFormateurValide_(
+      jeton,
+      renouveler,
+      false,
+      false,
+      diagnostic
+    );
+    if (resultat.sessionFormateur) {
+      enregistrerTypeSessionUtilisateurCache_(jeton, 'FORMATEUR');
+      return resultat;
+    }
+  }
+
+  if (typeEnCache !== 'ADMINISTRATEUR') {
+    resultat.sessionAdministration =
+      obtenirSessionAdministrationValide_(
+        jeton,
+        renouveler,
+        false,
+        false,
+        diagnostic
+      );
+    if (resultat.sessionAdministration) {
+      enregistrerTypeSessionUtilisateurCache_(
+        jeton,
+        'ADMINISTRATEUR'
+      );
+    }
+  }
+  return resultat;
+}
+
+
+function initialiserDiagnosticValidationUtilisateur_(diagnostic) {
+  if (!diagnostic) return;
+  diagnostic.operation = 'VALIDATION_SESSION';
+  [
+    'determinationTypeSessionMs',
+    'accesPropertiesServiceMs',
+    'lectureSessionPersistanteMs',
+    'parsingSessionMs',
+    'lectureCacheActiviteMs',
+    'controleExpirationMs',
+    'lectureCacheAutorisationMs',
+    'recuperationUtilisateurMs',
+    'controleStatutMs',
+    'renouvellementActiviteMs',
+    'constructionContexteMs',
+    'totalValidationSessionMs',
+    'totalServeurMs'
+  ].forEach(function (cle) {
+    diagnostic[cle] = Number(diagnostic[cle] || 0);
+  });
+}
+
+
+function ajouterDureeDiagnosticValidationUtilisateur_(
+  diagnostic,
+  propriete,
+  debut
+) {
+  if (!diagnostic) return;
+  diagnostic[propriete] = Number(diagnostic[propriete] || 0) +
+    Math.max(0, Date.now() - debut);
+}
+
+
+function finaliserDiagnosticValidationUtilisateur_(diagnostic, debut) {
+  if (!diagnostic) return;
+  diagnostic.totalServeurMs = Math.max(0, Date.now() - debut);
 }
 
 
@@ -444,6 +582,10 @@ function deverrouillerAdministration(motDePasse, jetonFormateur) {
       PREFIXE_SESSION_ADMIN + empreinteJeton,
       maintenant
     );
+    enregistrerTypeSessionUtilisateurCache_(
+      jeton,
+      'ADMINISTRATEUR'
+    );
 
     resultat = {
       jeton: jeton,
@@ -514,21 +656,32 @@ function verrouillerAdministration(jetonAdministrateur) {
 }
 
 
-function exigerAdministrateur_(jetonAdministrateur) {
+function exigerAdministrateur_(jetonAdministrateur, diagnostic) {
+  const debutTotal = diagnostic ? Date.now() : 0;
+  initialiserDiagnosticValidationUtilisateur_(diagnostic);
   const sessionAdministration =
     obtenirSessionAdministrationValide_(
       jetonAdministrateur,
       true,
-      true
+      true,
+      false,
+      diagnostic
     );
+  const debutContexte = diagnostic ? Date.now() : 0;
   const sessionUtilisateur =
     construireSessionUtilisateur_(sessionAdministration);
+  ajouterDureeDiagnosticValidationUtilisateur_(
+    diagnostic,
+    'constructionContexteMs',
+    debutContexte
+  );
 
   sessionUtilisateur.identifiantHistorique =
     construireIdentifiantHistoriqueAdministration_(
       sessionAdministration
     );
 
+  finaliserDiagnosticValidationUtilisateur_(diagnostic, debutTotal);
   return sessionUtilisateur;
 }
 
@@ -697,14 +850,36 @@ function exigerAdministrateurLectureSeule_(jetonAdministrateur) {
 }
 
 
-function verifierAccesPage_(nomPage, jetonUtilisateur) {
-  const session = exigerUtilisateurAuthentifie_(jetonUtilisateur);
-  if ([
+function verifierAccesPage_(nomPage, jetonUtilisateur, diagnostic) {
+  const debutTotal = diagnostic ? Date.now() : 0;
+  if (diagnostic) {
+    diagnostic.operation = 'VERIFICATION_ACCES_PAGE';
+    diagnostic.controleDroitsMs = 0;
+    diagnostic.appelsAutresServices = [];
+  }
+  const diagnosticValidation = diagnostic ? {} : null;
+  const session = exigerUtilisateurAuthentifie_(
+    jetonUtilisateur,
+    diagnosticValidation
+  );
+  const debutDroits = diagnostic ? Date.now() : 0;
+  const accesAdministrateurRequis = [
     'Referentiel',
     'Indemnisation',
     'Administration'
-  ].includes(String(nomPage || '')) && !session.estAdministrateur) {
+  ].includes(String(nomPage || ''));
+  if (diagnostic) {
+    diagnostic.controleDroitsMs = Date.now() - debutDroits;
+    diagnostic.appelsAutresServices.push(diagnosticValidation);
+  }
+  if (accesAdministrateurRequis && !session.estAdministrateur) {
+    if (diagnostic) {
+      diagnostic.totalServeurMs = Date.now() - debutTotal;
+    }
     throw new Error('Accès réservé à l’administrateur.');
+  }
+  if (diagnostic) {
+    diagnostic.totalServeurMs = Date.now() - debutTotal;
   }
   return session;
 }
@@ -714,37 +889,38 @@ function obtenirSessionAdministrationValide_(
   jetonAdministrateur,
   renouveler,
   erreurSiInvalide,
-  forcerEcritureActivite
+  forcerEcritureActivite,
+  diagnostic
 ) {
-  const jeton = String(jetonAdministrateur || '').trim();
-
-  if (!/^[A-Za-z0-9_-]{40,200}$/.test(jeton)) {
-    if (erreurSiInvalide) {
-      throw new Error('Accès réservé à l’administrateur.');
-    }
-    return null;
-  }
-
-  const verrou = LockService.getScriptLock();
-
-  if (!verrou.tryLock(10000)) {
-    if (erreurSiInvalide) {
-      throw new Error('Accès réservé à l’administrateur.');
-    }
-    return null;
-  }
-
+  const debutTotal = diagnostic ? Date.now() : 0;
   try {
+    initialiserDiagnosticValidationUtilisateur_(diagnostic);
+    const jeton = String(jetonAdministrateur || '').trim();
+
+    if (!/^[A-Za-z0-9_-]{40,200}$/.test(jeton)) {
+      if (erreurSiInvalide) {
+        throw new Error('Accès réservé à l’administrateur.');
+      }
+      return null;
+    }
+
+    let debutEtape = diagnostic ? Date.now() : 0;
     const proprietes = PropertiesService.getScriptProperties();
+    ajouterDureeDiagnosticValidationUtilisateur_(
+      diagnostic,
+      'accesPropertiesServiceMs',
+      debutEtape
+    );
     const maintenant = Date.now();
     const cle =
       PREFIXE_SESSION_ADMIN +
       hacherJetonAdministration_(jeton);
+    debutEtape = diagnostic ? Date.now() : 0;
     const valeur = proprietes.getProperty(cle);
-
-    nettoyerSessionsAdministrationDansProprietes_(
-      proprietes,
-      maintenant
+    ajouterDureeDiagnosticValidationUtilisateur_(
+      diagnostic,
+      'lectureSessionPersistanteMs',
+      debutEtape
     );
 
     if (!valeur) {
@@ -756,33 +932,53 @@ function obtenirSessionAdministrationValide_(
 
     let session;
 
+    debutEtape = diagnostic ? Date.now() : 0;
     try {
       session = JSON.parse(valeur);
     } catch (erreur) {
-      proprietes.deleteProperty(cle);
+      supprimerSessionAdministrationCibleInvalide_(cle, '');
 
       if (erreurSiInvalide) {
         throw new Error('Accès réservé à l’administrateur.');
       }
       return null;
+    } finally {
+      ajouterDureeDiagnosticValidationUtilisateur_(
+        diagnostic,
+        'parsingSessionMs',
+        debutEtape
+      );
     }
 
     const derniereActivitePersistante = Number(
       session.derniereActivite || 0
     );
+    debutEtape = diagnostic ? Date.now() : 0;
     const derniereActiviteEffective = Math.max(
       derniereActivitePersistante,
       lireActiviteSessionAdministrationCache_(cle)
     );
-    if (
+    ajouterDureeDiagnosticValidationUtilisateur_(
+      diagnostic,
+      'lectureCacheActiviteMs',
+      debutEtape
+    );
+
+    debutEtape = diagnostic ? Date.now() : 0;
+    const sessionExpiree = Boolean(
       !session.idSession ||
       !session.derniereActivite ||
       !Number(session.expireA || 0) ||
       maintenant - derniereActiviteEffective >=
         DUREE_SESSION_ADMIN_MS
-    ) {
-      proprietes.deleteProperty(cle);
-      supprimerActiviteSessionAdministrationCache_(cle);
+    );
+    ajouterDureeDiagnosticValidationUtilisateur_(
+      diagnostic,
+      'controleExpirationMs',
+      debutEtape
+    );
+    if (sessionExpiree) {
+      supprimerSessionAdministrationCibleInvalide_(cle, session.idSession);
 
       if (erreurSiInvalide) {
         throw new Error('Accès réservé à l’administrateur.');
@@ -791,16 +987,33 @@ function obtenirSessionAdministrationValide_(
     }
 
     if (renouveler) {
+      debutEtape = diagnostic ? Date.now() : 0;
       enregistrerActiviteSessionAdministrationCache_(cle, maintenant);
       if (
         forcerEcritureActivite ||
         maintenant - derniereActivitePersistante >=
           DUREE_THROTTLE_ACTIVITE_SESSION_ADMIN_MS_
       ) {
-        session.derniereActivite = maintenant;
-        session.expireA = maintenant + DUREE_SESSION_ADMIN_MS;
-        proprietes.setProperty(cle, JSON.stringify(session));
+        const sessionRenouvelee =
+          renouvelerSessionAdministrationPersistante_(
+            proprietes,
+            cle,
+            session,
+            maintenant
+          );
+        if (!sessionRenouvelee) {
+          if (erreurSiInvalide) {
+            throw new Error('Accès réservé à l’administrateur.');
+          }
+          return null;
+        }
+        session = sessionRenouvelee;
       }
+      ajouterDureeDiagnosticValidationUtilisateur_(
+        diagnostic,
+        'renouvellementActiviteMs',
+        debutEtape
+      );
     }
     session.expireA = Math.max(
       Number(session.expireA || 0),
@@ -810,18 +1023,169 @@ function obtenirSessionAdministrationValide_(
 
     return session;
   } finally {
-    verrou.releaseLock();
+    if (diagnostic) {
+      diagnostic.totalValidationSessionMs = Number(
+        diagnostic.totalValidationSessionMs || 0
+      ) + Math.max(0, Date.now() - debutTotal);
+    }
   }
 }
 
 
-function motDePasseAdministrateurConfigure_() {
-  const proprietes = PropertiesService.getScriptProperties();
+function supprimerSessionAdministrationCibleInvalide_(cleSession, idSession) {
+  const verrou = LockService.getScriptLock();
+  const verrouDejaDetenu = typeof verrou.hasLock === 'function' &&
+    verrou.hasLock();
+  if (!verrouDejaDetenu && !verrou.tryLock(10000)) {
+    supprimerActiviteSessionAdministrationCache_(cleSession);
+    return;
+  }
+  try {
+    const proprietes = PropertiesService.getScriptProperties();
+    const valeurCourante = proprietes.getProperty(cleSession);
+    if (valeurCourante && idSession) {
+      try {
+        const sessionCourante = JSON.parse(valeurCourante);
+        if (
+          String(sessionCourante.idSession || '') !== String(idSession)
+        ) {
+          return;
+        }
+      } catch (erreurJson) {
+        // Une valeur illisible portant la même clé doit être retirée.
+      }
+    }
+    proprietes.deleteProperty(cleSession);
+  } finally {
+    if (!verrouDejaDetenu) verrou.releaseLock();
+    supprimerActiviteSessionAdministrationCache_(cleSession);
+  }
+}
 
-  return Boolean(
+
+function renouvelerSessionAdministrationPersistante_(
+  proprietes,
+  cleSession,
+  sessionValidee,
+  maintenant
+) {
+  const verrou = LockService.getScriptLock();
+  const verrouDejaDetenu = typeof verrou.hasLock === 'function' &&
+    verrou.hasLock();
+  if (!verrouDejaDetenu && !verrou.tryLock(10000)) return null;
+  try {
+    const valeurCourante = proprietes.getProperty(cleSession);
+    if (!valeurCourante) return null;
+    let sessionCourante;
+    try {
+      sessionCourante = JSON.parse(valeurCourante);
+    } catch (erreurJson) {
+      proprietes.deleteProperty(cleSession);
+      return null;
+    }
+    if (
+      String(sessionCourante.idSession || '') !==
+        String(sessionValidee.idSession || '')
+    ) {
+      return null;
+    }
+    const derniereActiviteEffective = Math.max(
+      Number(sessionCourante.derniereActivite || 0),
+      lireActiviteSessionAdministrationCache_(cleSession)
+    );
+    if (
+      !sessionCourante.derniereActivite ||
+      maintenant - derniereActiviteEffective >= DUREE_SESSION_ADMIN_MS
+    ) {
+      proprietes.deleteProperty(cleSession);
+      return null;
+    }
+    sessionCourante.derniereActivite = maintenant;
+    sessionCourante.expireA = maintenant + DUREE_SESSION_ADMIN_MS;
+    proprietes.setProperty(cleSession, JSON.stringify(sessionCourante));
+    return sessionCourante;
+  } finally {
+    if (!verrouDejaDetenu) verrou.releaseLock();
+  }
+}
+
+
+function lireTypeSessionUtilisateurCache_(jetonUtilisateur) {
+  try {
+    const type = String(
+      CacheService.getScriptCache().get(
+        construireCleCacheTypeSessionUtilisateur_(jetonUtilisateur)
+      ) || ''
+    );
+    return ['FORMATEUR', 'ADMINISTRATEUR'].includes(type) ? type : '';
+  } catch (erreur) {
+    return '';
+  }
+}
+
+
+function enregistrerTypeSessionUtilisateurCache_(jetonUtilisateur, type) {
+  const typeNormalise = String(type || '').toUpperCase();
+  if (!['FORMATEUR', 'ADMINISTRATEUR'].includes(typeNormalise)) return;
+  try {
+    CacheService.getScriptCache().put(
+      construireCleCacheTypeSessionUtilisateur_(jetonUtilisateur),
+      typeNormalise,
+      DUREE_CACHE_TYPE_SESSION_UTILISATEUR_SECONDES_
+    );
+  } catch (erreur) {
+    // Le routage retombe sur les deux validations persistantes ciblées.
+  }
+}
+
+
+function supprimerTypeSessionUtilisateurCache_(jetonUtilisateur) {
+  try {
+    CacheService.getScriptCache().remove(
+      construireCleCacheTypeSessionUtilisateur_(jetonUtilisateur)
+    );
+  } catch (erreur) {
+    // Une entrée de routage ne peut jamais valider une session à elle seule.
+  }
+}
+
+
+function construireCleCacheTypeSessionUtilisateur_(jetonUtilisateur) {
+  const octets = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    'ROUTAGE_SESSION\u0000' + String(jetonUtilisateur || ''),
+    Utilities.Charset.UTF_8
+  );
+  return PREFIXE_CACHE_TYPE_SESSION_UTILISATEUR_ +
+    Utilities.base64EncodeWebSafe(octets).replace(/=+$/g, '');
+}
+
+
+function motDePasseAdministrateurConfigure_() {
+  try {
+    const valeurCache = CacheService.getScriptCache().get(
+      CLE_CACHE_CONFIGURATION_ADMIN_
+    );
+    if (valeurCache === '1') return true;
+    if (valeurCache === '0') return false;
+  } catch (erreurCache) {
+    // La propriété persistante reste utilisée ci-dessous.
+  }
+  const proprietes = PropertiesService.getScriptProperties();
+  const configure = Boolean(
     proprietes.getProperty(PROPRIETE_SEL_ADMIN) &&
     proprietes.getProperty(PROPRIETE_HASH_ADMIN)
   );
+  try {
+    CacheService.getScriptCache().put(
+      CLE_CACHE_CONFIGURATION_ADMIN_,
+      configure ? '1' : '0',
+      DUREE_CACHE_CONFIGURATION_ADMIN_SECONDES_
+    );
+  } catch (erreurCache) {
+    // Cette valeur est informative et sera simplement relue si nécessaire.
+  }
+  return configure;
 }
 
 
@@ -880,6 +1244,15 @@ function initialiserMotDePasseAdministrateur_() {
       ADMIN_PASSWORD_SALT: sel,
       ADMIN_PASSWORD_HASH: hash
     }, false);
+    try {
+      CacheService.getScriptCache().put(
+        CLE_CACHE_CONFIGURATION_ADMIN_,
+        '1',
+        DUREE_CACHE_CONFIGURATION_ADMIN_SECONDES_
+      );
+    } catch (erreurCache) {
+      // Le secret persistant vient d'être écrit et reste la source de vérité.
+    }
     proprietes.deleteProperty(PROPRIETE_TENTATIVES_ADMIN);
     supprimerToutesSessionsAdministration_(proprietes);
   } finally {
@@ -1016,6 +1389,7 @@ function supprimerSessionAdministrationParJeton_(jetonAdministrateur) {
   } finally {
     verrou.releaseLock();
   }
+  supprimerTypeSessionUtilisateurCache_(jetonAdministrateur);
 }
 
 

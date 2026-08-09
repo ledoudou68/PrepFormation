@@ -61,6 +61,7 @@ class FausseFeuille {
   constructor(nom, donnees) {
     this.nom = nom;
     this.donnees = donnees.map(ligne => ligne.map(clonerValeur));
+    this.lecturesValeurs = 0;
   }
 
   getLastRow() {
@@ -73,9 +74,12 @@ class FausseFeuille {
 
   getDataRange() {
     return {
-      getValues: () => this.donnees.map(
-        ligne => ligne.map(clonerValeur)
-      )
+      getValues: () => {
+        this.lecturesValeurs++;
+        return this.donnees.map(
+          ligne => ligne.map(clonerValeur)
+        );
+      }
     };
   }
 
@@ -151,12 +155,26 @@ function creerEnvironnement() {
   const proprietes = {};
   const cache = {};
   const ecrituresProprietes = {};
+  const compteursServices = {
+    getProperty: 0,
+    getProperties: 0,
+    getPropertyParCle: {},
+    cacheGet: 0,
+    cachePut: 0,
+    cacheRemove: 0
+  };
   const audits = [];
   let sequence = 0;
   const magasinProprietes = {
-    getProperty: cle => Object.prototype.hasOwnProperty.call(proprietes, cle)
-      ? proprietes[cle]
-      : null,
+    getProperty: cle => {
+      compteursServices.getProperty++;
+      compteursServices.getPropertyParCle[cle] = Number(
+        compteursServices.getPropertyParCle[cle] || 0
+      ) + 1;
+      return Object.prototype.hasOwnProperty.call(proprietes, cle)
+        ? proprietes[cle]
+        : null;
+    },
     setProperty: (cle, valeur) => {
       proprietes[cle] = String(valeur);
       ecrituresProprietes[cle] = Number(ecrituresProprietes[cle] || 0) + 1;
@@ -174,7 +192,10 @@ function creerEnvironnement() {
       delete proprietes[cle];
       return magasinProprietes;
     },
-    getProperties: () => Object.assign({}, proprietes)
+    getProperties: () => {
+      compteursServices.getProperties++;
+      return Object.assign({}, proprietes);
+    }
   };
   let verrouPris = false;
   const verrou = {
@@ -213,13 +234,18 @@ function creerEnvironnement() {
     },
     CacheService: {
       getScriptCache: () => ({
-        get: cle => Object.prototype.hasOwnProperty.call(cache, cle)
-          ? cache[cle]
-          : null,
+        get: cle => {
+          compteursServices.cacheGet++;
+          return Object.prototype.hasOwnProperty.call(cache, cle)
+            ? cache[cle]
+            : null;
+        },
         put: (cle, valeur) => {
+          compteursServices.cachePut++;
           cache[cle] = String(valeur);
         },
         remove: cle => {
+          compteursServices.cacheRemove++;
           delete cache[cle];
         }
       })
@@ -308,6 +334,7 @@ function creerEnvironnement() {
     feuilles,
     proprietes,
     cache,
+    compteursServices,
     ecrituresProprietes,
     audits
   };
@@ -318,10 +345,24 @@ function creerEnvironnementSessionAdministration() {
   const proprietes = {};
   const cache = {};
   const ecritures = {};
+  const compteursServices = {
+    getProperty: 0,
+    getProperties: 0,
+    getPropertyParCle: {},
+    cacheGet: 0,
+    cachePut: 0,
+    cacheRemove: 0
+  };
   const magasinProprietes = {
-    getProperty: cle => Object.prototype.hasOwnProperty.call(proprietes, cle)
-      ? proprietes[cle]
-      : null,
+    getProperty: cle => {
+      compteursServices.getProperty++;
+      compteursServices.getPropertyParCle[cle] = Number(
+        compteursServices.getPropertyParCle[cle] || 0
+      ) + 1;
+      return Object.prototype.hasOwnProperty.call(proprietes, cle)
+        ? proprietes[cle]
+        : null;
+    },
     setProperty: (cle, valeur) => {
       proprietes[cle] = String(valeur);
       ecritures[cle] = Number(ecritures[cle] || 0) + 1;
@@ -331,7 +372,10 @@ function creerEnvironnementSessionAdministration() {
       delete proprietes[cle];
       return magasinProprietes;
     },
-    getProperties: () => Object.assign({}, proprietes)
+    getProperties: () => {
+      compteursServices.getProperties++;
+      return Object.assign({}, proprietes);
+    }
   };
   let verrouPris = false;
   const verrou = {
@@ -365,13 +409,18 @@ function creerEnvironnementSessionAdministration() {
     },
     CacheService: {
       getScriptCache: () => ({
-        get: cle => Object.prototype.hasOwnProperty.call(cache, cle)
-          ? cache[cle]
-          : null,
+        get: cle => {
+          compteursServices.cacheGet++;
+          return Object.prototype.hasOwnProperty.call(cache, cle)
+            ? cache[cle]
+            : null;
+        },
         put: (cle, valeur) => {
+          compteursServices.cachePut++;
           cache[cle] = String(valeur);
         },
         remove: cle => {
+          compteursServices.cacheRemove++;
           delete cache[cle];
         }
       })
@@ -393,7 +442,13 @@ function creerEnvironnementSessionAdministration() {
   vm.runInContext(sourceSecurite, contexte, {
     filename: 'SecuriteService.js'
   });
-  return { contexte, proprietes, cache, ecritures };
+  return {
+    contexte,
+    proprietes,
+    cache,
+    ecritures,
+    compteursServices
+  };
 }
 
 
@@ -448,6 +503,20 @@ function activerAuthentificationAdministrationReelle(
     );
   environnement.motDePasseAdministrateur = motDePasseAdministrateur;
   return environnement;
+}
+
+
+function reinitialiserCompteursValidation_(environnement) {
+  const compteurs = environnement.compteursServices;
+  compteurs.getProperty = 0;
+  compteurs.getProperties = 0;
+  compteurs.getPropertyParCle = {};
+  compteurs.cacheGet = 0;
+  compteurs.cachePut = 0;
+  compteurs.cacheRemove = 0;
+  Object.keys(environnement.feuilles || {}).forEach(function (nomFeuille) {
+    environnement.feuilles[nomFeuille].lecturesValeurs = 0;
+  });
 }
 
 
@@ -1091,6 +1160,118 @@ test('deux appareils peuvent conserver simultanément une session valide', () =>
 });
 
 
+test('la validation formateur cible une propriété et réutilise le cache court', () => {
+  const envSession = creerEnvironnement();
+  creerCompte(
+    envSession,
+    'F1',
+    'alice.validation-ciblee',
+    'phrase temporaire suffisamment longue'
+  );
+  const premiere = envSession.contexte.connecterFormateur(
+    'alice.validation-ciblee',
+    'phrase temporaire suffisamment longue'
+  );
+  const connexion = envSession.contexte.terminerPremiereConnexionFormateur(
+    premiere.jetonChangementMotDePasse,
+    'phrase définitive validation ciblée',
+    'phrase définitive validation ciblée'
+  );
+
+  reinitialiserCompteursValidation_(envSession);
+  assert(envSession.contexte.obtenirSessionFormateurValide_(
+    connexion.jeton,
+    false,
+    true
+  ));
+  assert.strictEqual(envSession.compteursServices.getProperties, 0);
+  assert.strictEqual(envSession.compteursServices.getProperty, 1);
+  assert.strictEqual(envSession.feuilles.UTILISATEURS.lecturesValeurs, 0);
+  assert.strictEqual(envSession.feuilles.FORMATEURS.lecturesValeurs, 0);
+
+  Object.keys(envSession.cache).filter(function (cle) {
+    return cle.startsWith('FORMATEUR_SESSION_AUTHORIZATION_');
+  }).forEach(function (cle) {
+    delete envSession.cache[cle];
+  });
+  reinitialiserCompteursValidation_(envSession);
+  assert(envSession.contexte.obtenirSessionFormateurValide_(
+    connexion.jeton,
+    false,
+    true
+  ));
+  assert.strictEqual(envSession.compteursServices.getProperties, 0);
+  assert.strictEqual(envSession.feuilles.UTILISATEURS.lecturesValeurs, 1);
+  assert.strictEqual(envSession.feuilles.FORMATEURS.lecturesValeurs, 1);
+
+  assert(envSession.contexte.obtenirSessionFormateurValide_(
+    connexion.jeton,
+    false,
+    true
+  ));
+  assert.strictEqual(envSession.feuilles.UTILISATEURS.lecturesValeurs, 1);
+  assert.strictEqual(envSession.feuilles.FORMATEURS.lecturesValeurs, 1);
+});
+
+
+test('la propriété persistante reste prioritaire sur le cache formateur', () => {
+  const envSession = creerEnvironnement();
+  creerCompte(
+    envSession,
+    'F1',
+    'alice.source-persistante',
+    'phrase temporaire suffisamment longue'
+  );
+  const premiere = envSession.contexte.connecterFormateur(
+    'alice.source-persistante',
+    'phrase temporaire suffisamment longue'
+  );
+  const connexion = envSession.contexte.terminerPremiereConnexionFormateur(
+    premiere.jetonChangementMotDePasse,
+    'phrase définitive source persistante',
+    'phrase définitive source persistante'
+  );
+  const cle = Object.keys(envSession.proprietes).find(function (nom) {
+    return nom.startsWith('FORMATEUR_SESSION_');
+  });
+  assert(Object.keys(envSession.cache).some(function (nom) {
+    return nom === 'FORMATEUR_SESSION_AUTHORIZATION_' + cle;
+  }));
+  delete envSession.proprietes[cle];
+  assert.strictEqual(
+    envSession.contexte.obtenirSessionFormateurValide_(
+      connexion.jeton,
+      false,
+      false
+    ),
+    null
+  );
+});
+
+
+test('la validation admin ne balaie plus toutes les Script Properties', () => {
+  const envAdmin = creerEnvironnementSessionAdministration();
+  const jeton = 'R'.repeat(48);
+  const cle = 'ADMIN_SESSION_' +
+    envAdmin.contexte.hacherJetonAdministration_(jeton);
+  const maintenant = Date.now();
+  envAdmin.proprietes[cle] = JSON.stringify({
+    idSession: 'ADMIN_CIBLE',
+    creeA: maintenant,
+    derniereActivite: maintenant,
+    expireA: maintenant + 30 * 60 * 1000
+  });
+  reinitialiserCompteursValidation_(envAdmin);
+  assert(envAdmin.contexte.obtenirSessionAdministrationValide_(
+    jeton,
+    false,
+    true
+  ));
+  assert.strictEqual(envAdmin.compteursServices.getProperties, 0);
+  assert.strictEqual(envAdmin.compteursServices.getProperty, 1);
+});
+
+
 test('l’activité est validée à chaque appel mais persistée au plus toutes les cinq minutes', () => {
   const envSession = creerEnvironnement();
   creerCompte(
@@ -1245,6 +1426,81 @@ test('un compte formateur bloqué ne bloque jamais l’accès administrateur dir
     String(evenement.utilisateur).includes('ADMINISTRATION_DIRECTE') &&
     !String(evenement.utilisateur).includes('FORMATEUR:')
   ));
+});
+
+
+test('le routage en cache sélectionne directement la session administrateur', () => {
+  const env = creerEnvironnementDoubleAuthentification({
+    connecterFormateur: true
+  });
+  const resultat = env.contexte.deverrouillerAdministration(
+    env.motDePasseAdministrateur,
+    ''
+  );
+  reinitialiserCompteursValidation_(env);
+  const session = env.contexte.getSessionUtilisateur(resultat.jeton);
+  assert.strictEqual(session.estAdministrateur, true);
+  assert.strictEqual(session.estFormateur, false);
+  const clesLues = Object.keys(
+    env.compteursServices.getPropertyParCle
+  );
+  assert.strictEqual(
+    clesLues.filter(cle => cle.startsWith('FORMATEUR_SESSION_')).length,
+    0
+  );
+  assert.strictEqual(
+    clesLues.filter(cle => cle.startsWith('ADMIN_SESSION_')).length,
+    1
+  );
+  assert.strictEqual(env.compteursServices.getProperties, 0);
+  assert.strictEqual(
+    env.contexte.obtenirSessionFormateurValide_(
+      resultat.jeton,
+      false,
+      false
+    ),
+    null
+  );
+});
+
+
+test('le diagnostic détaille la validation et le contrôle des droits sans secret', () => {
+  const env = creerEnvironnementDoubleAuthentification({
+    connecterFormateur: true
+  });
+  const diagnostic = {};
+  const session = env.contexte.verifierAccesPage_(
+    'Accueil',
+    env.jetonFormateur,
+    diagnostic
+  );
+  assert.strictEqual(session.estFormateur, true);
+  assert.strictEqual(diagnostic.operation, 'VERIFICATION_ACCES_PAGE');
+  assert.strictEqual(typeof diagnostic.controleDroitsMs, 'number');
+  assert.strictEqual(diagnostic.appelsAutresServices.length, 1);
+  const validation = diagnostic.appelsAutresServices[0];
+  [
+    'determinationTypeSessionMs',
+    'accesPropertiesServiceMs',
+    'lectureSessionPersistanteMs',
+    'parsingSessionMs',
+    'lectureCacheActiviteMs',
+    'controleExpirationMs',
+    'lectureCacheAutorisationMs',
+    'recuperationUtilisateurMs',
+    'controleStatutMs',
+    'renouvellementActiviteMs',
+    'constructionContexteMs',
+    'totalValidationSessionMs',
+    'totalServeurMs'
+  ].forEach(function (cle) {
+    assert.strictEqual(typeof validation[cle], 'number', cle);
+  });
+  const rapport = JSON.stringify(diagnostic);
+  assert(!rapport.includes(env.jetonFormateur));
+  assert(!rapport.includes('PASSWORD_HASH'));
+  assert(!rapport.includes('PASSWORD_SALT'));
+  assert(!rapport.includes('PEPPER'));
 });
 
 

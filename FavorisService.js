@@ -37,9 +37,16 @@ function getFavoris(
     : null;
   const debutTotal = diagnostic ? Date.now() : 0;
   let debutEtape = diagnostic ? Date.now() : 0;
-  const session = exigerUtilisateurAuthentifie_(jetonUtilisateur);
+  const diagnosticValidationSession = diagnostic ? {} : null;
+  const session = exigerUtilisateurAuthentifie_(
+    jetonUtilisateur,
+    diagnosticValidationSession
+  );
   if (diagnostic) {
     diagnostic.authentificationMs = Date.now() - debutEtape;
+    diagnostic.appelsAutresServices.push(
+      diagnosticValidationSession
+    );
   }
 
   debutEtape = diagnostic ? Date.now() : 0;

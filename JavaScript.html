@@ -474,6 +474,19 @@ function normaliserDiagnosticServeurAccueil_(diagnosticServeur) {
   [
     'authentificationMs',
     'verificationAccesMs',
+    'determinationTypeSessionMs',
+    'accesPropertiesServiceMs',
+    'lectureSessionPersistanteMs',
+    'parsingSessionMs',
+    'lectureCacheActiviteMs',
+    'controleExpirationMs',
+    'lectureCacheAutorisationMs',
+    'recuperationUtilisateurMs',
+    'controleStatutMs',
+    'renouvellementActiviteMs',
+    'constructionContexteMs',
+    'controleDroitsMs',
+    'totalValidationSessionMs',
     'ouvertureSpreadsheetMs',
     'synchronisationStatutsMs',
     'preparationFeuilleMs',
@@ -13948,27 +13961,7 @@ function creerOperationDiagnosticAccueilAdministration_(operation) {
     `);
   }
   services.forEach(function (service) {
-    const mesuresService = creerMesuresServeurDiagnosticAccueil_(service);
-    details.push(`
-      <h5>Service · ${echapperHtml(service.operation || 'Service interne')}</h5>
-      ${creerLigneDiagnosticAccueil_(
-        'Durée totale',
-        service.totalServeurMs
-      )}
-      ${mesuresService}
-      ${(service.lecturesFeuilles || []).map(function (lecture) {
-        return creerLigneDiagnosticAccueil_(
-          'Feuille ' + lecture.feuille,
-          lecture.totalLectureMs
-        );
-      }).join('')}
-      ${(service.lecturesIndirectes || []).map(function (feuille) {
-        return creerLigneDiagnosticAccueil_(
-          'Lecture indirecte ' + feuille,
-          service.totalServeurMs
-        );
-      }).join('')}
-    `);
+    details.push(creerBlocServiceDiagnosticAccueil_(service, 0));
   });
   if (etapes.length) {
     details.push(`
@@ -14024,10 +14017,51 @@ function creerOperationDiagnosticAccueilAdministration_(operation) {
 }
 
 
+function creerBlocServiceDiagnosticAccueil_(service, profondeur) {
+  const niveau = Math.max(0, Math.min(3, Number(profondeur || 0)));
+  const mesures = creerMesuresServeurDiagnosticAccueil_(service);
+  return `
+    <h5>${'↳ '.repeat(niveau)}Service · ${echapperHtml(
+      service.operation || 'Service interne'
+    )}</h5>
+    ${creerLigneDiagnosticAccueil_(
+      'Durée totale',
+      service.totalServeurMs
+    )}
+    ${mesures}
+    ${(service.lecturesFeuilles || []).map(function (lecture) {
+      return creerLigneDiagnosticAccueil_(
+        'Feuille ' + lecture.feuille,
+        lecture.totalLectureMs
+      );
+    }).join('')}
+    ${(service.appelsAutresServices || []).map(function (serviceInterne) {
+      return creerBlocServiceDiagnosticAccueil_(
+        serviceInterne,
+        niveau + 1
+      );
+    }).join('')}
+  `;
+}
+
+
 function creerMesuresServeurDiagnosticAccueil_(serveur) {
   const libelles = {
     authentificationMs: 'Validation de la session',
     verificationAccesMs: 'Vérification des droits de page',
+    determinationTypeSessionMs: 'Routage du type de session',
+    accesPropertiesServiceMs: 'Accès à Script Properties',
+    lectureSessionPersistanteMs: 'Lecture de la session persistante',
+    parsingSessionMs: 'Parsing de la session',
+    lectureCacheActiviteMs: 'Lecture du cache d’activité',
+    controleExpirationMs: 'Contrôle de l’expiration',
+    lectureCacheAutorisationMs: 'Lecture du cache d’autorisation',
+    recuperationUtilisateurMs: 'Récupération utilisateur/formateur',
+    controleStatutMs: 'Contrôle des statuts',
+    renouvellementActiviteMs: 'Renouvellement de l’activité',
+    constructionContexteMs: 'Construction du contexte utilisateur',
+    controleDroitsMs: 'Contrôle des droits',
+    totalValidationSessionMs: 'Total validation de session',
     ouvertureSpreadsheetMs: 'Récupération du classeur',
     synchronisationStatutsMs: 'Synchronisation des statuts',
     preparationFeuilleMs: 'Préparation / contrôle de feuille',

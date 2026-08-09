@@ -132,7 +132,19 @@ function creerEnvironnementServeur() {
           iso.slice(0, 4) + ' ' + iso.slice(11, 16);
       }
     },
-    exigerUtilisateurAuthentifie_() {
+    exigerUtilisateurAuthentifie_(jeton, diagnostic) {
+      if (diagnostic) {
+        diagnostic.operation = 'VALIDATION_SESSION';
+        diagnostic.accesPropertiesServiceMs = 2;
+        diagnostic.lectureSessionPersistanteMs = 3;
+        diagnostic.parsingSessionMs = 1;
+        diagnostic.controleExpirationMs = 1;
+        diagnostic.lectureCacheAutorisationMs = 1;
+        diagnostic.recuperationUtilisateurMs = 0;
+        diagnostic.controleStatutMs = 0;
+        diagnostic.totalValidationSessionMs = 8;
+        diagnostic.totalServeurMs = 8;
+      }
       return {
         estAdministrateur: true,
         estFormateur: true,
@@ -142,7 +154,17 @@ function creerEnvironnementServeur() {
     exigerAdministrateurLectureSeule_() {
       return { estAdministrateur: true };
     },
-    verifierAccesPage_() {},
+    verifierAccesPage_(nomPage, jeton, diagnostic) {
+      if (diagnostic) {
+        diagnostic.operation = 'VERIFICATION_ACCES_PAGE';
+        diagnostic.controleDroitsMs = 1;
+        diagnostic.totalServeurMs = 9;
+        diagnostic.appelsAutresServices = [{
+          operation: 'VALIDATION_SESSION',
+          totalServeurMs: 8
+        }];
+      }
+    },
     synchroniserStatutsStagiaires_(diagnostic) {
       if (!diagnostic) return { migres: 0, automatiquesMisAJour: 0 };
       diagnostic.ouvertureSpreadsheetMs = 2;
@@ -253,7 +275,7 @@ function assertLectureUniqueAccueil(lectures) {
     ]
   );
   assert.strictEqual(
-    diagnostic.diagnosticAccueil.appelsAutresServices[0].operation,
+    diagnostic.diagnosticAccueil.appelsAutresServices[1].operation,
     'SYNCHRONISATION_STATUTS_STAGIAIRES'
   );
   [

@@ -49,14 +49,18 @@ function getPage(nomPage, jetonUtilisateur, optionsDiagnostic) {
   }
 
   const debutVerificationAcces = diagnostic ? Date.now() : 0;
-  verifierAccesPage_(nomPage, jetonUtilisateur);
+  const diagnosticVerificationAcces = diagnostic ? {} : null;
+  verifierAccesPage_(
+    nomPage,
+    jetonUtilisateur,
+    diagnosticVerificationAcces
+  );
   if (diagnostic) {
     diagnostic.verificationAccesMs =
       Date.now() - debutVerificationAcces;
-    diagnostic.appelsAutresServices.push({
-      operation: 'VERIFICATION_ACCES_PAGE',
-      totalServeurMs: diagnostic.verificationAccesMs
-    });
+    diagnostic.appelsAutresServices.push(
+      diagnosticVerificationAcces
+    );
   }
 
   const debutConstructionHtml = diagnostic ? Date.now() : 0;
