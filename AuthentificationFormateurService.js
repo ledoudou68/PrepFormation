@@ -34,7 +34,7 @@ const DUREE_INACTIVITE_SESSION_FORMATEUR_MS_ = 60 * 60 * 1000;
 const DUREE_THROTTLE_ACTIVITE_SESSION_FORMATEUR_MS_ = 5 * 60 * 1000;
 const DUREE_CHANGEMENT_INITIAL_FORMATEUR_MS_ = 10 * 60 * 1000;
 const ITERATIONS_PBKDF2_FORMATEUR_ = 20000;
-const LONGUEUR_MIN_MOT_DE_PASSE_FORMATEUR_ = 15;
+const LONGUEUR_MIN_MOT_DE_PASSE_FORMATEUR_ = 10;
 const LONGUEUR_MAX_MOT_DE_PASSE_FORMATEUR_ = 512;
 const VERSION_VERIFICATEUR_MOT_DE_PASSE_FORMATEUR_ = 'PF2';
 const ALGORITHME_PBKDF2_FORMATEUR_ = 'PBKDF2-HMAC-SHA-256';
@@ -1528,7 +1528,7 @@ function verifierPolitiqueMotDePasseFormateur_(motDePasse) {
     valeur.length > LONGUEUR_MAX_MOT_DE_PASSE_FORMATEUR_
   ) {
     throw new Error(
-      'Le mot de passe doit contenir entre 15 et 512 caractères.'
+      'Le mot de passe doit contenir entre 10 et 512 caractères.'
     );
   }
   if (/\u0000/.test(valeur)) {
@@ -1593,17 +1593,13 @@ function calculerClePbkdf2Formateur_(motDePasse, sel, nombreIterations) {
 
 
 function deriverMotDePasseFormateur_(motDePasse, sel, nombreIterations) {
-  const valeur = verifierPolitiqueMotDePasseFormateur_(motDePasse);
   const iterations = nombreIterations === undefined
     ? ITERATIONS_PBKDF2_FORMATEUR_
     : Number(nombreIterations);
-  const cleDerivee = calculerClePbkdf2Formateur_(
-    valeur,
+  const verificateur = calculerVerificateurMotDePasseFormateur_(
+    motDePasse,
     sel,
-    iterations
-  );
-  const verificateur = appliquerPepperMotDePasseFormateur_(
-    cleDerivee,
+    iterations,
     obtenirPepperMotDePasseFormateur_()
   );
 
@@ -1614,6 +1610,22 @@ function deriverMotDePasseFormateur_(motDePasse, sel, nombreIterations) {
     ALGORITHME_PEPPER_FORMATEUR_,
     Utilities.base64EncodeWebSafe(verificateur).replace(/=+$/g, '')
   ].join('$');
+}
+
+
+function calculerVerificateurMotDePasseFormateur_(
+  motDePasse,
+  sel,
+  nombreIterations,
+  pepper
+) {
+  const valeur = verifierPolitiqueMotDePasseFormateur_(motDePasse);
+  const cleDerivee = calculerClePbkdf2Formateur_(
+    valeur,
+    sel,
+    nombreIterations
+  );
+  return appliquerPepperMotDePasseFormateur_(cleDerivee, pepper);
 }
 
 
@@ -1647,7 +1659,7 @@ function verifierMotDePasseFormateur_(motDePasse, sel, hashAttendu) {
     iterations > 200000
   ) {
     const cleFactice = calculerClePbkdf2Formateur_(
-      'TENTATIVE_INVALIDE_15_CARACTERES',
+      'TENTATIVE_INVALIDE_LONGUEUR_MINIMALE',
       sel,
       ITERATIONS_PBKDF2_FORMATEUR_
     );
@@ -1728,6 +1740,21 @@ function obtenirPepperMotDePasseFormateur_() {
 }
 
 
+function lirePepperMotDePasseFormateurPourBenchmark_() {
+  const pepper = String(
+    PropertiesService.getScriptProperties().getProperty(
+      PROPRIETE_PEPPER_MOT_DE_PASSE_FORMATEUR_
+    ) || ''
+  );
+  if (pepper.length < 32) {
+    throw new Error(
+      'Le secret d’installation nécessaire au benchmark est indisponible.'
+    );
+  }
+  return pepper;
+}
+
+
 /**
  * Benchmark manuel réservé à une session administrateur valide. Il n'accède
  * à aucun compte et utilise exclusivement des données factices internes.
@@ -1737,28 +1764,20 @@ function benchmarkerDerivationMotDePasseFormateur(jetonAdministrateur) {
   const motDePasseFactice =
     'Phrase de passe factice pour benchmark NFC é';
   const selFactice = 'SEL_FACTICE_BENCHMARK_PREPFORMATION_V2';
-  const iterationsTestees = [20000, 30000, 50000];
+  const pepper = lirePepperMotDePasseFormateurPourBenchmark_();
+  const iterationsTestees = [500, 1000, 1500, 2000];
   const durees = {};
 
   iterationsTestees.forEach(function (iterations) {
     const debut = Date.now();
-    calculerClePbkdf2Formateur_(
+    calculerVerificateurMotDePasseFormateur_(
       motDePasseFactice,
       selFactice,
-      iterations
+      iterations,
+      pepper
     );
     durees[String(iterations)] = Date.now() - debut;
   });
-
-  if (durees['50000'] <= 5000) {
-    const debut100000 = Date.now();
-    calculerClePbkdf2Formateur_(
-      motDePasseFactice,
-      selFactice,
-      100000
-    );
-    durees['100000'] = Date.now() - debut100000;
-  }
 
   return durees;
 }

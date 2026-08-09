@@ -578,25 +578,76 @@ test('deux comptes au même mot de passe ont des sels et hashes distincts', () =
 });
 
 
-test('la politique accepte 15 caractères, les espaces et les phrases de passe', () => {
+test('la politique refuse 9 caractères et en accepte 10', () => {
   assert.throws(
     () => environnement.contexte.verifierPolitiqueMotDePasseFormateur_(
-      '12345678901234'
+      '123456789'
     ),
-    /entre 15 et 512/
+    /entre 10 et 512/
   );
   assert.strictEqual(
     environnement.contexte.verifierPolitiqueMotDePasseFormateur_(
-      '123456789012345'
+      '1234567890'
     ),
-    '123456789012345'
+    '1234567890'
   );
+});
+
+
+test('la politique accepte les espaces, les phrases de passe et 512 caractères', () => {
   assert.strictEqual(
     environnement.contexte.verifierPolitiqueMotDePasseFormateur_(
       'une longue phrase avec espaces'
     ),
     'une longue phrase avec espaces'
   );
+  const maximum = 'é'.repeat(512);
+  assert.strictEqual(
+    environnement.contexte.verifierPolitiqueMotDePasseFormateur_(maximum),
+    maximum
+  );
+  assert.throws(
+    () => environnement.contexte.verifierPolitiqueMotDePasseFormateur_(
+      'a'.repeat(513)
+    ),
+    /entre 10 et 512/
+  );
+});
+
+
+test('la règle de 10 caractères est commune à tous les parcours formateur', () => {
+  const envParcours = creerEnvironnement();
+  const creation = envParcours.contexte.creerAccesFormateur({
+    idFormateur: 'F1',
+    identifiant: 'parcours.dix',
+    motDePasse: '1234567890'
+  }, 'JETON_ADMIN_TEST');
+  assert.strictEqual(creation.compte.idFormateur, 'F1');
+
+  const premiereConnexion = envParcours.contexte.connecterFormateur(
+    'parcours.dix',
+    '1234567890'
+  );
+  const session = envParcours.contexte.terminerPremiereConnexionFormateur(
+    premiereConnexion.jetonChangementMotDePasse,
+    'abcdefghij',
+    'abcdefghij'
+  );
+  const changement = envParcours.contexte.changerMotDePasseFormateur(
+    session.jeton,
+    'abcdefghij',
+    'klmnopqrst',
+    'klmnopqrst'
+  );
+  assert.strictEqual(changement.sessionUtilisateur.idFormateur, 'F1');
+
+  const reinitialisation = envParcours.contexte.executerActionAccesFormateur(
+    'F1',
+    'REINITIALISER_MOT_DE_PASSE',
+    { motDePasse: 'uvwxyzABCD' },
+    'JETON_ADMIN_TEST'
+  );
+  assert.strictEqual(reinitialisation.motDePasseTemporaire, 'uvwxyzABCD');
 });
 
 
@@ -1393,10 +1444,35 @@ test('le benchmark est protégé par le jeton admin et ne lit aucun utilisateur'
     debut
   );
   const benchmark = sourceProduction.slice(debut, fin);
+  const debutDerivation = sourceProduction.indexOf(
+    'function deriverMotDePasseFormateur_('
+  );
+  const finDerivation = sourceProduction.indexOf(
+    'function verifierMotDePasseFormateur_(',
+    debutDerivation
+  );
+  const derivation = sourceProduction.slice(
+    debutDerivation,
+    finDerivation
+  );
   assert(debut >= 0);
   assert(benchmark.indexOf('exigerAdministrateur_(') <
-    benchmark.indexOf('calculerClePbkdf2Formateur_('));
-  assert(!/lireTableUtilisateurs|SpreadsheetApp|journaliser/.test(benchmark));
+    benchmark.indexOf('calculerVerificateurMotDePasseFormateur_('));
+  assert(benchmark.includes(
+    'lirePepperMotDePasseFormateurPourBenchmark_()'
+  ));
+  assert(benchmark.includes(
+    'const iterationsTestees = [500, 1000, 1500, 2000];'
+  ));
+  assert(!/\[20000, 30000, 50000\]|100000/.test(benchmark));
+  assert(!/lireTableUtilisateurs|SpreadsheetApp|journaliser|setProperty/.test(
+    benchmark
+  ));
+  assert(derivation.includes(
+    'calculerVerificateurMotDePasseFormateur_('
+  ));
+  assert(derivation.includes('calculerClePbkdf2Formateur_('));
+  assert(derivation.includes('appliquerPepperMotDePasseFormateur_('));
   assert.throws(
     () => environnement.contexte
       .benchmarkerDerivationMotDePasseFormateur('JETON_INVALIDE'),
@@ -1418,8 +1494,11 @@ test('le benchmark accepte les deux modes administrateur et refuse le jeton form
     );
   assert.deepStrictEqual(
     Object.keys(resultatDirect).sort(),
-    ['100000', '20000', '30000', '50000']
+    ['1000', '1500', '2000', '500']
   );
+  assert(!JSON.stringify(resultatDirect).includes(
+    envDirect.proprietes.FORMATEUR_PASSWORD_PEPPER
+  ));
   assert.strictEqual(
     administrationDirecte.sessionUtilisateur.modeAccesAdministration,
     'ADMINISTRATION_DIRECTE'
@@ -1446,8 +1525,31 @@ test('le benchmark accepte les deux modes administrateur et refuse le jeton form
     elevation.sessionUtilisateur.modeAccesAdministration,
     'ELEVATION_FORMATEUR'
   );
-  assert.strictEqual(typeof resultatEleve['20000'], 'number');
-  assert.strictEqual(typeof resultatEleve['50000'], 'number');
+  assert.strictEqual(typeof resultatEleve['500'], 'number');
+  assert.strictEqual(typeof resultatEleve['1000'], 'number');
+  assert.strictEqual(typeof resultatEleve['1500'], 'number');
+  assert.strictEqual(typeof resultatEleve['2000'], 'number');
+});
+
+
+test('le benchmark ne crée pas de pepper et ne retourne aucun secret', () => {
+  const envSansPepper = creerEnvironnementDoubleAuthentification();
+  delete envSansPepper.proprietes.FORMATEUR_PASSWORD_PEPPER;
+  const administration = envSansPepper.contexte
+    .deverrouillerAdministration(
+      envSansPepper.motDePasseAdministrateur
+    );
+  assert.throws(
+    () => envSansPepper.contexte
+      .benchmarkerDerivationMotDePasseFormateur(
+        administration.jeton
+      ),
+    /secret d’installation.*indisponible/
+  );
+  assert.strictEqual(
+    envSansPepper.proprietes.FORMATEUR_PASSWORD_PEPPER,
+    undefined
+  );
 });
 
 
@@ -1602,7 +1704,9 @@ test('les champs de mot de passe utilisent les bons autocomplete et autorisent l
   assert(indexHtml.includes('autocomplete="username"'));
   assert(indexHtml.includes('autocomplete="current-password"'));
   assert(indexHtml.includes('autocomplete="new-password"'));
-  assert(indexHtml.includes('minlength="15"'));
+  assert(indexHtml.includes('minlength="10"'));
+  assert(!indexHtml.includes('minlength="15"'));
+  assert(formateursHtml.includes('minlength="10"'));
   assert(!/onpaste\s*=/.test(indexHtml));
   assert(sourceInterface.includes('function basculerVisibiliteMotDePasse_('));
 });

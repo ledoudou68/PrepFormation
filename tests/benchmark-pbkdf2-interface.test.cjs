@@ -256,18 +256,23 @@ assert.strictEqual(appels[0].jeton, 'JETON_ADMINISTRATION_DIRECTE');
 assert.strictEqual(bouton.disabled, true);
 assert.strictEqual(bouton.textContent, 'Benchmark en cours…');
 appels.shift().succes({
-  20000: 115,
-  30000: 184,
-  50000: 302
+  500: 108,
+  1000: 216,
+  1500: 327,
+  2000: 438
 });
 assert.strictEqual(bouton.disabled, false);
 assert.strictEqual(bouton.textContent, 'Tester les performances PBKDF2');
-assert(resultat.innerHTML.includes('115 ms'));
-assert(resultat.innerHTML.includes('184 ms'));
-assert(resultat.innerHTML.includes('302 ms'));
-assert(!resultat.innerHTML.includes('100000'));
-assert(!resultat.innerHTML.includes('100 000'));
-assert(resultat.innerHTML.includes('20 000 itérations'));
+assert(resultat.innerHTML.includes('108 ms'));
+assert(resultat.innerHTML.includes('216 ms'));
+assert(resultat.innerHTML.includes('327 ms'));
+assert(resultat.innerHTML.includes('438 ms'));
+const resultatNormalise = resultat.innerHTML.replace(/[\u00a0\u202f]/g, ' ');
+assert(resultatNormalise.includes('500'));
+assert(resultatNormalise.includes('1 000'));
+assert(resultatNormalise.includes('1 500'));
+assert(resultatNormalise.includes('2 000'));
+assert(resultatNormalise.includes('20 000 itérations'));
 
 definirContexteAuthentification({
   contexte: 'FORMATEUR_ADMINISTRATEUR',
@@ -280,13 +285,28 @@ vm.runInContext('executerBenchmarkPbkdf2Administration();', contexte);
 assert.strictEqual(appels.length, 1);
 assert.strictEqual(appels[0].jeton, 'JETON_ADMIN_ELEVATION');
 appels.shift().succes({
-  20000: 101,
-  30000: 151,
-  50000: 251,
-  100000: 498
+  500: 101,
+  1000: 203,
+  1500: 304,
+  2000: 407
 });
-assert(resultat.innerHTML.includes('498 ms'));
-assert(resultat.innerHTML.includes('100'));
+assert(resultat.innerHTML.includes('407 ms'));
+
+const debutRenduBenchmark = sourceInterface.indexOf(
+  'function afficherResultatsBenchmarkPbkdf2Administration_('
+);
+const finRenduBenchmark = sourceInterface.indexOf(
+  'function afficherErreurBenchmarkPbkdf2Administration_(',
+  debutRenduBenchmark
+);
+const sourceRenduBenchmark = sourceInterface.slice(
+  debutRenduBenchmark,
+  finRenduBenchmark
+);
+assert(sourceRenduBenchmark.includes(
+  'const iterations = [500, 1000, 1500, 2000];'
+));
+assert(!sourceRenduBenchmark.includes('[20000, 30000, 50000]'));
 
 definirContexteAuthentification({
   contexte: 'ADMINISTRATEUR',

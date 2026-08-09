@@ -13278,14 +13278,7 @@ function afficherResultatsBenchmarkPbkdf2Administration_(durees) {
   );
   if (!zone) return;
 
-  const iterations = [20000, 30000, 50000];
-  if (
-    Object.prototype.hasOwnProperty.call(durees, '100000') &&
-    typeof durees['100000'] === 'number' &&
-    Number.isFinite(durees['100000'])
-  ) {
-    iterations.push(100000);
-  }
+  const iterations = [500, 1000, 1500, 2000];
 
   zone.className = '';
   zone.innerHTML = `
