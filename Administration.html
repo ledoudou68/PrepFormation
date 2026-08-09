@@ -20,6 +20,36 @@
     ></div>
   </section>
 
+  <section
+    class="bloc bloc-securite-authentification-administration"
+    data-admin-only="true"
+  >
+    <div class="entete-page entete-page-actions">
+      <div>
+        <h2>Sécurité de l'authentification</h2>
+        <p>
+          Mesure le temps nécessaire à la dérivation des mots de passe sur le
+          runtime Apps Script. Ce test n'utilise aucun compte ni mot de passe
+          réel.
+        </p>
+      </div>
+      <button
+        type="button"
+        id="boutonBenchmarkPbkdf2Administration"
+        class="bouton-principal"
+        onclick="executerBenchmarkPbkdf2Administration()"
+        disabled
+      >Tester les performances PBKDF2</button>
+    </div>
+
+    <div
+      id="resultatBenchmarkPbkdf2Administration"
+      class="masque"
+      role="status"
+      aria-live="polite"
+    ></div>
+  </section>
+
   <section class="bloc bloc-mise-production-administration">
     <div class="entete-page entete-page-actions">
       <div>

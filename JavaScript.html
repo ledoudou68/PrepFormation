@@ -93,6 +93,7 @@ const etatApplication = {
   consultationRestaurabiliteActive: null,
   filtreSauvegardesAdministration: 'TOUTES',
   backupSuppressionAdministration: null,
+  benchmarkPbkdf2AdministrationEnCours: false,
   derniereActiviteAdministration: 0,
   minuterieAdministration: null,
   renouvellementAdministrationEnCours: false,
@@ -13134,6 +13135,8 @@ function initialiserPageAdministration() {
     return;
   }
 
+  etatApplication.benchmarkPbkdf2AdministrationEnCours = false;
+  mettreAJourDisponibiliteBenchmarkPbkdf2Administration_(false);
   afficherLoader();
 
   google.script.run
@@ -13173,12 +13176,152 @@ function initialiserPageAdministration() {
         etatApplication.restaurationAdministration
       );
       afficherFormationsAdministration();
+      mettreAJourDisponibiliteBenchmarkPbkdf2Administration_(true);
       masquerLoader();
     })
     .withFailureHandler(gererErreurServeur)
     .getDonneesAdministration(
       obtenirJetonAdministrateurApplication()
     );
+}
+
+
+function mettreAJourDisponibiliteBenchmarkPbkdf2Administration_(
+  sessionValidee
+) {
+  const bouton = document.getElementById(
+    'boutonBenchmarkPbkdf2Administration'
+  );
+  if (!bouton) return;
+
+  const disponible = Boolean(
+    sessionValidee &&
+    estAdministrateurApplication() &&
+    obtenirJetonAdministrateurApplication() &&
+    !etatApplication.benchmarkPbkdf2AdministrationEnCours
+  );
+  bouton.disabled = !disponible;
+  bouton.textContent = etatApplication.benchmarkPbkdf2AdministrationEnCours
+    ? 'Benchmark en cours…'
+    : 'Tester les performances PBKDF2';
+}
+
+
+function executerBenchmarkPbkdf2Administration() {
+  const bouton = document.getElementById(
+    'boutonBenchmarkPbkdf2Administration'
+  );
+  const zone = document.getElementById(
+    'resultatBenchmarkPbkdf2Administration'
+  );
+  const jetonAdministrateur =
+    obtenirJetonAdministrateurApplication();
+
+  if (
+    !bouton ||
+    !zone ||
+    etatApplication.benchmarkPbkdf2AdministrationEnCours
+  ) {
+    return;
+  }
+
+  if (!estAdministrateurApplication() || !jetonAdministrateur) {
+    bouton.disabled = true;
+    afficherErreurBenchmarkPbkdf2Administration_(
+      'Une session administrateur valide est nécessaire pour lancer ce test.'
+    );
+    return;
+  }
+
+  etatApplication.benchmarkPbkdf2AdministrationEnCours = true;
+  bouton.disabled = true;
+  bouton.textContent = 'Benchmark en cours…';
+  zone.classList.remove('masque');
+  zone.innerHTML = `
+    <div class="etat-vide">
+      Mesure en cours sur le runtime Apps Script…
+    </div>
+  `;
+
+  google.script.run
+    .withSuccessHandler(function (durees) {
+      etatApplication.benchmarkPbkdf2AdministrationEnCours = false;
+      afficherResultatsBenchmarkPbkdf2Administration_(durees || {});
+      mettreAJourDisponibiliteBenchmarkPbkdf2Administration_(true);
+    })
+    .withFailureHandler(function (erreur) {
+      etatApplication.benchmarkPbkdf2AdministrationEnCours = false;
+      const messageServeur = extraireMessageErreur(erreur);
+      const sessionRefusee = String(messageServeur || '').includes(
+        'Accès réservé à l’administrateur.'
+      );
+      const messagePublic = sessionRefusee
+        ? 'La session administrateur a expiré ou a été verrouillée. Déverrouille de nouveau l’administration.'
+        : 'Le benchmark PBKDF2 n’a pas pu être exécuté sur le runtime Apps Script. Réessaie ultérieurement.';
+      afficherErreurBenchmarkPbkdf2Administration_(
+        messagePublic
+      );
+      afficherToast(messagePublic, true);
+      mettreAJourDisponibiliteBenchmarkPbkdf2Administration_(
+        !sessionRefusee
+      );
+    })
+    .benchmarkerDerivationMotDePasseFormateur(
+      jetonAdministrateur
+    );
+}
+
+
+function afficherResultatsBenchmarkPbkdf2Administration_(durees) {
+  const zone = document.getElementById(
+    'resultatBenchmarkPbkdf2Administration'
+  );
+  if (!zone) return;
+
+  const iterations = [20000, 30000, 50000];
+  if (
+    Object.prototype.hasOwnProperty.call(durees, '100000') &&
+    typeof durees['100000'] === 'number' &&
+    Number.isFinite(durees['100000'])
+  ) {
+    iterations.push(100000);
+  }
+
+  zone.className = '';
+  zone.innerHTML = `
+    <div class="grille-diagnostic-administration">
+      ${iterations.map(function (nombreIterations) {
+        const duree = durees[String(nombreIterations)];
+        const mesureDisponible = typeof duree === 'number' &&
+          Number.isFinite(duree) && duree >= 0;
+        return `
+          <article class="carte-diagnostic-administration">
+            <span>${nombreIterations.toLocaleString('fr-FR')} itérations</span>
+            <strong>${mesureDisponible
+              ? Math.round(duree).toLocaleString('fr-FR') + ' ms'
+              : 'Non mesuré'}</strong>
+          </article>
+        `;
+      }).join('')}
+    </div>
+    <p class="avertissement-diagnostic-administration">
+      Configuration actuellement utilisée : <strong>20 000 itérations</strong>
+    </p>
+  `;
+}
+
+
+function afficherErreurBenchmarkPbkdf2Administration_(message) {
+  const zone = document.getElementById(
+    'resultatBenchmarkPbkdf2Administration'
+  );
+  if (!zone) return;
+
+  zone.className = 'erreur-sauvegarde-administration';
+  zone.innerHTML = `
+    <strong>Benchmark interrompu</strong>
+    <span>${echapperHtml(message)}</span>
+  `;
 }
 
 

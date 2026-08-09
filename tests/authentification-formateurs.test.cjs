@@ -1405,6 +1405,94 @@ test('le benchmark est protégé par le jeton admin et ne lit aucun utilisateur'
 });
 
 
+test('le benchmark accepte les deux modes administrateur et refuse le jeton formateur seul', () => {
+  const envDirect = creerEnvironnementDoubleAuthentification();
+  envDirect.contexte.calculerClePbkdf2Formateur_ = () => [];
+  const administrationDirecte = envDirect.contexte
+    .deverrouillerAdministration(
+      envDirect.motDePasseAdministrateur
+    );
+  const resultatDirect = envDirect.contexte
+    .benchmarkerDerivationMotDePasseFormateur(
+      administrationDirecte.jeton
+    );
+  assert.deepStrictEqual(
+    Object.keys(resultatDirect).sort(),
+    ['100000', '20000', '30000', '50000']
+  );
+  assert.strictEqual(
+    administrationDirecte.sessionUtilisateur.modeAccesAdministration,
+    'ADMINISTRATION_DIRECTE'
+  );
+
+  const envEleve = creerEnvironnementDoubleAuthentification({
+    connecterFormateur: true
+  });
+  envEleve.contexte.calculerClePbkdf2Formateur_ = () => [];
+  assert.throws(
+    () => envEleve.contexte
+      .benchmarkerDerivationMotDePasseFormateur(
+        envEleve.jetonFormateur
+      ),
+    /Accès réservé/
+  );
+  const elevation = envEleve.contexte.deverrouillerAdministration(
+    envEleve.motDePasseAdministrateur,
+    envEleve.jetonFormateur
+  );
+  const resultatEleve = envEleve.contexte
+    .benchmarkerDerivationMotDePasseFormateur(elevation.jeton);
+  assert.strictEqual(
+    elevation.sessionUtilisateur.modeAccesAdministration,
+    'ELEVATION_FORMATEUR'
+  );
+  assert.strictEqual(typeof resultatEleve['20000'], 'number');
+  assert.strictEqual(typeof resultatEleve['50000'], 'number');
+});
+
+
+test('le benchmark refuse une session administrateur expirée ou verrouillée', () => {
+  const envExpire = creerEnvironnementDoubleAuthentification();
+  envExpire.contexte.calculerClePbkdf2Formateur_ = () => [];
+  const administration = envExpire.contexte
+    .deverrouillerAdministration(
+      envExpire.motDePasseAdministrateur
+    );
+  const cleSession = Object.keys(envExpire.proprietes).find(
+    cle => cle.startsWith('ADMIN_SESSION_')
+  );
+  const session = JSON.parse(envExpire.proprietes[cleSession]);
+  session.derniereActivite = Date.now() - 31 * 60 * 1000;
+  session.expireA = Date.now() - 60 * 1000;
+  envExpire.proprietes[cleSession] = JSON.stringify(session);
+  delete envExpire.cache['ADMIN_LAST_ACTIVITY_' + cleSession];
+  assert.throws(
+    () => envExpire.contexte
+      .benchmarkerDerivationMotDePasseFormateur(
+        administration.jeton
+      ),
+    /Accès réservé/
+  );
+
+  const envVerrouille = creerEnvironnementDoubleAuthentification();
+  envVerrouille.contexte.calculerClePbkdf2Formateur_ = () => [];
+  const sessionVerrouillable = envVerrouille.contexte
+    .deverrouillerAdministration(
+      envVerrouille.motDePasseAdministrateur
+    );
+  envVerrouille.contexte.verrouillerAdministration(
+    sessionVerrouillable.jeton
+  );
+  assert.throws(
+    () => envVerrouille.contexte
+      .benchmarkerDerivationMotDePasseFormateur(
+        sessionVerrouillable.jeton
+      ),
+    /Accès réservé/
+  );
+});
+
+
 test('l’identité et les droits sont toujours résolus côté serveur', () => {
   assert(sourceSecurite.includes("? 'FORMATEUR_ADMINISTRATEUR'"));
   assert(sourceSecurite.includes("? 'ADMINISTRATEUR'"));
