@@ -411,9 +411,9 @@ test('la passe responsive ne crée ni migration ni nouvelle feuille', () => {
   assert(!css.includes('@import'));
 });
 
-test('la version applicative est centralisée à 1.9.4', () => {
+test('la version applicative est centralisée à 2.0.0', () => {
   assert(metadonnees.includes(
-    "VERSION_APPLICATION_PREPFORMATION_ = '1.9.4'"
+    "VERSION_APPLICATION_PREPFORMATION_ = '2.0.0'"
   ));
 });
 

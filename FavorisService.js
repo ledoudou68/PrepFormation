@@ -20,11 +20,13 @@ const COLONNES_FAVORIS_ = [
 
 
 /**
- * Retourne uniquement les favoris associés à la clé locale fournie.
- * La clé est un identifiant de confort, jamais une authentification.
+ * Pour un formateur authentifié, la clé de stockage est déterminée
+ * exclusivement depuis sa session serveur. La clé locale reste utilisée
+ * pour l'administrateur et pour une migration volontaire des anciens favoris.
  */
-function getFavoris(utilisateurCle) {
-  const cle = validerUtilisateurCleFavoris_(utilisateurCle);
+function getFavoris(utilisateurCle, jetonUtilisateur) {
+  const session = exigerUtilisateurAuthentifie_(jetonUtilisateur);
+  const cle = resoudreCleProprietaireFavoris_(session, utilisateurCle);
   const classeur = SpreadsheetApp.getActiveSpreadsheet();
   const tableFavoris = lireTableFavoris_(classeur, 'FAVORIS', true);
   const lignes = tableFavoris.lignes.filter(function (ligne) {
@@ -83,10 +85,16 @@ function getFavoris(utilisateurCle) {
 }
 
 
-function ajouterFavori(type, identifiant, utilisateurCle) {
+function ajouterFavori(
+  type,
+  identifiant,
+  utilisateurCle,
+  jetonUtilisateur
+) {
+  const session = exigerUtilisateurAuthentifie_(jetonUtilisateur);
   const typeValide = validerTypeFavori_(type);
   const idValide = validerIdentifiantFavori_(identifiant);
-  const cle = validerUtilisateurCleFavoris_(utilisateurCle);
+  const cle = resoudreCleProprietaireFavoris_(session, utilisateurCle);
 
   return executerMutationMetier_(function () {
     const classeur = SpreadsheetApp.getActiveSpreadsheet();
@@ -143,15 +151,32 @@ function ajouterFavori(type, identifiant, utilisateurCle) {
       )
       .setValues([ligne]);
 
+    journaliserActionSensible_(
+      'FAVORI_AJOUT',
+      typeValide,
+      idValide,
+      {
+        idUtilisateur: session.idUtilisateur || '',
+        idFormateur: session.idFormateur || ''
+      },
+      session.identifiantHistorique
+    );
+
     return construireFavoriPublic_(favori, objet);
   });
 }
 
 
-function supprimerFavori(type, identifiant, utilisateurCle) {
+function supprimerFavori(
+  type,
+  identifiant,
+  utilisateurCle,
+  jetonUtilisateur
+) {
+  const session = exigerUtilisateurAuthentifie_(jetonUtilisateur);
   const typeValide = validerTypeFavori_(type);
   const idValide = validerIdentifiantFavori_(identifiant);
-  const cle = validerUtilisateurCleFavoris_(utilisateurCle);
+  const cle = resoudreCleProprietaireFavoris_(session, utilisateurCle);
 
   return executerMutationMetier_(function () {
     const classeur = SpreadsheetApp.getActiveSpreadsheet();
@@ -176,6 +201,19 @@ function supprimerFavori(type, identifiant, utilisateurCle) {
       tableFavoris.feuille.deleteRow(numeroLigne);
     });
 
+    if (numeros.length) {
+      journaliserActionSensible_(
+        'FAVORI_SUPPRESSION',
+        typeValide,
+        idValide,
+        {
+          idUtilisateur: session.idUtilisateur || '',
+          idFormateur: session.idFormateur || ''
+        },
+        session.identifiantHistorique
+      );
+    }
+
     return {
       supprime: numeros.length > 0,
       type: typeValide,
@@ -186,10 +224,16 @@ function supprimerFavori(type, identifiant, utilisateurCle) {
 }
 
 
-function estFavori(type, identifiant, utilisateurCle) {
+function estFavori(
+  type,
+  identifiant,
+  utilisateurCle,
+  jetonUtilisateur
+) {
+  const session = exigerUtilisateurAuthentifie_(jetonUtilisateur);
   const typeValide = validerTypeFavori_(type);
   const idValide = validerIdentifiantFavori_(identifiant);
-  const cle = validerUtilisateurCleFavoris_(utilisateurCle);
+  const cle = resoudreCleProprietaireFavoris_(session, utilisateurCle);
   const tableFavoris = lireTableFavoris_(
     SpreadsheetApp.getActiveSpreadsheet(),
     'FAVORIS',
@@ -202,6 +246,73 @@ function estFavori(type, identifiant, utilisateurCle) {
     idValide,
     cle
   ));
+}
+
+
+function importerFavorisLocauxFormateur(
+  utilisateurCleLocale,
+  jetonUtilisateur
+) {
+  const session = exigerUtilisateurAuthentifie_(jetonUtilisateur);
+  if (!session.estFormateur || !session.idUtilisateur) {
+    throw new Error('Cette importation est réservée au formateur connecté.');
+  }
+  const cleLocale = validerUtilisateurCleFavoris_(utilisateurCleLocale);
+  const cleCompte = construireCleCompteFavoris_(session.idUtilisateur);
+
+  return executerMutationMetier_(function () {
+    const classeur = SpreadsheetApp.getActiveSpreadsheet();
+    const table = lireTableFavoris_(classeur, 'FAVORIS', true);
+    const lignesLocales = table.lignes.filter(function (ligne) {
+      return valeurFavoris_(table, ligne, 'UTILISATEUR_CLE') === cleLocale;
+    });
+    let importes = 0;
+    let existants = 0;
+
+    lignesLocales.forEach(function (ligne) {
+      const type = normaliserTypeFavori_(
+        valeurFavoris_(table, ligne, 'TYPE')
+      );
+      const identifiant = valeurFavoris_(
+        table,
+        ligne,
+        'IDENTIFIANT'
+      );
+      if (!type || !identifiant) return;
+      if (trouverLigneFavori_(table, type, identifiant, cleCompte)) {
+        existants++;
+        return;
+      }
+
+      const copie = ligne.slice();
+      copie[table.index.ID_FAVORI] = Utilities.getUuid();
+      copie[table.index.UTILISATEUR_CLE] = cleCompte;
+      copie[table.index.DATE_CREATION] = new Date();
+      table.feuille.appendRow(copie);
+      table.lignes.push(copie);
+      importes++;
+    });
+
+    journaliserActionSensible_(
+      'FAVORIS_LOCAUX_IMPORTATION',
+      'UTILISATEUR',
+      session.idUtilisateur,
+      {
+        idFormateur: session.idFormateur,
+        importes: importes,
+        dejaExistants: existants,
+        sourceLocaleConservee: true
+      },
+      session.identifiantHistorique
+    );
+
+    return {
+      succes: true,
+      importes: importes,
+      dejaExistants: existants,
+      sourceLocaleConservee: true
+    };
+  });
 }
 
 
@@ -551,6 +662,26 @@ function validerUtilisateurCleFavoris_(utilisateurCle) {
     throw new Error('Clé locale de favoris invalide.');
   }
   return valeur;
+}
+
+
+function resoudreCleProprietaireFavoris_(session, utilisateurCle) {
+  if (session && session.estFormateur && session.idUtilisateur) {
+    return construireCleCompteFavoris_(session.idUtilisateur);
+  }
+  if (session && session.estAdministrateur) {
+    return validerUtilisateurCleFavoris_(utilisateurCle);
+  }
+  throw new Error('Authentification requise.');
+}
+
+
+function construireCleCompteFavoris_(idUtilisateur) {
+  const identifiant = String(idUtilisateur || '').trim();
+  if (!/^[A-Za-z0-9_-]{8,100}$/.test(identifiant)) {
+    throw new Error('Compte utilisateur invalide pour les favoris.');
+  }
+  return 'pusr_' + identifiant;
 }
 
 

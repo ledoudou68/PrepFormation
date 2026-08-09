@@ -40,7 +40,12 @@ function creerContexte() {
     Array,
     RegExp,
     Error,
-    isNaN
+    isNaN,
+    exigerUtilisateurAuthentifie_: () => ({
+      estFormateur: true,
+      idUtilisateur: 'U-TEST',
+      idFormateur: 'FO-TEST'
+    })
   };
   vm.createContext(contexte);
   vm.runInContext(source, contexte, {

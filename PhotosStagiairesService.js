@@ -9,7 +9,8 @@ const PREFIXE_DESCRIPTION_PHOTO_STAGIAIRE_ =
  * Consultation autorisée aux formateurs. Aucun identifiant Drive n'est
  * renvoyé au navigateur : seul un contenu temporaire est sérialisé.
  */
-function getPhotoStagiaire(uuid) {
+function getPhotoStagiaire(uuid, jetonUtilisateur) {
+  exigerUtilisateurAuthentifie_(jetonUtilisateur);
   const reference = lireReferencePhotoStagiaire_(uuid);
 
   if (!reference.fileId) {

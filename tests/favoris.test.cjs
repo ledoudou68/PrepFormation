@@ -98,7 +98,7 @@ function donneesBase() {
 }
 
 
-function creerContexteService(donneesOptionnelles) {
+function creerContexteService(donneesOptionnelles, sessionOptionnelle) {
   const donnees = donneesOptionnelles || donneesBase();
   const feuilles = {};
   let mutations = 0;
@@ -129,6 +129,9 @@ function creerContexteService(donneesOptionnelles) {
       }),
       deleteRow: numero => {
         valeurs.splice(numero - 1, 1);
+      },
+      appendRow: ligne => {
+        valeurs.push(ligne.slice());
       }
     };
   });
@@ -156,6 +159,12 @@ function creerContexteService(donneesOptionnelles) {
     Utilities: {
       getUuid: () => 'FAVORI-' + (++sequence)
     },
+    exigerUtilisateurAuthentifie_: () => sessionOptionnelle || ({
+      estAdministrateur: true,
+      estFormateur: false,
+      identifiantHistorique: 'TEST'
+    }),
+    journaliserActionSensible_: () => {},
     executerMutationMetier_: traitement => {
       mutations++;
       return traitement();
@@ -451,6 +460,64 @@ test('estFavori respecte le type, l’identifiant et la clé locale', () => {
 });
 
 
+test('un formateur retrouve ses favoris depuis deux appareils', () => {
+  const session = {
+    estAdministrateur: false,
+    estFormateur: true,
+    idUtilisateur: 'UTILISATEUR-0001',
+    idFormateur: 'FO1',
+    identifiantHistorique: 'UTILISATEUR:UTILISATEUR-0001'
+  };
+  const environnement = creerContexteService(undefined, session);
+  environnement.contexte.ajouterFavori(
+    'STAGIAIRE',
+    'T1',
+    'pfav_appareil_aaaaaaaaaaaa'
+  );
+  const favorisAutreAppareil = environnement.contexte.getFavoris(
+    'pfav_appareil_bbbbbbbbbbbb'
+  );
+  assert.strictEqual(favorisAutreAppareil.length, 1);
+  assert.strictEqual(
+    environnement.donnees.FAVORIS[1][5],
+    'pusr_UTILISATEUR-0001'
+  );
+});
+
+
+test('les anciens favoris locaux ne sont importés que sur action explicite', () => {
+  const donnees = donneesBase();
+  donnees.FAVORIS.push([
+    'F-LOCAL', 'STAGIAIRE', 'T1', 'BONNIN José', 'EQ PS',
+    'pfav_ancien_appareil_aaaa', '2026-08-01T10:00:00.000Z'
+  ]);
+  const session = {
+    estAdministrateur: false,
+    estFormateur: true,
+    idUtilisateur: 'UTILISATEUR-0002',
+    idFormateur: 'FO1',
+    identifiantHistorique: 'UTILISATEUR:UTILISATEUR-0002'
+  };
+  const environnement = creerContexteService(donnees, session);
+  assert.strictEqual(
+    environnement.contexte.getFavoris('pfav_autre_appareil_cccc').length,
+    0
+  );
+  const resultat = environnement.contexte.importerFavorisLocauxFormateur(
+    'pfav_ancien_appareil_aaaa'
+  );
+  assert.strictEqual(resultat.importes, 1);
+  assert.strictEqual(resultat.sourceLocaleConservee, true);
+  assert.strictEqual(
+    environnement.contexte.getFavoris('pfav_autre_appareil_cccc').length,
+    1
+  );
+  assert(donnees.FAVORIS.some(ligne =>
+    ligne[5] === 'pfav_ancien_appareil_aaaa'
+  ));
+});
+
+
 test('un objet supprimé reste affiché comme indisponible et retirable', () => {
   const donnees = donneesBase();
   donnees.FAVORIS.push([
@@ -701,9 +768,9 @@ test('le panneau mobile est plein écran avec des cibles tactiles suffisantes', 
 });
 
 
-test('la version applicative est centralisée à 1.9.4', () => {
+test('la version applicative est centralisée à 2.0.0', () => {
   assert(metadonnees.includes(
-    "VERSION_APPLICATION_PREPFORMATION_ = '1.9.4'"
+    "VERSION_APPLICATION_PREPFORMATION_ = '2.0.0'"
   ));
 });
 

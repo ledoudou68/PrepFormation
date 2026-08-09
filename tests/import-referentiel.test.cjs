@@ -266,7 +266,7 @@ function installerTransaction(contexte, options) {
     entetes.forEach((entete, i) => { index[String(entete)] = i; });
     return index;
   };
-  contexte.getFormations = () => ['F1'];
+  contexte.lireFormationsActives_ = () => ['F1'];
   contexte.preparerDonneesReferentiel_ = () => ({
     feuilleCategories: feuilles.CATEGORIES,
     feuilleItems: feuilles.REFERENTIEL
@@ -596,7 +596,7 @@ test('la modale expose les six étapes sans analyser à la sélection', () => {
   assert(sourceInterface.includes('.importerReferentielXlsx('));
 });
 
-test('Drive v3 est déclaré sans nouveau scope OAuth et la version vaut 1.9.4', () => {
+test('Drive v3 est déclaré sans nouveau scope OAuth et la version vaut 2.0.0', () => {
   const serviceDrive = manifeste.dependencies.enabledAdvancedServices.find(
     service => service.serviceId === 'drive' && service.version === 'v3'
   );
@@ -607,7 +607,7 @@ test('Drive v3 est déclaré sans nouveau scope OAuth et la version vaut 1.9.4',
     1
   );
   assert(metadonnees.includes(
-    "VERSION_APPLICATION_PREPFORMATION_ = '1.9.4'"
+    "VERSION_APPLICATION_PREPFORMATION_ = '2.0.0'"
   ));
 });
 

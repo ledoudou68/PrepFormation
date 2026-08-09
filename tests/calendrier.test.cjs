@@ -123,7 +123,12 @@ function creerContexteService(supplements) {
     RegExp,
     Error,
     isNaN,
-    isFinite
+    isFinite,
+    exigerUtilisateurAuthentifie_: () => ({
+      estFormateur: true,
+      idUtilisateur: 'U-TEST',
+      idFormateur: 'FO-TEST'
+    })
   }, supplements || {});
   vm.createContext(contexte);
   vm.runInContext(sourceService, contexte, {
@@ -567,7 +572,7 @@ test('chaque feuille est lue une fois et le cache évite la seconde lecture', ()
       })
     },
     CacheService: { getScriptCache: () => cache },
-    getSessionUtilisateur: () => ({
+    exigerUtilisateurAuthentifie_: () => ({
       estAdministrateur: false,
       droits: { gererSessions: true }
     }),
@@ -628,9 +633,9 @@ test('le cache calendrier est invalidé après séance et restauration', () => {
   );
 });
 
-test('la version applicative est centralisée à 1.9.4', () => {
+test('la version applicative est centralisée à 2.0.0', () => {
   assert(metadonnees.includes(
-    "VERSION_APPLICATION_PREPFORMATION_ = '1.9.4'"
+    "VERSION_APPLICATION_PREPFORMATION_ = '2.0.0'"
   ));
 });
 

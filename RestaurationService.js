@@ -549,7 +549,7 @@ function construirePrevisualisationRestauration_(
       return configuration.feuille;
     }),
     avertissementRemplacementIntegral:
-      'Les 13 feuilles déclarées seront intégralement remplacées par les valeurs de la sauvegarde. Les formats, formules et protections ne sont pas restaurés.',
+      'Toutes les feuilles déclarées seront intégralement remplacées par les valeurs de la sauvegarde. Les formats, formules et protections ne sont pas restaurés.',
     confirmationRequise: 'RESTAURER',
     sauvegardeSecuriteObligatoire: true,
     motDePasseRequis: true

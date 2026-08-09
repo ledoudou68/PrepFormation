@@ -56,7 +56,12 @@ const FEUILLES_ANALYSE_PEDAGOGIQUE_ = [
  * le cache court immédiatement après une mutation réalisée par un autre
  * service.
  */
-function getAnalysePedagogiqueStagiaire(uuidStagiaire, options) {
+function getAnalysePedagogiqueStagiaire(
+  uuidStagiaire,
+  options,
+  jetonUtilisateur
+) {
+  exigerUtilisateurAuthentifie_(jetonUtilisateur);
   const uuid = validerUuidAnalysePedagogique_(uuidStagiaire);
   const parametres = options || {};
 

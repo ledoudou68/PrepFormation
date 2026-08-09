@@ -4,12 +4,11 @@
  * Construit en une seule lecture le tableau de bord d'accueil.
  * Aucune donnée n'est créée ou modifiée par cette fonction.
  */
-function getDonneesTableauBordAccueil(jetonAdministrateur) {
-  synchroniserStatutsStagiaires_();
-
-  const sessionUtilisateur = getSessionUtilisateur(
-    jetonAdministrateur
+function getDonneesTableauBordAccueil(jetonUtilisateur) {
+  const sessionUtilisateur = exigerUtilisateurAuthentifie_(
+    jetonUtilisateur
   );
+  synchroniserStatutsStagiaires_();
 
   const classeur = SpreadsheetApp.getActiveSpreadsheet();
   const tables = {};

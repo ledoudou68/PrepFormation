@@ -1,6 +1,6 @@
 'use strict';
 
-const VERSION_APPLICATION_PREPFORMATION_ = '1.9.4';
+const VERSION_APPLICATION_PREPFORMATION_ = '2.0.0';
 
 
 function obtenirVersionApplication_() {

@@ -17,10 +17,14 @@ const CONFIG_FORMATEURS = {
 /**
  * Retourne tous les formateurs, actifs ou non.
  */
-function getFormateurs(jetonAdministrateur) {
-  const sessionUtilisateur = getSessionUtilisateur(
-    jetonAdministrateur
+function getFormateurs(jetonUtilisateur) {
+  const sessionUtilisateur = exigerUtilisateurAuthentifie_(
+    jetonUtilisateur
   );
+  const comptesParFormateur = sessionUtilisateur.estAdministrateur &&
+    typeof obtenirComptesPublicsFormateursAdministration_ === 'function'
+    ? obtenirComptesPublicsFormateursAdministration_()
+    : {};
   const feuille = obtenirFeuilleFormateursLecture_();
   const donnees = feuille.getDataRange().getValues();
 
@@ -49,14 +53,18 @@ function getFormateurs(jetonAdministrateur) {
 
           return (
             sessionUtilisateur.estAdministrateur ||
-            email === sessionUtilisateur.email
+            String(sessionUtilisateur.idFormateur || '') ===
+              String(ligne[index.ID_FORMATEUR] || '')
           )
             ? email
             : '';
         })(),
         actif: convertirActifFormateur_(
           ligne[index.ACTIF]
-        )
+        ),
+        compteAcces: comptesParFormateur[
+          String(ligne[index.ID_FORMATEUR] || '')
+        ] || null
       };
     })
     .sort(function (a, b) {
@@ -159,6 +167,13 @@ function enregistrerFormateurInterne_(donnees, sessionUtilisateur) {
       .setNumberFormat('dd/MM/yyyy HH:mm');
   });
 
+  if (
+    !convertirActifFormateur_(donnees.actif) &&
+    typeof invaliderSessionsFormateurParIdFormateur_ === 'function'
+  ) {
+    invaliderSessionsFormateurParIdFormateur_(idFormateur);
+  }
+
   journaliserActionSensible_(
     donnees.idFormateur
       ? 'FORMATEUR_MODIFICATION'
@@ -244,32 +259,25 @@ function verifierFormateur_(donnees) {
 
 
 /**
- * Retourne exclusivement les prestations du formateur dont
- * l'adresse correspond à l'utilisateur Google actif.
+ * Retourne exclusivement les prestations du formateur identifié par la
+ * session interne. L'adresse Google n'intervient jamais dans ce rattachement.
  */
-function getMonRecapitulatifHeuresFormateur() {
-  const session = obtenirSessionUtilisateur_();
-
-  if (!session.estIdentifie) {
-    return {
-      estIdentifie: false,
-      formateurAssocie: false,
-      email: '',
-      totalHeures: 0,
-      nombrePrestations: 0,
-      prestations: []
-    };
+function getMonRecapitulatifHeuresFormateur(jetonUtilisateur) {
+  const session = exigerUtilisateurAuthentifie_(jetonUtilisateur);
+  if (!session.estFormateur || !session.idFormateur) {
+    throw new Error('Ce récapitulatif est réservé au formateur connecté.');
   }
-
-  const formateur = getFormateurs().find(function (element) {
-    return element.email === session.email;
-  });
+  const formateur = getFormateurs(jetonUtilisateur).find(
+    function (element) {
+      return element.idFormateur === session.idFormateur;
+    }
+  );
 
   if (!formateur) {
     return {
       estIdentifie: true,
       formateurAssocie: false,
-      email: session.email,
+      email: '',
       totalHeures: 0,
       nombrePrestations: 0,
       prestations: []
@@ -289,7 +297,7 @@ function getMonRecapitulatifHeuresFormateur() {
     return {
       estIdentifie: true,
       formateurAssocie: true,
-      email: session.email,
+      email: formateur.email || '',
       formateur: [formateur.prenom, formateur.nom]
         .filter(Boolean)
         .join(' '),
@@ -381,7 +389,7 @@ function getMonRecapitulatifHeuresFormateur() {
   return {
     estIdentifie: true,
     formateurAssocie: true,
-    email: session.email,
+    email: formateur.email || '',
     formateur: [formateur.prenom, formateur.nom]
       .filter(Boolean)
       .join(' '),

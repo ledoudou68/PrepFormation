@@ -9,7 +9,8 @@ const NOMBRE_MAX_RECOMMANDATIONS_GROUPE_ = 10;
  * n'appelle volontairement pas getStagiaires(), qui peut synchroniser les
  * statuts, et ne déclenche donc aucune mutation métier.
  */
-function getPreparationAssistantPedagogique() {
+function getPreparationAssistantPedagogique(jetonUtilisateur) {
+  exigerUtilisateurAuthentifie_(jetonUtilisateur);
   const avertissements = [];
   const tables = lireTablesAnalysePedagogique_(avertissements);
   const formations = construireFormationsAnalysePedagogique_(
@@ -178,7 +179,8 @@ function getPreparationAssistantPedagogique() {
  * par AnalysePedagogiqueService.js. Il ne fait que mutualiser leur lecture et
  * calculer des statistiques descriptives.
  */
-function getAnalyseGroupe(idsStagiaires, options) {
+function getAnalyseGroupe(idsStagiaires, options, jetonUtilisateur) {
+  exigerUtilisateurAuthentifie_(jetonUtilisateur);
   const debutCalcul = Date.now();
   const parametres = options || {};
   const ids = normaliserIdsStagiairesGroupe_(idsStagiaires);

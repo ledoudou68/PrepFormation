@@ -39,7 +39,8 @@ const CONFIG_STAGIAIRES = {
 /**
  * Retourne tous les stagiaires.
  */
-function getStagiaires() {
+function getStagiaires(jetonUtilisateur) {
+  exigerUtilisateurAuthentifie_(jetonUtilisateur);
   synchroniserStatutsStagiaires_();
   return lireStagiairesSansSynchronisation_();
 }
@@ -451,14 +452,16 @@ function convertirDateHeureStatutPourInterface_(valeur) {
 /**
  * Retourne un stagiaire précis.
  */
-function getStagiaire(uuid) {
+function getStagiaire(uuid, jetonUtilisateur) {
+  exigerUtilisateurAuthentifie_(jetonUtilisateur);
   if (!uuid) {
     throw new Error(
       'Identifiant du stagiaire manquant.'
     );
   }
 
-  const stagiaires = getStagiaires();
+  synchroniserStatutsStagiaires_();
+  const stagiaires = lireStagiairesSansSynchronisation_();
 
   const stagiaire = stagiaires.find(function (element) {
     return element.uuid === uuid;
@@ -476,8 +479,8 @@ function getStagiaire(uuid) {
  * Retourne les indicateurs et les sessions suivies
  * affichés dans la fiche de consultation.
  */
-function getSuiviStagiaire(uuid) {
-  const stagiaire = getStagiaire(uuid);
+function getSuiviStagiaire(uuid, jetonUtilisateur) {
+  const stagiaire = getStagiaire(uuid, jetonUtilisateur);
   const classeur =
     SpreadsheetApp.getActiveSpreadsheet();
 
@@ -922,10 +925,10 @@ function getSuiviStagiaire(uuid) {
   }
 
   const categoriesReferentiel =
-    getCategoriesReferentiel(stagiaire.formation);
+    lireCategoriesReferentielPourFormation_(stagiaire.formation);
 
   const itemsReferentiel =
-    getItemsReferentiel(stagiaire.formation);
+    lireItemsReferentielPourFormation_(stagiaire.formation);
 
   const itemsParId = {};
   const positionItems = {};
@@ -1836,7 +1839,13 @@ function reactiverPreparationStagiaireInterne_(
  * Retourne les formations actives configurées
  * dans la feuille FORMATIONS.
  */
-function getFormations() {
+function getFormations(jetonUtilisateur) {
+  exigerUtilisateurAuthentifie_(jetonUtilisateur);
+  return lireFormationsActives_();
+}
+
+
+function lireFormationsActives_() {
   const feuille = SpreadsheetApp
     .getActiveSpreadsheet()
     .getSheetByName('FORMATIONS');
@@ -1925,7 +1934,8 @@ function getFormations() {
 /**
  * Retourne les statuts disponibles.
  */
-function getStatutsStagiaires() {
+function getStatutsStagiaires(jetonUtilisateur) {
+  exigerUtilisateurAuthentifie_(jetonUtilisateur);
   return CONFIG_STAGIAIRES.statuts.slice();
 }
 

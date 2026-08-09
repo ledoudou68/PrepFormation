@@ -89,7 +89,7 @@ function analyserFichierXlsxReferentiel(
     return construireReponseAnalyseImportReferentiel_(
       idAnalyse,
       analyse,
-      getFormations()
+      lireFormationsActives_()
     );
   } finally {
     if (!fichierTemporaire && idFichierTemporaire) {
@@ -140,7 +140,7 @@ function previsualiserImportReferentiel(
     idAnalyse,
     session.identifiantHistorique
   );
-  const formationsActives = getFormations();
+  const formationsActives = lireFormationsActives_();
   const donnees = preparerDonneesReferentiel_(true);
   const categories = lireCategoriesReferentiel_(
     donnees.feuilleCategories
@@ -212,7 +212,7 @@ function importerReferentielXlsx(
     const planActuel = construirePlanFusionImportReferentiel_(
       analyse,
       planMemorise.correspondances,
-      getFormations(),
+      lireFormationsActives_(),
       categories,
       items
     );

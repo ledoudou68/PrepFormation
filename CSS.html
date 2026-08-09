@@ -598,6 +598,237 @@ button:disabled {
   cursor: wait;
 }
 
+/* =====================================================
+   AUTHENTIFICATION INTERNE 2.0
+===================================================== */
+
+.ecran-connexion {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  padding:
+    max(24px, env(safe-area-inset-top))
+    max(18px, env(safe-area-inset-right))
+    max(24px, env(safe-area-inset-bottom))
+    max(18px, env(safe-area-inset-left));
+  overflow: auto;
+  background:
+    radial-gradient(circle at 15% 15%, rgba(190, 30, 45, 0.16), transparent 34%),
+    linear-gradient(145deg, #f7f9fc 0%, #edf1f6 100%);
+}
+
+.ecran-connexion.masque {
+  display: none;
+}
+
+body:not(.application-authentifiee) > .topbar,
+body:not(.application-authentifiee) > .application {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.carte-connexion {
+  width: min(100%, 430px);
+  padding: 34px;
+  border: 1px solid rgba(25, 42, 70, 0.1);
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(18, 34, 58, 0.16);
+}
+
+.marque-connexion {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  margin-bottom: 20px;
+  border-radius: 15px;
+  background: var(--rouge);
+  color: #fff;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.carte-connexion h1 {
+  margin: 0 0 7px;
+  font-size: 30px;
+}
+
+.carte-connexion > p {
+  margin: 0 0 26px;
+  color: var(--texte-secondaire);
+}
+
+.carte-connexion form {
+  display: grid;
+  gap: 17px;
+}
+
+.carte-connexion .champ,
+.modal-mot-de-passe-formateur .champ {
+  min-height: 48px;
+  font-size: 16px;
+}
+
+.champ-mot-de-passe {
+  position: relative;
+}
+
+.champ-mot-de-passe .champ {
+  width: 100%;
+  padding-right: 92px;
+}
+
+.bouton-visibilite-mot-de-passe {
+  position: absolute;
+  top: 50%;
+  right: 5px;
+  min-width: 78px;
+  min-height: 38px;
+  padding: 6px 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--texte-secondaire);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+
+.bouton-visibilite-mot-de-passe:hover,
+.bouton-visibilite-mot-de-passe:focus-visible {
+  background: #eef2f7;
+  color: var(--texte);
+  outline: none;
+}
+
+.bouton-connexion-formateur,
+.bouton-administration-connexion {
+  width: 100%;
+  min-height: 48px;
+}
+
+.erreur-connexion {
+  padding: 11px 12px;
+  border: 1px solid #efb2b2;
+  border-radius: 8px;
+  background: #fff1f1;
+  color: #8d1c1c;
+  font-size: 13px;
+}
+
+.erreur-connexion.masque {
+  display: none;
+}
+
+.message-premiere-connexion {
+  display: grid;
+  gap: 5px;
+  padding: 13px;
+  border-left: 4px solid var(--rouge);
+  border-radius: 0 8px 8px 0;
+  background: #fff5f5;
+}
+
+.message-premiere-connexion span {
+  color: var(--texte-secondaire);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.separateur-connexion {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 22px 0;
+  color: var(--texte-secondaire);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.separateur-connexion::before,
+.separateur-connexion::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--bordure);
+}
+
+.actions-session-utilisateur {
+  display: flex;
+  gap: 6px;
+}
+
+.bouton-session-utilisateur,
+.actions-session-mobile button {
+  min-height: 44px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  cursor: pointer;
+}
+
+.bouton-session-utilisateur {
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.actions-session-mobile {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px 14px;
+}
+
+.actions-session-mobile button {
+  width: 100%;
+  padding: 8px 12px;
+  border-color: var(--bordure);
+  background: #fff;
+  color: var(--texte);
+  text-align: left;
+}
+
+.modal-mot-de-passe-formateur {
+  width: min(520px, calc(100vw - 32px));
+}
+
+@media (min-width: 901px) {
+  .actions-session-mobile {
+    display: none;
+  }
+}
+
+@media (max-width: 1100px) {
+  .actions-session-utilisateur {
+    display: none;
+  }
+}
+
+@media (max-width: 700px) {
+  .ecran-connexion {
+    align-items: start;
+    padding-top: max(32px, env(safe-area-inset-top));
+  }
+
+  .carte-connexion {
+    padding: 26px 20px;
+    border-radius: 14px;
+  }
+
+  .carte-connexion h1 {
+    font-size: 27px;
+  }
+
+  .modal-mot-de-passe-formateur {
+    width: 100%;
+  }
+}
+
 @media (max-width: 700px) {
 
   .entete-page-actions {
@@ -9431,6 +9662,91 @@ canvas {
 
   .fiche-consultation-barre {
     min-height: 54px;
+  }
+}
+
+.detail-acces-formateur {
+  display: block;
+  margin-top: 4px;
+  color: var(--texte-secondaire, #64748b);
+}
+
+.modal-acces-formateur {
+  width: min(680px, calc(100vw - 32px));
+}
+
+.actions-acces-formateur {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.resume-acces-formateur dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.resume-acces-formateur dl > div {
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.resume-acces-formateur dt {
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.resume-acces-formateur dd {
+  margin: 5px 0 0;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.secret-temporaire {
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid #f59e0b;
+  border-radius: 12px;
+  background: #fffbeb;
+}
+
+.secret-temporaire > strong,
+.secret-temporaire > div {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.secret-temporaire code {
+  user-select: all;
+  overflow-wrap: anywhere;
+}
+
+.import-favoris-locaux {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.import-favoris-locaux small {
+  color: #64748b;
+}
+
+@media (max-width: 700px) {
+  .resume-acces-formateur dl {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .actions-acces-formateur > button {
+    min-height: 44px;
+    width: 100%;
   }
 }
 

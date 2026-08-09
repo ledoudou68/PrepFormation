@@ -4,7 +4,10 @@ const PROPRIETE_SEL_ADMIN = 'ADMIN_PASSWORD_SALT';
 const PROPRIETE_HASH_ADMIN = 'ADMIN_PASSWORD_HASH';
 const PROPRIETE_TENTATIVES_ADMIN = 'ADMIN_AUTH_ATTEMPTS';
 const PREFIXE_SESSION_ADMIN = 'ADMIN_SESSION_';
+const PREFIXE_CACHE_ACTIVITE_SESSION_ADMIN_ = 'ADMIN_LAST_ACTIVITY_';
 const DUREE_SESSION_ADMIN_MS = 30 * 60 * 1000;
+const DUREE_THROTTLE_ACTIVITE_SESSION_ADMIN_MS_ = 5 * 60 * 1000;
+const NOMBRE_MAX_SESSIONS_ADMIN_ = 10;
 const DUREE_BLOCAGE_ADMIN_MS = 15 * 60 * 1000;
 const NOMBRE_MAX_TENTATIVES_ADMIN = 5;
 const MESSAGE_RESTAURATION_ECRITURES_BLOQUEES_ =
@@ -25,35 +28,83 @@ const COLONNES_HISTORIQUE_SECURITE = [
 
 
 /**
- * Retourne les droits courants. L'adresse Google, lorsqu'elle
- * est disponible, reste purement informative.
+ * Retourne le contexte courant à partir d'un jeton opaque. L'adresse Google,
+ * lorsqu'elle est disponible, reste purement informative.
  */
-function getSessionUtilisateur(jetonAdministrateur) {
-  const sessionAdministration = jetonAdministrateur
+function getSessionUtilisateur(jetonUtilisateur) {
+  const sessionAdministration = jetonUtilisateur
     ? obtenirSessionAdministrationValide_(
-      jetonAdministrateur,
+      jetonUtilisateur,
       true,
       false
     )
     : null;
+  const sessionFormateur = !sessionAdministration && jetonUtilisateur &&
+    typeof obtenirSessionFormateurValide_ === 'function'
+    ? obtenirSessionFormateurValide_(jetonUtilisateur, true, false)
+    : null;
 
-  return construireSessionUtilisateur_(sessionAdministration);
+  return construireSessionUtilisateur_(
+    sessionAdministration,
+    sessionFormateur
+  );
 }
 
 
-function obtenirSessionUtilisateur_() {
-  return construireSessionUtilisateur_(null);
+function obtenirSessionUtilisateur_(jetonUtilisateur) {
+  return getSessionUtilisateur(jetonUtilisateur);
 }
 
 
-function construireSessionUtilisateur_(sessionAdministration) {
+function construireSessionUtilisateur_(
+  sessionAdministration,
+  sessionFormateur
+) {
   const email = obtenirEmailUtilisateurActif_();
   const estAdministrateur = Boolean(sessionAdministration);
+  const identiteFormateur = sessionFormateur ||
+    construireIdentiteFormateurSessionAdministration_(
+      sessionAdministration
+    );
+  const estFormateur = Boolean(identiteFormateur);
+  const contexte = estAdministrateur && estFormateur
+    ? 'FORMATEUR_ADMINISTRATEUR'
+    : (
+      estAdministrateur
+        ? 'ADMINISTRATEUR'
+        : (estFormateur ? 'FORMATEUR' : 'NON_CONNECTE')
+    );
+  const nomComplet = estFormateur
+    ? [identiteFormateur.prenom, identiteFormateur.nom]
+      .filter(Boolean)
+      .join(' ')
+    : '';
 
   return {
     email: email,
-    estIdentifie: Boolean(email),
+    emailGoogleInformatif: email,
+    contexte: contexte,
+    estIdentifie: estAdministrateur || estFormateur,
     estAdministrateur: estAdministrateur,
+    estFormateur: estFormateur,
+    idUtilisateur: estFormateur
+      ? String(identiteFormateur.idUtilisateur || '')
+      : '',
+    idFormateur: estFormateur
+      ? String(identiteFormateur.idFormateur || '')
+      : '',
+    identifiant: estFormateur
+      ? String(identiteFormateur.identifiant || '')
+      : '',
+    nom: estFormateur ? String(identiteFormateur.nom || '') : '',
+    prenom: estFormateur ? String(identiteFormateur.prenom || '') : '',
+    nomComplet: nomComplet,
+    modeAccesAdministration: estAdministrateur
+      ? String(
+        sessionAdministration.modeAccesAdministration ||
+          'ADMINISTRATION_DIRECTE'
+      )
+      : '',
     modeExecution: 'USER_DEPLOYING',
     controleAccesSecurise: true,
     authentificationAdministrateurConfiguree:
@@ -64,15 +115,20 @@ function construireSessionUtilisateur_(sessionAdministration) {
     expirationSessionAdministration: estAdministrateur
       ? new Date(sessionAdministration.expireA).toISOString()
       : '',
+    expirationAbsolueSessionFormateur: estFormateur
+      ? serialiserExpirationSessionUtilisateur_(
+        identiteFormateur.expireAbsolueA
+      )
+      : '',
     droits: {
-      consulterStagiaires: true,
-      consulterSuiviPedagogique: true,
-      gererSessions: true,
-      consulterCalendrier: true,
-      consulterFormateurs: true,
-      consulterStatistiques: true,
-      consulterAssistantPedagogique: true,
-      consulterMonRecapitulatifHeures: Boolean(email),
+      consulterStagiaires: estAdministrateur || estFormateur,
+      consulterSuiviPedagogique: estAdministrateur || estFormateur,
+      gererSessions: estAdministrateur || estFormateur,
+      consulterCalendrier: estAdministrateur || estFormateur,
+      consulterFormateurs: estAdministrateur || estFormateur,
+      consulterStatistiques: estAdministrateur || estFormateur,
+      consulterAssistantPedagogique: estAdministrateur || estFormateur,
+      consulterMonRecapitulatifHeures: estFormateur,
       gererStagiaires: estAdministrateur,
       gererFormateurs: estAdministrateur,
       gererFormations: estAdministrateur,
@@ -81,6 +137,104 @@ function construireSessionUtilisateur_(sessionAdministration) {
       accederAdministration: estAdministrateur
     }
   };
+}
+
+
+function construireIdentiteFormateurSessionAdministration_(session) {
+  if (
+    !session ||
+    !session.idUtilisateurFormateur ||
+    !session.idFormateurAssocie
+  ) {
+    return null;
+  }
+  return {
+    idUtilisateur: String(session.idUtilisateurFormateur),
+    idFormateur: String(session.idFormateurAssocie),
+    identifiant: String(session.identifiantFormateur || ''),
+    nom: String(session.nomFormateur || ''),
+    prenom: String(session.prenomFormateur || ''),
+    expireAbsolueA: Number(session.expireAbsolueFormateurA || 0)
+  };
+}
+
+
+function serialiserExpirationSessionUtilisateur_(valeur) {
+  const date = new Date(Number(valeur || 0));
+  return Number(valeur || 0) && !isNaN(date.getTime())
+    ? date.toISOString()
+    : '';
+}
+
+
+function construireIdentifiantHistoriqueAdministration_(session) {
+  const idSession = String(session && session.idSession || '');
+  const base = 'SESSION_ADMIN:' + idSession;
+  if (
+    session &&
+    session.idUtilisateurFormateur &&
+    session.idFormateurAssocie
+  ) {
+    return base +
+      '|UTILISATEUR:' + String(session.idUtilisateurFormateur) +
+      '|FORMATEUR:' + String(session.idFormateurAssocie);
+  }
+  return base + '|ADMINISTRATION_DIRECTE';
+}
+
+
+function construireIdentifiantHistoriqueAdministrationDepuisContexte_(
+  contexte
+) {
+  const idSession = String(
+    contexte && contexte.identifiantSessionAdministration || ''
+  );
+  if (
+    contexte &&
+    contexte.idUtilisateur &&
+    contexte.idFormateur
+  ) {
+    return 'SESSION_ADMIN:' + idSession +
+      '|UTILISATEUR:' + String(contexte.idUtilisateur) +
+      '|FORMATEUR:' + String(contexte.idFormateur);
+  }
+  return 'SESSION_ADMIN:' + idSession + '|ADMINISTRATION_DIRECTE';
+}
+
+
+function exigerUtilisateurAuthentifie_(jetonUtilisateur) {
+  const sessionAdministration = obtenirSessionAdministrationValide_(
+    jetonUtilisateur,
+    true,
+    false
+  );
+  if (sessionAdministration) {
+    const contexteAdministration = construireSessionUtilisateur_(
+      sessionAdministration,
+      null
+    );
+    contexteAdministration.identifiantHistorique =
+      construireIdentifiantHistoriqueAdministration_(
+        sessionAdministration
+      );
+    return contexteAdministration;
+  }
+
+  const sessionFormateur = typeof obtenirSessionFormateurValide_ ===
+    'function'
+    ? obtenirSessionFormateurValide_(jetonUtilisateur, true, false)
+    : null;
+  if (!sessionFormateur) {
+    throw new Error('Authentification requise.');
+  }
+
+  const contexteFormateur = construireSessionUtilisateur_(
+    null,
+    sessionFormateur
+  );
+  contexteFormateur.identifiantHistorique =
+    construireIdentifiantHistoriqueFormateur_(sessionFormateur);
+  return contexteFormateur;
 }
 
 
@@ -99,10 +253,35 @@ function obtenirEmailUtilisateurActif_() {
 
 
 /**
+ * L'association d'une identité formateur est facultative et n'intervient
+ * qu'après validation du mot de passe administrateur. Une session absente,
+ * expirée, bloquée par ses données ou illisible ne peut donc jamais empêcher
+ * la création de la session administrateur de secours.
+ */
+function obtenirSessionFormateurPourElevationAdministration_(jetonFormateur) {
+  if (
+    !jetonFormateur ||
+    typeof obtenirSessionFormateurValide_ !== 'function'
+  ) {
+    return null;
+  }
+  try {
+    return obtenirSessionFormateurValide_(
+      jetonFormateur,
+      true,
+      false
+    );
+  } catch (erreur) {
+    return null;
+  }
+}
+
+
+/**
  * Authentifie le mot de passe et retourne une seule fois le
  * jeton brut. Le serveur ne conserve que son empreinte.
  */
-function deverrouillerAdministration(motDePasse) {
+function deverrouillerAdministration(motDePasse, jetonFormateur) {
   const tentative = String(motDePasse || '');
   const idTentative = Utilities.getUuid().slice(0, 12);
 
@@ -222,7 +401,10 @@ function deverrouillerAdministration(motDePasse) {
       proprietes,
       maintenant
     );
+    limiterSessionsAdministrationAvantCreation_(proprietes);
 
+    const sessionFormateurAssociee =
+      obtenirSessionFormateurPourElevationAdministration_(jetonFormateur);
     const jeton = creerSecretAleatoireSecurite_();
     const empreinteJeton = hacherJetonAdministration_(jeton);
     const idSession = Utilities.getUuid().slice(0, 12);
@@ -230,12 +412,37 @@ function deverrouillerAdministration(motDePasse) {
       idSession: idSession,
       creeA: maintenant,
       derniereActivite: maintenant,
-      expireA: maintenant + DUREE_SESSION_ADMIN_MS
+      expireA: maintenant + DUREE_SESSION_ADMIN_MS,
+      modeAccesAdministration: sessionFormateurAssociee
+        ? 'ELEVATION_FORMATEUR'
+        : 'ADMINISTRATION_DIRECTE',
+      idUtilisateurFormateur: sessionFormateurAssociee
+        ? String(sessionFormateurAssociee.idUtilisateur || '')
+        : '',
+      idFormateurAssocie: sessionFormateurAssociee
+        ? String(sessionFormateurAssociee.idFormateur || '')
+        : '',
+      identifiantFormateur: sessionFormateurAssociee
+        ? String(sessionFormateurAssociee.identifiant || '')
+        : '',
+      nomFormateur: sessionFormateurAssociee
+        ? String(sessionFormateurAssociee.nom || '')
+        : '',
+      prenomFormateur: sessionFormateurAssociee
+        ? String(sessionFormateurAssociee.prenom || '')
+        : '',
+      expireAbsolueFormateurA: sessionFormateurAssociee
+        ? Number(sessionFormateurAssociee.expireAbsolueA || 0)
+        : 0
     };
 
     proprietes.setProperty(
       PREFIXE_SESSION_ADMIN + empreinteJeton,
       JSON.stringify(session)
+    );
+    enregistrerActiviteSessionAdministrationCache_(
+      PREFIXE_SESSION_ADMIN + empreinteJeton,
+      maintenant
     );
 
     resultat = {
@@ -252,10 +459,15 @@ function deverrouillerAdministration(motDePasse) {
     resultat.sessionUtilisateur.identifiantSessionAdministration,
     {
       expirationInactiviteMinutes:
-        DUREE_SESSION_ADMIN_MS / 60000
+        DUREE_SESSION_ADMIN_MS / 60000,
+      modeAccesAdministration:
+        resultat.sessionUtilisateur.modeAccesAdministration,
+      idUtilisateur: resultat.sessionUtilisateur.idUtilisateur || '',
+      idFormateur: resultat.sessionUtilisateur.idFormateur || ''
     },
-    'SESSION_ADMIN:' +
-      resultat.sessionUtilisateur.identifiantSessionAdministration
+    construireIdentifiantHistoriqueAdministrationDepuisContexte_(
+      resultat.sessionUtilisateur
+    )
   );
 
   return resultat;
@@ -279,19 +491,20 @@ function verrouillerAdministration(jetonAdministrateur) {
     false,
     true
   );
-  const proprietes = PropertiesService.getScriptProperties();
-
-  proprietes.deleteProperty(
-    PREFIXE_SESSION_ADMIN +
-      hacherJetonAdministration_(jetonAdministrateur)
-  );
+  supprimerSessionAdministrationParJeton_(jetonAdministrateur);
 
   journaliserEvenementSecuriteSansBloquer_(
     'ADMIN_VERROUILLAGE',
     'SECURITE',
     session.idSession,
-    {},
-    'SESSION_ADMIN:' + session.idSession
+    {
+      modeAccesAdministration: String(
+        session.modeAccesAdministration || 'ADMINISTRATION_DIRECTE'
+      ),
+      idUtilisateur: String(session.idUtilisateurFormateur || ''),
+      idFormateur: String(session.idFormateurAssocie || '')
+    },
+    construireIdentifiantHistoriqueAdministration_(session)
   );
 
   return {
@@ -312,7 +525,9 @@ function exigerAdministrateur_(jetonAdministrateur) {
     construireSessionUtilisateur_(sessionAdministration);
 
   sessionUtilisateur.identifiantHistorique =
-    'SESSION_ADMIN:' + sessionAdministration.idSession;
+    construireIdentifiantHistoriqueAdministration_(
+      sessionAdministration
+    );
 
   return sessionUtilisateur;
 }
@@ -458,12 +673,16 @@ function exigerAdministrateurLectureSeule_(jetonAdministrateur) {
   }
 
   const maintenant = Date.now();
+  const derniereActiviteEffective = Math.max(
+    Number(session.derniereActivite || 0),
+    lireActiviteSessionAdministrationCache_(cle)
+  );
 
   if (
     !session.idSession ||
     !session.derniereActivite ||
-    Number(session.expireA || 0) <= maintenant ||
-    maintenant - Number(session.derniereActivite) >=
+    !Number(session.expireA || 0) ||
+    maintenant - derniereActiviteEffective >=
       DUREE_SESSION_ADMIN_MS
   ) {
     throw new Error('Accès réservé à l’administrateur.');
@@ -472,27 +691,30 @@ function exigerAdministrateurLectureSeule_(jetonAdministrateur) {
   const sessionUtilisateur = construireSessionUtilisateur_(session);
 
   sessionUtilisateur.identifiantHistorique =
-    'SESSION_ADMIN:' + session.idSession;
+    construireIdentifiantHistoriqueAdministration_(session);
 
   return sessionUtilisateur;
 }
 
 
-function verifierAccesPage_(nomPage, jetonAdministrateur) {
+function verifierAccesPage_(nomPage, jetonUtilisateur) {
+  const session = exigerUtilisateurAuthentifie_(jetonUtilisateur);
   if ([
     'Referentiel',
     'Indemnisation',
     'Administration'
-  ].includes(String(nomPage || ''))) {
-    exigerAdministrateur_(jetonAdministrateur);
+  ].includes(String(nomPage || '')) && !session.estAdministrateur) {
+    throw new Error('Accès réservé à l’administrateur.');
   }
+  return session;
 }
 
 
 function obtenirSessionAdministrationValide_(
   jetonAdministrateur,
   renouveler,
-  erreurSiInvalide
+  erreurSiInvalide,
+  forcerEcritureActivite
 ) {
   const jeton = String(jetonAdministrateur || '').trim();
 
@@ -545,14 +767,22 @@ function obtenirSessionAdministrationValide_(
       return null;
     }
 
+    const derniereActivitePersistante = Number(
+      session.derniereActivite || 0
+    );
+    const derniereActiviteEffective = Math.max(
+      derniereActivitePersistante,
+      lireActiviteSessionAdministrationCache_(cle)
+    );
     if (
       !session.idSession ||
       !session.derniereActivite ||
-      Number(session.expireA || 0) <= maintenant ||
-      maintenant - Number(session.derniereActivite) >=
+      !Number(session.expireA || 0) ||
+      maintenant - derniereActiviteEffective >=
         DUREE_SESSION_ADMIN_MS
     ) {
       proprietes.deleteProperty(cle);
+      supprimerActiviteSessionAdministrationCache_(cle);
 
       if (erreurSiInvalide) {
         throw new Error('Accès réservé à l’administrateur.');
@@ -561,10 +791,22 @@ function obtenirSessionAdministrationValide_(
     }
 
     if (renouveler) {
-      session.derniereActivite = maintenant;
-      session.expireA = maintenant + DUREE_SESSION_ADMIN_MS;
-      proprietes.setProperty(cle, JSON.stringify(session));
+      enregistrerActiviteSessionAdministrationCache_(cle, maintenant);
+      if (
+        forcerEcritureActivite ||
+        maintenant - derniereActivitePersistante >=
+          DUREE_THROTTLE_ACTIVITE_SESSION_ADMIN_MS_
+      ) {
+        session.derniereActivite = maintenant;
+        session.expireA = maintenant + DUREE_SESSION_ADMIN_MS;
+        proprietes.setProperty(cle, JSON.stringify(session));
+      }
     }
+    session.expireA = Math.max(
+      Number(session.expireA || 0),
+      (renouveler ? maintenant : derniereActiviteEffective) +
+        DUREE_SESSION_ADMIN_MS
+    );
 
     return session;
   } finally {
@@ -695,17 +937,23 @@ function nettoyerSessionsAdministrationDansProprietes_(
 
     try {
       const session = JSON.parse(toutes[cle]);
+      const derniereActiviteEffective = Math.max(
+        Number(session.derniereActivite || 0),
+        lireActiviteSessionAdministrationCache_(cle)
+      );
 
       if (
         !session.derniereActivite ||
-        Number(session.expireA || 0) <= maintenant ||
-        maintenant - Number(session.derniereActivite) >=
+        !Number(session.expireA || 0) ||
+        maintenant - derniereActiviteEffective >=
           DUREE_SESSION_ADMIN_MS
       ) {
         proprietes.deleteProperty(cle);
+        supprimerActiviteSessionAdministrationCache_(cle);
       }
     } catch (erreur) {
       proprietes.deleteProperty(cle);
+      supprimerActiviteSessionAdministrationCache_(cle);
     }
   });
 }
@@ -717,8 +965,97 @@ function supprimerToutesSessionsAdministration_(proprietes) {
   Object.keys(toutes).forEach(function (cle) {
     if (cle.startsWith(PREFIXE_SESSION_ADMIN)) {
       proprietes.deleteProperty(cle);
+      supprimerActiviteSessionAdministrationCache_(cle);
     }
   });
+}
+
+
+function limiterSessionsAdministrationAvantCreation_(proprietes) {
+  const toutes = proprietes.getProperties();
+  const sessions = Object.keys(toutes)
+    .filter(function (cle) {
+      return cle.startsWith(PREFIXE_SESSION_ADMIN);
+    })
+    .map(function (cle) {
+      try {
+        return { cle: cle, session: JSON.parse(toutes[cle]) };
+      } catch (erreur) {
+        proprietes.deleteProperty(cle);
+        supprimerActiviteSessionAdministrationCache_(cle);
+        return null;
+      }
+    })
+    .filter(Boolean)
+    .sort(function (a, b) {
+      return Number(a.session.creeA || 0) - Number(b.session.creeA || 0);
+    });
+  const excedent = Math.max(
+    0,
+    sessions.length - NOMBRE_MAX_SESSIONS_ADMIN_ + 1
+  );
+  sessions.slice(0, excedent).forEach(function (entree) {
+    proprietes.deleteProperty(entree.cle);
+    supprimerActiviteSessionAdministrationCache_(entree.cle);
+  });
+}
+
+
+function supprimerSessionAdministrationParJeton_(jetonAdministrateur) {
+  const verrou = LockService.getScriptLock();
+  if (!verrou.tryLock(10000)) {
+    throw new Error(
+      'Le service d’authentification est momentanément occupé.'
+    );
+  }
+  try {
+    const cle = PREFIXE_SESSION_ADMIN +
+      hacherJetonAdministration_(jetonAdministrateur);
+    PropertiesService.getScriptProperties().deleteProperty(cle);
+    supprimerActiviteSessionAdministrationCache_(cle);
+  } finally {
+    verrou.releaseLock();
+  }
+}
+
+
+function lireActiviteSessionAdministrationCache_(cleSession) {
+  try {
+    return Number(
+      CacheService.getScriptCache().get(
+        PREFIXE_CACHE_ACTIVITE_SESSION_ADMIN_ + cleSession
+      ) || 0
+    );
+  } catch (erreur) {
+    return 0;
+  }
+}
+
+
+function enregistrerActiviteSessionAdministrationCache_(
+  cleSession,
+  maintenant
+) {
+  try {
+    CacheService.getScriptCache().put(
+      PREFIXE_CACHE_ACTIVITE_SESSION_ADMIN_ + cleSession,
+      String(maintenant),
+      Math.ceil(DUREE_SESSION_ADMIN_MS / 1000)
+    );
+  } catch (erreur) {
+    // Le timestamp persistant conserve une dégradation sûre et bornée.
+  }
+}
+
+
+function supprimerActiviteSessionAdministrationCache_(cleSession) {
+  try {
+    CacheService.getScriptCache().remove(
+      PREFIXE_CACHE_ACTIVITE_SESSION_ADMIN_ + cleSession
+    );
+  } catch (erreur) {
+    // Le cache est une optimisation : l'expiration persistante reste active.
+  }
 }
 
 

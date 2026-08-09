@@ -41,7 +41,7 @@ const FEUILLES_CALENDRIER_ = [
 function getDonneesCalendrier(
   dateDebutIso,
   dateFinIso,
-  jetonAdministrateur
+  jetonUtilisateur
 ) {
   if (
     typeof restaurationBloqueEcritures_ === 'function' &&
@@ -53,7 +53,7 @@ function getDonneesCalendrier(
   }
 
   const periode = validerPeriodeCalendrier_(dateDebutIso, dateFinIso);
-  const droits = obtenirDroitsCalendrier_(jetonAdministrateur);
+  const droits = obtenirDroitsCalendrier_(jetonUtilisateur);
   const cache = CacheService.getScriptCache();
   const generation = cache.get(CLE_GENERATION_CACHE_CALENDRIER_) || '0';
   const version = typeof obtenirVersionApplication_ === 'function'
@@ -124,13 +124,8 @@ function getDonneesCalendrier(
 }
 
 
-function obtenirDroitsCalendrier_(jetonAdministrateur) {
-  const session = typeof getSessionUtilisateur === 'function'
-    ? getSessionUtilisateur(jetonAdministrateur)
-    : {
-      estAdministrateur: false,
-      droits: { gererSessions: true }
-    };
+function obtenirDroitsCalendrier_(jetonUtilisateur) {
+  const session = exigerUtilisateurAuthentifie_(jetonUtilisateur);
 
   return {
     consulterCalendrier: true,

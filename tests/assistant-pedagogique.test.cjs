@@ -367,6 +367,11 @@ function testerPreparationServeur() {
     Boolean,
     isNaN,
     restaurationBloqueEcritures_: () => false,
+    exigerUtilisateurAuthentifie_: () => ({
+      estFormateur: true,
+      idUtilisateur: 'U-TEST',
+      idFormateur: 'FO-TEST'
+    }),
     obtenirVersionApplication_: () => '1.9.3'
   };
   vm.createContext(contexte);
@@ -418,7 +423,9 @@ test('le module est déclaré dans le menu, le routage et les droits formateur',
   assert(sourceInterface.includes(
     "if (nomPage === 'AssistantPedagogique')"
   ));
-  assert(securite.includes('consulterAssistantPedagogique: true'));
+  assert(securite.includes(
+    'consulterAssistantPedagogique: estAdministrateur || estFormateur'
+  ));
   assert(!indexHtml.includes(
     'data-page="AssistantPedagogique" data-admin-only="true"'
   ));

@@ -3,6 +3,7 @@
 const FEUILLES_REINITIALISATION_PRODUCTION_ = [
   { feuille: 'STAGIAIRES', cle: 'stagiaires' },
   { feuille: 'FORMATEURS', cle: 'formateurs' },
+  { feuille: 'UTILISATEURS', cle: 'utilisateurs' },
   { feuille: 'SESSIONS', cle: 'sessions' },
   { feuille: 'PRESENCES_STAGIAIRES', cle: 'presences' },
   { feuille: 'PRESTATIONS_FORMATEURS', cle: 'prestations' },

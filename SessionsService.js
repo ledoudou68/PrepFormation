@@ -3,7 +3,8 @@
 /**
  * Retourne les séances enregistrées avec leurs participants.
  */
-function getSessions() {
+function getSessions(jetonUtilisateur) {
+  exigerUtilisateurAuthentifie_(jetonUtilisateur);
   const classeur = SpreadsheetApp.getActiveSpreadsheet();
   const tableSessions = lireFeuilleSession_(
     classeur,
@@ -224,7 +225,8 @@ function getSessions() {
  * Retourne toutes les données nécessaires à la consultation,
  * à la modification ou à la duplication d'une séance.
  */
-function getSessionDetaillee(idSession) {
+function getSessionDetaillee(idSession, jetonUtilisateur) {
+  exigerUtilisateurAuthentifie_(jetonUtilisateur);
   const identifiant = String(idSession || '').trim();
 
   if (!identifiant) {
@@ -281,16 +283,38 @@ function construireSessionDetaillee_(classeur, idSession) {
 
   const stagiairesParId = {};
 
-  getStagiaires().forEach(function (stagiaire) {
+  lireStagiairesSansSynchronisation_().forEach(function (stagiaire) {
     stagiairesParId[String(stagiaire.uuid)] = stagiaire;
   });
 
   const formateursParId = {};
 
-  getFormateurs().forEach(function (formateur) {
-    formateursParId[
-      String(formateur.idFormateur)
-    ] = formateur;
+  const tableFormateursDetail = lireFeuilleSession_(
+    classeur,
+    'FORMATEURS'
+  );
+  tableFormateursDetail.lignes.forEach(function (ligne) {
+    const idFormateur = String(
+      valeurColonneSession_(
+        ligne,
+        tableFormateursDetail.index,
+        'ID_FORMATEUR'
+      ) || ''
+    );
+    if (!idFormateur) return;
+    formateursParId[idFormateur] = {
+      idFormateur: idFormateur,
+      nom: String(valeurColonneSession_(
+        ligne,
+        tableFormateursDetail.index,
+        'NOM'
+      ) || ''),
+      prenom: String(valeurColonneSession_(
+        ligne,
+        tableFormateursDetail.index,
+        'PRENOM'
+      ) || '')
+    };
   });
 
   const tablePresences = lireFeuilleSession_(
@@ -482,11 +506,11 @@ function construireSessionDetaillee_(classeur, idSession) {
   }
 
   const categoriesReferentiel = formation
-    ? getCategoriesReferentiel(formation)
+    ? lireCategoriesReferentielPourFormation_(formation)
     : [];
 
   const itemsReferentiel = formation
-    ? getItemsReferentiel(formation)
+    ? lireItemsReferentielPourFormation_(formation)
     : [];
 
   const categoriesParId = {};
@@ -757,11 +781,12 @@ function estValeurPositiveSession_(valeur) {
 /**
  * Retourne les participants disponibles pour une nouvelle séance.
  */
-function getPreparationSession() {
+function getPreparationSession(jetonUtilisateur) {
+  exigerUtilisateurAuthentifie_(jetonUtilisateur);
   return {
-    stagiaires: getStagiaires(),
+    stagiaires: getStagiaires(jetonUtilisateur),
     formateurs: getFormateursActifsSession_(),
-    formations: getFormations()
+    formations: lireFormationsActives_()
   };
 }
 
@@ -769,8 +794,9 @@ function getPreparationSession() {
 /**
  * Retourne le référentiel actif d'une formation.
  */
-function getReferentielFormation(formation) {
-  return getReferentielSession(formation, '');
+function getReferentielFormation(formation, jetonUtilisateur) {
+  exigerUtilisateurAuthentifie_(jetonUtilisateur);
+  return construireReferentielSession_(formation, '');
 }
 
 
@@ -779,6 +805,16 @@ function getReferentielFormation(formation) {
  * duplication, les éléments inactifs déjà utilisés.
  */
 function getReferentielSession(
+  formation,
+  idSessionHistorique,
+  jetonUtilisateur
+) {
+  exigerUtilisateurAuthentifie_(jetonUtilisateur);
+  return construireReferentielSession_(formation, idSessionHistorique);
+}
+
+
+function construireReferentielSession_(
   formation,
   idSessionHistorique
 ) {
@@ -818,11 +854,11 @@ function getReferentielSession(
     });
   }
 
-  const categories = getCategoriesReferentiel(
+  const categories = lireCategoriesReferentielPourFormation_(
     formationDemandee
   );
 
-  const items = getItemsReferentiel(formationDemandee)
+  const items = lireItemsReferentielPourFormation_(formationDemandee)
     .filter(function (item) {
       return (
         item.actif && item.categorieActive
@@ -1042,12 +1078,14 @@ function obtenirIdsItemsSessionHistorique_(
 /**
  * Enregistre une séance et toutes ses données liées.
  */
-function enregistrerSession(donnees) {
+function enregistrerSession(donnees, jetonUtilisateur) {
   if (!donnees) {
     throw new Error('Aucune donnée de séance reçue.');
   }
 
-  const sessionUtilisateur = obtenirSessionUtilisateur_();
+  const sessionUtilisateur = exigerUtilisateurAuthentifie_(
+    jetonUtilisateur
+  );
 
   return executerMutationMetier_(function () {
     return enregistrerSessionInterne_(donnees, sessionUtilisateur);
@@ -1137,7 +1175,9 @@ function enregistrerSessionInterne_(donnees, sessionUtilisateur) {
       );
     } else {
       objetSession.THEME = '';
-      objetSession.SAISI_PAR = obtenirUtilisateurSession_();
+      objetSession.SAISI_PAR = obtenirUtilisateurSession_(
+        sessionUtilisateur
+      );
       objetSession.DATE_CREATION = maintenant;
 
       ajouterLignesSession_(
@@ -1313,7 +1353,7 @@ function enregistrerSessionInterne_(donnees, sessionUtilisateur) {
         nombreStagiaires: donneesValidees.stagiaires.length,
         nombreItems: donneesValidees.itemsTravailles.length
       },
-      sessionUtilisateur.email || 'FORMATEUR_PUBLIC'
+      sessionUtilisateur.identifiantHistorique
     );
 
     if (typeof invaliderCacheCalendrier_ === 'function') {
@@ -1363,7 +1403,7 @@ function verifierSession_(donnees, detailSource) {
 
   if (
     !detailSource &&
-    !getFormations().includes(formation)
+    !lireFormationsActives_().includes(formation)
   ) {
     throw new Error(
       'La formation sélectionnée est introuvable ou inactive.'
@@ -1425,7 +1465,7 @@ function verifierSession_(donnees, detailSource) {
     String(donnees.idSession || '').trim()
   );
 
-  const stagiairesAutorises = getStagiaires()
+  const stagiairesAutorises = lireStagiairesSansSynchronisation_()
     .filter(function (stagiaire) {
       return (
         stagiaire.formation === formation
@@ -1508,7 +1548,7 @@ function verifierSession_(donnees, detailSource) {
 
   const idsItemsAutorises = new Set();
 
-  getReferentielFormation(formation)
+  construireReferentielSession_(formation, '')
     .forEach(function (categorie) {
       categorie.items.forEach(function (item) {
         idsItemsAutorises.add(String(item.idItem));
@@ -2409,7 +2449,13 @@ function valeursUniquesSession_(valeurs) {
 }
 
 
-function obtenirUtilisateurSession_() {
+function obtenirUtilisateurSession_(sessionUtilisateur) {
+  if (
+    sessionUtilisateur &&
+    sessionUtilisateur.identifiantHistorique
+  ) {
+    return String(sessionUtilisateur.identifiantHistorique);
+  }
   return obtenirEmailUtilisateurActif_() ||
     'FORMATEUR_PUBLIC';
 }

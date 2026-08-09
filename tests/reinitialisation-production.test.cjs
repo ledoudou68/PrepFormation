@@ -40,12 +40,14 @@ const SCHEMA = [
   ['ITEMS_SESSIONS', ['ID_SESSION_ITEM', 'ID_SESSION', 'ID_ITEM']],
   ['HISTORIQUE_ENVOIS_INDEMNISATIONS', ['ID_ENVOI', 'ID_PRESTATIONS']],
   ['FAVORIS', ['ID_FAVORI', 'TYPE', 'IDENTIFIANT']],
-  ['HISTORIQUE_IMPORTS_REFERENTIEL', ['ID_IMPORT', 'NOM_FICHIER']]
+  ['HISTORIQUE_IMPORTS_REFERENTIEL', ['ID_IMPORT', 'NOM_FICHIER']],
+  ['UTILISATEURS', ['ID_UTILISATEUR', 'ID_FORMATEUR', 'IDENTIFIANT']]
 ].map(([feuille, colonnes]) => ({ feuille, colonnes }));
 
 const RESET = [
   'STAGIAIRES',
   'FORMATEURS',
+  'UTILISATEURS',
   'SESSIONS',
   'PRESENCES_STAGIAIRES',
   'PRESTATIONS_FORMATEURS',
@@ -253,6 +255,7 @@ function baseData(withRows = true) {
     ['ST-2', 'Durand', 'PHOTO-2']
   );
   data.FORMATEURS.push(['FO-1', 'Dupont']);
+  data.UTILISATEURS.push(['UT-1', 'FO-1', 'dupont']);
   data.SESSIONS.push(['SE-1', 'F-EQPS']);
   data.PRESENCES_STAGIAIRES.push(['PR-1', 'SE-1', 'ST-1']);
   data.PRESTATIONS_FORMATEURS.push(['PF-1', 'SE-1', 'FO-1']);
@@ -738,9 +741,9 @@ test('le service n’ajoute ni migration ni restauration réelle', () => {
 });
 
 
-test('la version applicative est centralisée à 1.9.4', () => {
+test('la version applicative est centralisée à 2.0.0', () => {
   assert(METADONNEES.includes(
-    "VERSION_APPLICATION_PREPFORMATION_ = '1.9.4'"
+    "VERSION_APPLICATION_PREPFORMATION_ = '2.0.0'"
   ));
 });
 

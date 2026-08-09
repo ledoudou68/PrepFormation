@@ -166,6 +166,18 @@ const SCHEMA_BASE_ = [
       'LIGNES_IGNOREES', 'ANOMALIES',
       'SESSION_ADMIN', 'DATE_CREATION'
     ]
+  },
+  {
+    feuille: 'UTILISATEURS',
+    identifiant: 'ID_UTILISATEUR',
+    colonnes: [
+      'ID_UTILISATEUR', 'ID_FORMATEUR', 'IDENTIFIANT',
+      'PASSWORD_HASH', 'PASSWORD_SALT', 'ACTIF',
+      'DOIT_CHANGER_MOT_DE_PASSE', 'NB_ECHECS',
+      'BLOQUE_JUSQU_A', 'DERNIERE_CONNEXION',
+      'DATE_MODIFICATION_MDP', 'DATE_CREATION',
+      'DATE_MODIFICATION'
+    ]
   }
 ];
 
@@ -232,6 +244,15 @@ const MIGRATIONS_SCHEMA_ = [
     executer: migration7ImportReferentielXlsx_,
     simulable: true,
     simuler: simulerMigration7ImportReferentielXlsxModele_
+  },
+  {
+    version: 8,
+    versionSource: 7,
+    versionCible: 8,
+    nom: 'Authentification interne des formateurs',
+    executer: migration8AuthentificationFormateurs_,
+    simulable: true,
+    simuler: simulerMigration8AuthentificationFormateursModele_
   }
 ];
 
@@ -640,6 +661,13 @@ function migration7ImportReferentielXlsx_(classeur) {
 }
 
 
+function migration8AuthentificationFormateurs_(classeur) {
+  // La migration crée uniquement la structure. Aucun compte n'est déduit ni
+  // créé automatiquement à partir de FORMATEURS.
+  assurerFeuilleMigration_(classeur, 'UTILISATEURS');
+}
+
+
 function ajouterParametresEmailIndemnisationMigration_(feuille) {
   const donnees = feuille.getDataRange().getValues();
   const index = creerIndexMigration_(donnees[0]);
@@ -1040,6 +1068,11 @@ function simulerMigration6FavorisModele_(modele) {
 
 
 function simulerMigration7ImportReferentielXlsxModele_(modele) {
+  assurerStructureModeleMigration_(modele);
+}
+
+
+function simulerMigration8AuthentificationFormateursModele_(modele) {
   assurerStructureModeleMigration_(modele);
 }
 
@@ -1618,6 +1651,8 @@ function construireRapportIntegrite_(classeur) {
     }
   );
 
+  verifierUniciteComptesUtilisateurs_(tables.UTILISATEURS, erreurs);
+
   const version = lireVersionSchemaSansCreation_(classeur);
   const nombreErreursStructure = erreurs.filter(
     function (erreur) {
@@ -1749,7 +1784,8 @@ function obtenirReglesReferencesMigration_() {
     ['STAGIAIRES', 'FORMATION', 'FORMATIONS', 'LIBELLE'],
     ['SESSIONS', 'FORMATION', 'FORMATIONS', 'LIBELLE'],
     ['CATEGORIES', 'FORMATION', 'FORMATIONS', 'LIBELLE'],
-    ['REFERENTIEL', 'FORMATION', 'FORMATIONS', 'LIBELLE']
+    ['REFERENTIEL', 'FORMATION', 'FORMATIONS', 'LIBELLE'],
+    ['UTILISATEURS', 'ID_FORMATEUR', 'FORMATEURS', 'ID_FORMATEUR']
   ].map(function (regle) {
     return {
       feuilleSource: regle[0],
@@ -1758,6 +1794,74 @@ function obtenirReglesReferencesMigration_() {
       colonneCible: regle[3]
     };
   });
+}
+
+
+function verifierUniciteComptesUtilisateurs_(table, erreurs) {
+  if (!table) return;
+  const indexIdentifiant = table.index.IDENTIFIANT;
+  const indexFormateur = table.index.ID_FORMATEUR;
+  if (
+    !Number.isInteger(indexIdentifiant) ||
+    !Number.isInteger(indexFormateur)
+  ) {
+    return;
+  }
+
+  const identifiants = {};
+  const formateurs = {};
+  table.donnees.slice(1).forEach(function (ligne, position) {
+    const identifiant = normaliserIdentifiantDiagnosticUtilisateur_(
+      ligne[indexIdentifiant]
+    );
+    const idFormateur = String(ligne[indexFormateur] || '').trim();
+    if (identifiant) {
+      identifiants[identifiant] = identifiants[identifiant] || [];
+      identifiants[identifiant].push(position + 2);
+    }
+    if (idFormateur) {
+      formateurs[idFormateur] = formateurs[idFormateur] || [];
+      formateurs[idFormateur].push(position + 2);
+    }
+  });
+
+  Object.keys(identifiants).forEach(function (identifiant) {
+    if (identifiants[identifiant].length < 2) return;
+    ajouterErreurIntegrite_(erreurs, {
+      type: 'IDENTIFIANT_DOUBLON',
+      feuille: 'UTILISATEURS',
+      colonne: 'IDENTIFIANT',
+      valeur: identifiant,
+      lignes: identifiants[identifiant],
+      message: 'Identifiant utilisateur dupliqué après normalisation : ' +
+        identifiant + '.'
+    });
+  });
+
+  Object.keys(formateurs).forEach(function (idFormateur) {
+    if (formateurs[idFormateur].length < 2) return;
+    ajouterErreurIntegrite_(erreurs, {
+      type: 'IDENTIFIANT_DOUBLON',
+      feuille: 'UTILISATEURS',
+      colonne: 'ID_FORMATEUR',
+      valeur: idFormateur,
+      lignes: formateurs[idFormateur],
+      message: 'Plusieurs comptes sont liés au formateur ' +
+        idFormateur + '.'
+    });
+  });
+}
+
+
+function normaliserIdentifiantDiagnosticUtilisateur_(valeur) {
+  return String(valeur || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9._-]+/g, '.')
+    .replace(/\.{2,}/g, '.')
+    .replace(/^[._-]+|[._-]+$/g, '');
 }
 
 

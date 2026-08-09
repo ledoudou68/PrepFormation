@@ -34,13 +34,14 @@
             <th>Nom</th>
             <th>Prénom</th>
             <th>Statut</th>
+            <th data-admin-only="true">Accès</th>
             <th class="colonne-actions">Actions</th>
           </tr>
         </thead>
 
         <tbody id="corpsTableauFormateurs">
           <tr>
-            <td colspan="4" class="etat-vide">
+            <td colspan="5" class="etat-vide">
               Chargement des formateurs…
             </td>
           </tr>
@@ -52,6 +53,96 @@
 
   </div>
 
+</div>
+
+<div
+  id="modalAccesFormateur"
+  class="modal-overlay masque"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="titreModalAccesFormateur"
+  data-admin-only="true"
+>
+  <div class="modal-contenu modal-acces-formateur">
+    <div class="modal-entete">
+      <div>
+        <h2 id="titreModalAccesFormateur">Accès formateur</h2>
+        <p id="sousTitreModalAccesFormateur"></p>
+      </div>
+      <button
+        type="button"
+        class="bouton-fermer-modal"
+        onclick="fermerModalAccesFormateur()"
+        aria-label="Fermer"
+      >×</button>
+    </div>
+
+    <div class="modal-corps">
+      <input type="hidden" id="accesFormateurId">
+
+      <section id="creationAccesFormateur" class="masque">
+        <div class="grille-formulaire">
+          <div class="groupe-champ groupe-champ-large-grille">
+            <label for="identifiantAccesFormateur">Identifiant *</label>
+            <input
+              id="identifiantAccesFormateur"
+              class="champ"
+              type="text"
+              required
+              autocomplete="off"
+              autocapitalize="none"
+              spellcheck="false"
+            >
+          </div>
+          <div class="groupe-champ groupe-champ-large-grille">
+            <label for="motDePasseTemporaireAccesFormateur">
+              Mot de passe temporaire facultatif
+            </label>
+            <input
+              id="motDePasseTemporaireAccesFormateur"
+              class="champ"
+              type="password"
+              minlength="15"
+              maxlength="512"
+              autocomplete="new-password"
+            >
+            <small>Laisse vide pour générer un mot de passe robuste.</small>
+          </div>
+        </div>
+        <button
+          type="button"
+          id="boutonCreerAccesFormateur"
+          class="bouton-principal"
+          onclick="creerAccesFormateurInterface_()"
+        >Créer l’accès</button>
+      </section>
+
+      <section id="gestionAccesFormateur" class="masque">
+        <div id="resumeAccesFormateur" class="resume-acces-formateur"></div>
+        <div class="actions-acces-formateur">
+          <button type="button" class="bouton-secondaire" data-action-acces="DESACTIVER" onclick="executerActionAccesFormateurInterface_(this.dataset.actionAcces)">Désactiver</button>
+          <button type="button" class="bouton-secondaire" data-action-acces="REACTIVER" onclick="executerActionAccesFormateurInterface_(this.dataset.actionAcces)">Réactiver</button>
+          <button type="button" class="bouton-secondaire" data-action-acces="DEBLOQUER" onclick="executerActionAccesFormateurInterface_(this.dataset.actionAcces)">Débloquer</button>
+          <button type="button" class="bouton-secondaire" data-action-acces="FORCER_CHANGEMENT_MOT_DE_PASSE" onclick="executerActionAccesFormateurInterface_(this.dataset.actionAcces)">Forcer le changement</button>
+          <button type="button" class="bouton-principal" data-action-acces="REINITIALISER_MOT_DE_PASSE" onclick="executerActionAccesFormateurInterface_(this.dataset.actionAcces)">Réinitialiser le mot de passe</button>
+        </div>
+      </section>
+
+      <div id="resultatSecretAccesFormateur" class="secret-temporaire masque" role="status">
+        <strong>À transmettre maintenant — cette valeur ne sera plus affichée.</strong>
+        <div><span>Identifiant :</span> <code id="resultatIdentifiantAccesFormateur"></code></div>
+        <div><span>Mot de passe temporaire :</span> <code id="resultatMotDePasseAccesFormateur"></code></div>
+      </div>
+    </div>
+
+    <div class="modal-pied">
+      <button
+        type="button"
+        class="bouton-principal"
+        onclick="fermerModalAccesFormateur()"
+      >Fermer</button>
+    </div>
+  </div>
 </div>
 
 <div class="page page-recapitulatif-formateur">
@@ -146,7 +237,7 @@
               placeholder="prenom.nom@exemple.fr"
             >
             <small>
-              Utilisée pour afficher uniquement le récapitulatif d’heures du formateur connecté.
+              Information complémentaire uniquement ; l’accès utilise le compte interne.
             </small>
           </div>
 

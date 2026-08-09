@@ -24,7 +24,8 @@ const FEUILLES_RECHERCHE_GLOBALE_ = [
  * dans le contrat pour permettre de futurs filtres ou favoris sans changer le
  * format de l'API.
  */
-function rechercherGlobalement(texte, options) {
+function rechercherGlobalement(texte, options, jetonUtilisateur) {
+  exigerUtilisateurAuthentifie_(jetonUtilisateur);
   const debut = Date.now();
   const requete = normaliserRechercheGlobale_(texte);
   const parametres = normaliserOptionsRechercheGlobale_(options);

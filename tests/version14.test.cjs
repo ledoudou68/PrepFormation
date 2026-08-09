@@ -95,6 +95,11 @@ function contextePhotos() {
       formatDate: () => '2026-08-06_10-30-00'
     },
     Session: { getScriptTimeZone: () => 'Europe/Paris' },
+    exigerUtilisateurAuthentifie_: () => ({
+      estFormateur: true,
+      idUtilisateur: 'U-TEST',
+      idFormateur: 'FO-TEST'
+    }),
     SpreadsheetApp: { flush: () => {} },
     DriveApp: {
       getFileById: () => { throw new Error('absent'); }
@@ -384,9 +389,9 @@ test('le formulaire conserve les champs métier existants', () => {
   ));
 });
 
-test('la version applicative est centralisée à 1.9.4', () => {
+test('la version applicative est centralisée à 2.0.0', () => {
   assert(sourceMetadonnees.includes(
-    "VERSION_APPLICATION_PREPFORMATION_ = '1.9.4'"
+    "VERSION_APPLICATION_PREPFORMATION_ = '2.0.0'"
   ));
 });
 

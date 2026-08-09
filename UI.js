@@ -23,7 +23,7 @@ function include(nomFichier) {
     .getContent();
 }
 
-function getPage(nomPage, jetonAdministrateur) {
+function getPage(nomPage, jetonUtilisateur) {
   const pagesAutorisees = [
     'Accueil',
     'Stagiaires',
@@ -41,7 +41,7 @@ function getPage(nomPage, jetonAdministrateur) {
     throw new Error('Page inconnue.');
   }
 
-  verifierAccesPage_(nomPage, jetonAdministrateur);
+  verifierAccesPage_(nomPage, jetonUtilisateur);
 
   return HtmlService
     .createTemplateFromFile(nomPage)

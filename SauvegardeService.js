@@ -1906,7 +1906,10 @@ function verifierAbsenceSecretsSauvegarde_(
     String(jetonAdministrateur || ''),
     String(cleHmac || ''),
     String(proprietes.getProperty('ADMIN_PASSWORD_SALT') || ''),
-    String(proprietes.getProperty('ADMIN_PASSWORD_HASH') || '')
+    String(proprietes.getProperty('ADMIN_PASSWORD_HASH') || ''),
+    String(
+      proprietes.getProperty('FORMATEUR_PASSWORD_PEPPER') || ''
+    )
   ].filter(function (secret) {
     return secret.length >= 12;
   });

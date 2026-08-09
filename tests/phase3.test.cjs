@@ -401,7 +401,7 @@ function assertJsonEqual(actual, expected) {
   assert.strictEqual(JSON.stringify(actual), JSON.stringify(expected));
 }
 
-for (let position = 0; position < 13; position++) {
+for (let position = 0; position < 17; position++) {
   [
     `AVANT_RENOMMAGE_SOURCE_${position}`,
     `APRES_RENOMMAGE_SOURCE_${position}`,
@@ -626,7 +626,7 @@ test('création puis modification réelle d’un item du référentiel', () => {
   env.setBook(book);
   env.run(`
     exigerAdministrateur_ = function () { return { identifiantHistorique: 'TEST' }; };
-    getFormations = function () { return ['F1']; };
+    lireFormationsActives_ = function () { return ['F1']; };
     journaliserActionSensible_ = function () {};
   `);
   env.context.__create = {

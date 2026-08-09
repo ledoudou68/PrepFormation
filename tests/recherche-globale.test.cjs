@@ -164,6 +164,11 @@ function creerContexteService(donneesOptionnelles) {
       base64EncodeWebSafe: octets => Buffer.from(octets).toString('base64url'),
       getUuid: () => 'GENERATION-' + (++sequenceUuid)
     },
+    exigerUtilisateurAuthentifie_: () => ({
+      estFormateur: true,
+      idUtilisateur: 'U-TEST',
+      idFormateur: 'FO-TEST'
+    }),
     obtenirVersionApplication_: () => '1.9.3'
   };
   vm.createContext(contexte);
@@ -706,9 +711,9 @@ test('l’invalidation est raccordée au point central de toutes les mutations',
 });
 
 
-test('la version applicative est centralisée à 1.9.4', () => {
+test('la version applicative est centralisée à 2.0.0', () => {
   assert(metadonnees.includes(
-    "VERSION_APPLICATION_PREPFORMATION_ = '1.9.4'"
+    "VERSION_APPLICATION_PREPFORMATION_ = '2.0.0'"
   ));
 });
 

@@ -29,7 +29,13 @@ const CONFIG_ITEMS_REFERENTIEL = {
 /**
  * Retourne les catégories d'une formation dans leur ordre.
  */
-function getCategoriesReferentiel(formation) {
+function getCategoriesReferentiel(formation, jetonUtilisateur) {
+  exigerAdministrateur_(jetonUtilisateur);
+  return lireCategoriesReferentielPourFormation_(formation);
+}
+
+
+function lireCategoriesReferentielPourFormation_(formation) {
   const formationDemandee = nettoyerFormationReferentiel_(
     formation
   );
@@ -69,7 +75,13 @@ function getCategoriesReferentiel(formation) {
 /**
  * Retourne tous les items d'une formation, catégories puis items ordonnés.
  */
-function getItemsReferentiel(formation) {
+function getItemsReferentiel(formation, jetonUtilisateur) {
+  exigerAdministrateur_(jetonUtilisateur);
+  return lireItemsReferentielPourFormation_(formation);
+}
+
+
+function lireItemsReferentielPourFormation_(formation) {
   const formationDemandee = nettoyerFormationReferentiel_(
     formation
   );
@@ -1349,7 +1361,7 @@ function verifierFormationActiveReferentiel_(formation) {
     throw new Error('La formation est obligatoire.');
   }
 
-  if (!getFormations().includes(formationDemandee)) {
+  if (!lireFormationsActives_().includes(formationDemandee)) {
     throw new Error(
       'La formation sélectionnée est inactive ou introuvable.'
     );

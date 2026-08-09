@@ -178,6 +178,11 @@ function creerEnvironnement(donneesOptionnelles) {
         .toString('base64url')
     },
     restaurationBloqueEcritures_: () => false,
+    exigerUtilisateurAuthentifie_: () => ({
+      estFormateur: true,
+      idUtilisateur: 'U-TEST',
+      idFormateur: 'FO-TEST'
+    }),
     obtenirVersionApplication_: () => '1.9.3'
   };
 

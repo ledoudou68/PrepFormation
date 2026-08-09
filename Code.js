@@ -58,6 +58,22 @@ function initialiserApplicationInterne_(sessionUtilisateur) {
       'DATE_MODIFICATION'
     ],
 
+    UTILISATEURS: [
+      'ID_UTILISATEUR',
+      'ID_FORMATEUR',
+      'IDENTIFIANT',
+      'PASSWORD_HASH',
+      'PASSWORD_SALT',
+      'ACTIF',
+      'DOIT_CHANGER_MOT_DE_PASSE',
+      'NB_ECHECS',
+      'BLOQUE_JUSQU_A',
+      'DERNIERE_CONNEXION',
+      'DATE_MODIFICATION_MDP',
+      'DATE_CREATION',
+      'DATE_MODIFICATION'
+    ],
+
     SESSIONS: [
       'ID_SESSION',
       'DATE_SESSION',

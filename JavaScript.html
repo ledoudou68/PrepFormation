@@ -4,6 +4,8 @@
 
 const CLE_JETON_ADMINISTRATION =
   'prepformation.jetonAdministration';
+const CLE_JETON_FORMATEUR =
+  'prepformation.jetonFormateur';
 const CLE_UTILISATEUR_FAVORIS =
   'prepformation.utilisateurFavoris';
 const DUREE_INACTIVITE_ADMINISTRATION_MS = 30 * 60 * 1000;
@@ -93,7 +95,9 @@ const etatApplication = {
   backupSuppressionAdministration: null,
   derniereActiviteAdministration: 0,
   minuterieAdministration: null,
-  renouvellementAdministrationEnCours: false
+  renouvellementAdministrationEnCours: false,
+  jetonChangementMotDePasseFormateur: '',
+  interfaceAuthentifieeInitialisee: false
 };
 
 document.addEventListener(
@@ -132,35 +136,262 @@ function initialiserInterface() {
     gererClicExterieurFavoris
   );
 
+  resoudreSessionUtilisateurAuDemarrage_();
+}
+
+
+function resoudreSessionUtilisateurAuDemarrage_() {
+  const jetonAdministrateur = obtenirJetonAdministrateurApplication();
+  const jetonFormateur = obtenirJetonFormateurApplication();
+  const candidats = [];
+  if (jetonAdministrateur) {
+    candidats.push({ type: 'ADMINISTRATEUR', jeton: jetonAdministrateur });
+  }
+  if (jetonFormateur) {
+    candidats.push({ type: 'FORMATEUR', jeton: jetonFormateur });
+  }
+
+  function essayer(position) {
+    if (position >= candidats.length) {
+      afficherEcranConnexionFormateur_();
+      return;
+    }
+    const candidat = candidats[position];
+    google.script.run
+      .withSuccessHandler(function (sessionUtilisateur) {
+        if (
+          sessionUtilisateur &&
+          sessionUtilisateur.contexte !== 'NON_CONNECTE'
+        ) {
+          demarrerApplicationAuthentifiee_(sessionUtilisateur);
+          return;
+        }
+        if (candidat.type === 'ADMINISTRATEUR') {
+          retirerJetonAdministrateurApplication();
+        } else {
+          retirerJetonFormateurApplication();
+        }
+        essayer(position + 1);
+      })
+      .withFailureHandler(function () {
+        if (candidat.type === 'ADMINISTRATEUR') {
+          retirerJetonAdministrateurApplication();
+        } else {
+          retirerJetonFormateurApplication();
+        }
+        essayer(position + 1);
+      })
+      .getSessionUtilisateur(candidat.jeton);
+  }
+
+  if (!candidats.length) {
+    afficherEcranConnexionFormateur_();
+    return;
+  }
+  essayer(0);
+}
+
+
+function demarrerApplicationAuthentifiee_(sessionUtilisateur) {
+  etatApplication.sessionUtilisateur = sessionUtilisateur;
+  document.body.classList.add('application-authentifiee');
+  etatApplication.jetonChangementMotDePasseFormateur = '';
+  document.getElementById('ecranConnexion')?.classList.add('masque');
+  document.getElementById(
+    'formulaireConnexionFormateur'
+  )?.classList.remove('masque');
+  document.getElementById(
+    'formulairePremiereConnexionFormateur'
+  )?.classList.add('masque');
+
+  if (sessionUtilisateur.estAdministrateur) {
+    etatApplication.derniereActiviteAdministration = Date.now();
+  }
+
+  etatApplication.favoris = null;
   initialiserFavorisInterface_();
+  appliquerDroitsInterface();
+  demarrerSurveillanceAdministration();
+  masquerLoader();
+
+  if (!etatApplication.interfaceAuthentifieeInitialisee) {
+    etatApplication.interfaceAuthentifieeInitialisee = true;
+    chargerPage('Accueil');
+  } else {
+    rafraichirInterfaceApresChangementDroits();
+  }
+}
+
+
+function afficherEcranConnexionFormateur_() {
+  etatApplication.sessionUtilisateur = {
+    contexte: 'NON_CONNECTE',
+    estIdentifie: false,
+    estAdministrateur: false,
+    estFormateur: false,
+    droits: {}
+  };
+  etatApplication.interfaceAuthentifieeInitialisee = false;
+  etatApplication.favoris = null;
+  etatApplication.jetonChangementMotDePasseFormateur = '';
+  retirerJetonAdministrateurApplication();
+  retirerJetonFormateurApplication();
+  document.body.classList.remove('application-authentifiee');
+  document.getElementById('contenu').innerHTML = '';
+  document.getElementById('ecranConnexion')?.classList.remove('masque');
+  document.getElementById(
+    'formulaireConnexionFormateur'
+  )?.classList.remove('masque');
+  document.getElementById(
+    'formulairePremiereConnexionFormateur'
+  )?.classList.add('masque');
+  [
+    'motDePasseConnexionFormateur',
+    'nouveauMotDePassePremiereConnexion',
+    'confirmationMotDePassePremiereConnexion'
+  ].forEach(masquerMotDePasseInterface_);
+  fermerMenuMobile();
+  masquerLoader();
+  window.setTimeout(function () {
+    document.getElementById('identifiantConnexionFormateur')?.focus();
+  }, 50);
+}
+
+
+function basculerVisibiliteMotDePasse_(idChamp, bouton) {
+  const champ = document.getElementById(idChamp);
+  if (!champ) return;
+  const afficher = champ.type === 'password';
+  champ.type = afficher ? 'text' : 'password';
+  if (bouton) {
+    bouton.textContent = afficher ? 'Masquer' : 'Afficher';
+    bouton.setAttribute('aria-pressed', afficher ? 'true' : 'false');
+  }
+  try {
+    champ.focus({ preventScroll: true });
+  } catch (erreur) {
+    champ.focus();
+  }
+}
+
+
+function masquerMotDePasseInterface_(idChamp) {
+  const champ = document.getElementById(idChamp);
+  if (!champ) return;
+  champ.type = 'password';
+  const bouton = document.querySelector(
+    '.bouton-visibilite-mot-de-passe[aria-controls="' + idChamp + '"]'
+  );
+  if (bouton) {
+    bouton.textContent = 'Afficher';
+    bouton.setAttribute('aria-pressed', 'false');
+  }
+}
+
+
+function soumettreConnexionFormateur(evenement) {
+  evenement.preventDefault();
+  const champIdentifiant = document.getElementById(
+    'identifiantConnexionFormateur'
+  );
+  const champMotDePasse = document.getElementById(
+    'motDePasseConnexionFormateur'
+  );
+  const bouton = document.getElementById('boutonConnexionFormateur');
+  const zoneErreur = document.getElementById('erreurConnexionFormateur');
+  const identifiant = String(champIdentifiant?.value || '');
+  let motDePasse = String(champMotDePasse?.value || '');
+
+  if (champMotDePasse) champMotDePasse.value = '';
+  masquerMotDePasseInterface_('motDePasseConnexionFormateur');
+  if (zoneErreur) zoneErreur.classList.add('masque');
+  bouton.disabled = true;
+  bouton.textContent = 'Connexion…';
 
   google.script.run
-    .withSuccessHandler(function (sessionUtilisateur) {
-      etatApplication.sessionUtilisateur =
-        sessionUtilisateur || {
-          email: '',
-          estIdentifie: false,
-          estAdministrateur: false,
-          droits: {}
-        };
-
-      if (!etatApplication.sessionUtilisateur.estAdministrateur) {
-        retirerJetonAdministrateurApplication();
-      } else {
-        etatApplication.derniereActiviteAdministration = Date.now();
+    .withSuccessHandler(function (resultat) {
+      motDePasse = '';
+      bouton.disabled = false;
+      bouton.textContent = 'Se connecter';
+      if (resultat.changementMotDePasseRequis) {
+        etatApplication.jetonChangementMotDePasseFormateur =
+          resultat.jetonChangementMotDePasse;
+        document.getElementById(
+          'formulaireConnexionFormateur'
+        ).classList.add('masque');
+        document.getElementById(
+          'formulairePremiereConnexionFormateur'
+        ).classList.remove('masque');
+        document.getElementById(
+          'nouveauMotDePassePremiereConnexion'
+        ).focus();
+        return;
       }
-
-      appliquerDroitsInterface();
-      demarrerSurveillanceAdministration();
-      chargerPage('Accueil');
+      enregistrerJetonFormateurApplication(resultat.jeton);
+      demarrerApplicationAuthentifiee_(resultat.sessionUtilisateur);
     })
     .withFailureHandler(function (erreur) {
-      masquerLoader();
-      gererErreurServeur(erreur);
+      motDePasse = '';
+      bouton.disabled = false;
+      bouton.textContent = 'Se connecter';
+      if (zoneErreur) {
+        zoneErreur.textContent = extraireMessageErreur(erreur);
+        zoneErreur.classList.remove('masque');
+      }
     })
-    .getSessionUtilisateur(
-      obtenirJetonAdministrateurApplication()
+    .connecterFormateur(identifiant, motDePasse);
+  motDePasse = '';
+}
+
+
+function soumettrePremiereConnexionFormateur(evenement) {
+  evenement.preventDefault();
+  const nouveauChamp = document.getElementById(
+    'nouveauMotDePassePremiereConnexion'
+  );
+  const confirmationChamp = document.getElementById(
+    'confirmationMotDePassePremiereConnexion'
+  );
+  const bouton = document.getElementById(
+    'boutonPremiereConnexionFormateur'
+  );
+  const zoneErreur = document.getElementById(
+    'erreurPremiereConnexionFormateur'
+  );
+  let nouveau = String(nouveauChamp?.value || '');
+  let confirmation = String(confirmationChamp?.value || '');
+  if (nouveauChamp) nouveauChamp.value = '';
+  if (confirmationChamp) confirmationChamp.value = '';
+  masquerMotDePasseInterface_('nouveauMotDePassePremiereConnexion');
+  masquerMotDePasseInterface_('confirmationMotDePassePremiereConnexion');
+  zoneErreur?.classList.add('masque');
+  bouton.disabled = true;
+  bouton.textContent = 'Enregistrement…';
+
+  google.script.run
+    .withSuccessHandler(function (resultat) {
+      nouveau = '';
+      confirmation = '';
+      bouton.disabled = false;
+      bouton.textContent = 'Enregistrer et continuer';
+      enregistrerJetonFormateurApplication(resultat.jeton);
+      demarrerApplicationAuthentifiee_(resultat.sessionUtilisateur);
+    })
+    .withFailureHandler(function (erreur) {
+      nouveau = '';
+      confirmation = '';
+      bouton.disabled = false;
+      bouton.textContent = 'Enregistrer et continuer';
+      zoneErreur.textContent = extraireMessageErreur(erreur);
+      zoneErreur.classList.remove('masque');
+    })
+    .terminerPremiereConnexionFormateur(
+      etatApplication.jetonChangementMotDePasseFormateur,
+      nouveau,
+      confirmation
     );
+  nouveau = '';
+  confirmation = '';
 }
 
 function chargerPage(nomPage) {
@@ -196,7 +427,7 @@ function chargerPage(nomPage) {
     .withFailureHandler(gererErreurServeur)
     .getPage(
       nomPage,
-      obtenirJetonAdministrateurApplication()
+      obtenirJetonUtilisateurApplication()
     );
 }
 
@@ -249,6 +480,13 @@ function estAdministrateurApplication() {
   );
 }
 
+function estFormateurAuthentifieApplication() {
+  return Boolean(
+    etatApplication.sessionUtilisateur &&
+    etatApplication.sessionUtilisateur.estFormateur
+  );
+}
+
 function appliquerDroitsInterface() {
   const administrateur = estAdministrateurApplication();
 
@@ -271,7 +509,10 @@ function appliquerDroitsInterface() {
   document
     .querySelectorAll('[data-formateur-only="true"]')
     .forEach(function (element) {
-      element.classList.toggle('masque', administrateur);
+      element.classList.toggle(
+        'masque',
+        !estFormateurAuthentifieApplication()
+      );
     });
 
   const identite = document.getElementById(
@@ -281,13 +522,18 @@ function appliquerDroitsInterface() {
   if (identite) {
     const session = etatApplication.sessionUtilisateur || {};
 
-    identite.textContent = administrateur
-      ? 'Mode administrateur'
-      : 'Mode formateur';
-
-    if (session.email) {
-      identite.textContent += ' · ' + session.email;
-    }
+    identite.textContent = administrateur && session.estFormateur
+      ? (session.nomComplet || session.identifiant) +
+        ' — Formateur + Administrateur'
+      : (
+        administrateur
+          ? 'Administrateur — accès direct'
+          : (
+            session.estFormateur
+              ? (session.nomComplet || session.identifiant) + ' — Formateur'
+              : ''
+          )
+      );
 
     const identiteMenuMobile = document.getElementById(
       'identiteUtilisateurMenuMobile'
@@ -299,9 +545,49 @@ function appliquerDroitsInterface() {
 
   }
 
+  const origineFavoris = document.getElementById(
+    'origineFavorisUtilisateur'
+  );
+  if (origineFavoris) {
+    origineFavoris.textContent = estFormateurAuthentifieApplication()
+      ? 'Synchronisés avec votre compte formateur'
+      : 'Liés à ce navigateur administrateur';
+  }
+
   if (etatApplication.favoris) {
     afficherPanneauFavoris_();
     synchroniserBoutonsFavoris_();
+  }
+}
+
+function obtenirJetonUtilisateurApplication() {
+  return obtenirJetonAdministrateurApplication() ||
+    obtenirJetonFormateurApplication();
+}
+
+function obtenirJetonFormateurApplication() {
+  try {
+    return sessionStorage.getItem(CLE_JETON_FORMATEUR) || '';
+  } catch (erreur) {
+    return '';
+  }
+}
+
+function enregistrerJetonFormateurApplication(jeton) {
+  try {
+    sessionStorage.setItem(CLE_JETON_FORMATEUR, String(jeton || ''));
+  } catch (erreur) {
+    throw new Error(
+      'Le navigateur refuse le stockage temporaire de la session formateur.'
+    );
+  }
+}
+
+function retirerJetonFormateurApplication() {
+  try {
+    sessionStorage.removeItem(CLE_JETON_FORMATEUR);
+  } catch (erreur) {
+    console.error(erreur);
   }
 }
 
@@ -357,6 +643,7 @@ function ouvrirModalAccesAdministrateur() {
   }
 
   champ.value = '';
+  masquerMotDePasseInterface_('motDePasseAdministrateur');
   modal.classList.remove('masque');
   document.body.classList.add('modal-ouverte');
   window.setTimeout(function () {
@@ -372,6 +659,7 @@ function fermerModalAccesAdministrateur() {
   if (champ) {
     champ.value = '';
   }
+  masquerMotDePasseInterface_('motDePasseAdministrateur');
 
   document.getElementById(
     'modalAccesAdministrateur'
@@ -393,6 +681,7 @@ function soumettreAccesAdministrateur(evenement) {
   if (champ) {
     champ.value = '';
   }
+  masquerMotDePasseInterface_('motDePasseAdministrateur');
 
   bouton.disabled = true;
   bouton.textContent = 'Vérification…';
@@ -415,8 +704,7 @@ function soumettreAccesAdministrateur(evenement) {
         resultat.sessionUtilisateur;
       etatApplication.derniereActiviteAdministration = Date.now();
       fermerModalAccesAdministrateur();
-      appliquerDroitsInterface();
-      rafraichirInterfaceApresChangementDroits();
+      demarrerApplicationAuthentifiee_(resultat.sessionUtilisateur);
       afficherToast('Administration déverrouillée.', false);
     })
     .withFailureHandler(function (erreur) {
@@ -424,7 +712,10 @@ function soumettreAccesAdministrateur(evenement) {
       bouton.textContent = 'Déverrouiller';
       afficherToast(extraireMessageErreur(erreur), true);
     })
-    .deverrouillerAdministration(motDePasse);
+    .deverrouillerAdministration(
+      motDePasse,
+      obtenirJetonFormateurApplication()
+    );
 
   motDePasse = '';
 }
@@ -447,42 +738,150 @@ function verrouillerAdministrationInterface() {
 
 function verrouillerAdministrationLocale() {
   retirerJetonAdministrateurApplication();
-  etatApplication.sessionUtilisateur = {
-    email: etatApplication.sessionUtilisateur?.email || '',
-    estIdentifie: Boolean(
-      etatApplication.sessionUtilisateur?.email
-    ),
-    estAdministrateur: false,
-    droits: {
-      consulterStagiaires: true,
-      consulterSuiviPedagogique: true,
-      gererSessions: true,
-      consulterCalendrier: true,
-      consulterFormateurs: true,
-      consulterStatistiques: true,
-      consulterAssistantPedagogique: true,
-      consulterMonRecapitulatifHeures: Boolean(
-        etatApplication.sessionUtilisateur?.email
-      )
-    }
-  };
   etatApplication.derniereActiviteAdministration = 0;
   fermerModalAccesAdministrateur();
-  appliquerDroitsInterface();
-
-  if ([
-    'Referentiel',
-    'Indemnisation',
-    'Administration'
-  ].includes(etatApplication.pageActive)) {
-    chargerPage('Accueil');
-  } else {
-    rafraichirInterfaceApresChangementDroits();
+  const jetonFormateur = obtenirJetonFormateurApplication();
+  if (!jetonFormateur) {
+    afficherEcranConnexionFormateur_();
+    return;
   }
+  google.script.run
+    .withSuccessHandler(function (sessionUtilisateur) {
+      if (sessionUtilisateur && sessionUtilisateur.estFormateur) {
+        demarrerApplicationAuthentifiee_(sessionUtilisateur);
+      } else {
+        afficherEcranConnexionFormateur_();
+      }
+    })
+    .withFailureHandler(afficherEcranConnexionFormateur_)
+    .getSessionUtilisateur(jetonFormateur);
+}
+
+
+function deconnecterFormateurInterface() {
+  const jeton = obtenirJetonFormateurApplication();
+  const jetonAdministrateur = obtenirJetonAdministrateurApplication();
+  retirerJetonFormateurApplication();
+  retirerJetonAdministrateurApplication();
+  afficherEcranConnexionFormateur_();
+  if (jeton) {
+    google.script.run
+      .withFailureHandler(function () {})
+      .deconnecterFormateur(jeton, jetonAdministrateur);
+  } else if (jetonAdministrateur) {
+    google.script.run
+      .withFailureHandler(function () {})
+      .verrouillerAdministration(jetonAdministrateur);
+  }
+}
+
+
+function ouvrirModalMotDePasseFormateur() {
+  if (!estFormateurAuthentifieApplication()) return;
+  [
+    'motDePasseActuelFormateur',
+    'nouveauMotDePasseFormateur',
+    'confirmationNouveauMotDePasseFormateur'
+  ].forEach(function (id) {
+    const champ = document.getElementById(id);
+    if (champ) champ.value = '';
+  });
+  document.getElementById('modalMotDePasseFormateur')
+    ?.classList.remove('masque');
+  document.body.classList.add('modal-ouverte');
+  window.setTimeout(function () {
+    document.getElementById('motDePasseActuelFormateur')?.focus();
+  }, 50);
+}
+
+
+function fermerModalMotDePasseFormateur() {
+  [
+    'motDePasseActuelFormateur',
+    'nouveauMotDePasseFormateur',
+    'confirmationNouveauMotDePasseFormateur'
+  ].forEach(function (id) {
+    const champ = document.getElementById(id);
+    if (champ) champ.value = '';
+    masquerMotDePasseInterface_(id);
+  });
+  document.getElementById('modalMotDePasseFormateur')
+    ?.classList.add('masque');
+  document.body.classList.remove('modal-ouverte');
+}
+
+
+function soumettreChangementMotDePasseFormateur(evenement) {
+  evenement.preventDefault();
+  const bouton = document.getElementById(
+    'boutonChangerMotDePasseFormateur'
+  );
+  let actuel = document.getElementById(
+    'motDePasseActuelFormateur'
+  ).value;
+  let nouveau = document.getElementById(
+    'nouveauMotDePasseFormateur'
+  ).value;
+  let confirmation = document.getElementById(
+    'confirmationNouveauMotDePasseFormateur'
+  ).value;
+  bouton.disabled = true;
+  bouton.textContent = 'Modification…';
+  document.getElementById('motDePasseActuelFormateur').value = '';
+  document.getElementById('nouveauMotDePasseFormateur').value = '';
+  document.getElementById(
+    'confirmationNouveauMotDePasseFormateur'
+  ).value = '';
+  [
+    'motDePasseActuelFormateur',
+    'nouveauMotDePasseFormateur',
+    'confirmationNouveauMotDePasseFormateur'
+  ].forEach(masquerMotDePasseInterface_);
+
+  google.script.run
+    .withSuccessHandler(function (resultat) {
+      actuel = '';
+      nouveau = '';
+      confirmation = '';
+      bouton.disabled = false;
+      bouton.textContent = 'Modifier';
+      enregistrerJetonFormateurApplication(resultat.jeton);
+      fermerModalMotDePasseFormateur();
+      etatApplication.sessionUtilisateur = resultat.sessionUtilisateur;
+      appliquerDroitsInterface();
+      afficherToast('Mot de passe modifié.', false);
+    })
+    .withFailureHandler(function (erreur) {
+      actuel = '';
+      nouveau = '';
+      confirmation = '';
+      bouton.disabled = false;
+      bouton.textContent = 'Modifier';
+      afficherToast(extraireMessageErreur(erreur), true);
+    })
+    .changerMotDePasseFormateur(
+      obtenirJetonFormateurApplication(),
+      actuel,
+      nouveau,
+      confirmation
+    );
+  actuel = '';
+  nouveau = '';
+  confirmation = '';
 }
 
 function rafraichirInterfaceApresChangementDroits() {
   appliquerDroitsInterface();
+
+  if (
+    !estAdministrateurApplication() &&
+    ['Referentiel', 'Indemnisation', 'Administration'].includes(
+      etatApplication.pageActive
+    )
+  ) {
+    chargerPage('Accueil');
+    return;
+  }
 
   if (etatApplication.pageActive === 'Stagiaires') {
     afficherListeStagiaires();
@@ -610,6 +1009,14 @@ function extraireMessageErreur(erreur) {
     message.includes('Accès réservé à l’administrateur.')
   ) {
     verrouillerAdministrationLocale();
+  }
+
+  if (message.includes('Authentification requise.')) {
+    if (estAdministrateurApplication()) {
+      verrouillerAdministrationLocale();
+    } else {
+      afficherEcranConnexionFormateur_();
+    }
   }
 
   return message;
@@ -769,7 +1176,10 @@ function chargerFavorisUtilisateur_(forcer) {
         true
       );
     })
-    .getFavoris(etat.utilisateurCle);
+    .getFavoris(
+      etat.utilisateurCle,
+      obtenirJetonUtilisateurApplication()
+    );
 }
 
 
@@ -910,9 +1320,19 @@ function basculerFavoriDepuisBouton(evenement, bouton) {
     .withFailureHandler(echec);
 
   if (favoriAvant) {
-    appel.supprimerFavori(type, identifiant, etat.utilisateurCle);
+    appel.supprimerFavori(
+      type,
+      identifiant,
+      etat.utilisateurCle,
+      obtenirJetonUtilisateurApplication()
+    );
   } else {
-    appel.ajouterFavori(type, identifiant, etat.utilisateurCle);
+    appel.ajouterFavori(
+      type,
+      identifiant,
+      etat.utilisateurCle,
+      obtenirJetonUtilisateurApplication()
+    );
   }
 }
 
@@ -1033,8 +1453,22 @@ function afficherPanneauFavoris_(message, erreur) {
     zone.innerHTML = '<div class="etat-favoris">Chargement des favoris…</div>';
     return;
   }
+  const actionImport = estFormateurAuthentifieApplication()
+    ? `
+      <div class="import-favoris-locaux">
+        <button
+          type="button"
+          class="bouton-lien"
+          onclick="importerFavorisLocauxFormateurInterface_()"
+        >Importer les favoris de cet appareil</button>
+        <small>Import volontaire, sans supprimer les favoris locaux.</small>
+      </div>
+    `
+    : '';
   if (!etat.liste.length) {
-    zone.innerHTML = '<div class="etat-favoris">Aucun favori pour le moment</div>';
+    zone.innerHTML =
+      '<div class="etat-favoris">Aucun favori pour le moment</div>' +
+      actionImport;
     return;
   }
 
@@ -1058,7 +1492,39 @@ function afficherPanneauFavoris_(message, erreur) {
         <div>${favoris.map(creerLignePanneauFavori_).join('')}</div>
       </section>
     `;
-  }).join('');
+  }).join('') + actionImport;
+}
+
+
+function importerFavorisLocauxFormateurInterface_() {
+  if (!estFormateurAuthentifieApplication()) {
+    afficherToast('Cette importation est réservée au formateur connecté.', true);
+    return;
+  }
+  const etat = obtenirEtatFavoris_();
+  const cleLocale = String(etat.utilisateurCle || '').trim();
+  if (!cleLocale) {
+    afficherToast('Aucune clé locale de favoris n’est disponible.', true);
+    return;
+  }
+  google.script.run
+    .withSuccessHandler(function (resultat) {
+      const nombre = Number(resultat?.importes || 0);
+      afficherToast(
+        nombre
+          ? nombre + ' favori(s) importé(s).'
+          : 'Aucun nouveau favori local à importer.',
+        false
+      );
+      chargerFavorisUtilisateur_(true);
+    })
+    .withFailureHandler(function (erreur) {
+      afficherToast(extraireMessageErreur(erreur), true);
+    })
+    .importerFavorisLocauxFormateur(
+      cleLocale,
+      obtenirJetonUtilisateurApplication()
+    );
 }
 
 
@@ -1219,7 +1685,11 @@ function executerRechercheGlobale_(texte, generationProgramme) {
         true
       );
     })
-    .rechercherGlobalement(texte, {});
+    .rechercherGlobalement(
+      texte,
+      {},
+      obtenirJetonUtilisateurApplication()
+    );
 }
 
 
@@ -1427,7 +1897,10 @@ function chargerMiniaturesRechercheGlobale_() {
         zone.appendChild(image);
       })
       .withFailureHandler(function () {})
-      .getPhotoStagiaire(uuid);
+      .getPhotoStagiaire(
+        uuid,
+        obtenirJetonUtilisateurApplication()
+      );
   });
 }
 
@@ -1675,7 +2148,7 @@ function initialiserPageAccueil() {
       }
     })
     .getDonneesTableauBordAccueil(
-      obtenirJetonAdministrateurApplication()
+      obtenirJetonUtilisateurApplication()
     );
 }
 
@@ -2121,7 +2594,7 @@ function initialiserPageStagiaires() {
       terminerChargement();
     })
     .withFailureHandler(erreurChargement)
-    .getStagiaires();
+    .getStagiaires(obtenirJetonUtilisateurApplication());
 
   google.script.run
     .withSuccessHandler(function (formations) {
@@ -2131,7 +2604,7 @@ function initialiserPageStagiaires() {
       terminerChargement();
     })
     .withFailureHandler(erreurChargement)
-    .getFormations();
+    .getFormations(obtenirJetonUtilisateurApplication());
 
   google.script.run
     .withSuccessHandler(function (statuts) {
@@ -2141,7 +2614,7 @@ function initialiserPageStagiaires() {
       terminerChargement();
     })
     .withFailureHandler(erreurChargement)
-    .getStatutsStagiaires();
+    .getStatutsStagiaires(obtenirJetonUtilisateurApplication());
 }
 
 function remplirFiltresStagiaires() {
@@ -2426,7 +2899,10 @@ function initialiserMiniaturesStagiaires() {
       .withFailureHandler(function () {
         // Les initiales restent visibles si le fichier Drive manque.
       })
-      .getPhotoStagiaire(uuid);
+      .getPhotoStagiaire(
+        uuid,
+        obtenirJetonUtilisateurApplication()
+      );
   }
 
   if (!('IntersectionObserver' in window)) {
@@ -2495,7 +2971,10 @@ function chargerPhotoFicheStagiaire(uuid, stagiaire) {
       zone.classList.remove('photo-en-chargement');
       zone.innerHTML = '<span>Photo indisponible</span>';
     })
-    .getPhotoStagiaire(uuid);
+    .getPhotoStagiaire(
+      uuid,
+      obtenirJetonUtilisateurApplication()
+    );
 }
 
 
@@ -2995,7 +3474,10 @@ function consulterStagiaire(uuid) {
         erreur
       );
     })
-    .getSuiviStagiaire(uuid);
+    .getSuiviStagiaire(
+      uuid,
+      obtenirJetonUtilisateurApplication()
+    );
 }
 
 function creerInformationFiche(
@@ -3459,7 +3941,8 @@ function chargerAnalysePedagogiqueFicheStagiaire(
       etat.uuid,
       {
         forcerActualisation: Boolean(forcerActualisation)
-      }
+      },
+      obtenirJetonUtilisateurApplication()
     );
 }
 
@@ -5640,7 +6123,10 @@ function initialiserEtatPhotoStagiaire(stagiaire) {
         }
         zone.innerHTML = '<span>Photo indisponible</span>';
       })
-      .getPhotoStagiaire(stagiaire.uuid);
+      .getPhotoStagiaire(
+        stagiaire.uuid,
+        obtenirJetonUtilisateurApplication()
+      );
     return;
   }
 
@@ -6254,7 +6740,7 @@ function rechargerStagiaires() {
       masquerLoader();
     })
     .withFailureHandler(gererErreurServeur)
-    .getStagiaires();
+    .getStagiaires(obtenirJetonUtilisateurApplication());
 }
 
 function obtenirClasseStatut(statut) {
@@ -6335,7 +6821,7 @@ function initialiserPageFormateurs() {
     })
     .withFailureHandler(gererErreurServeur)
     .getFormateurs(
-      obtenirJetonAdministrateurApplication()
+      obtenirJetonUtilisateurApplication()
     );
 }
 
@@ -6373,7 +6859,7 @@ function afficherListeFormateurs() {
   if (!formateurs.length) {
     corps.innerHTML = `
       <tr>
-        <td colspan="4" class="etat-vide">
+        <td colspan="5" class="etat-vide">
           Aucun formateur enregistré pour le moment.
         </td>
       </tr>
@@ -6396,6 +6882,36 @@ function afficherListeFormateurs() {
           </button>
         `
         : '';
+      const compte = formateur.compteAcces || null;
+      const libelleAcces = !compte
+        ? 'Aucun accès'
+        : (compte.bloque
+          ? 'Bloqué'
+          : (compte.actif ? 'Actif' : 'Désactivé'));
+      const classeAcces = !compte || !compte.actif
+        ? 'badge-gris'
+        : (compte.bloque ? 'badge-rouge' : 'badge-vert');
+      const colonneAcces = estAdministrateurApplication()
+        ? `
+          <td>
+            <span class="badge-statut ${classeAcces}">
+              ${libelleAcces}
+            </span>
+            ${compte && compte.doitChangerMotDePasse
+              ? '<small class="detail-acces-formateur">Changement requis</small>'
+              : ''}
+          </td>
+        `
+        : '';
+      const actionAcces = estAdministrateurApplication()
+        ? `
+          <button
+            type="button"
+            class="bouton-secondaire bouton-compact"
+            onclick="ouvrirGestionAccesFormateur('${formateur.idFormateur}')"
+          >${compte ? 'Gérer l’accès' : 'Créer un accès'}</button>
+        `
+        : '';
 
       return `
         <tr data-formateur-id="${echapperHtml(formateur.idFormateur)}">
@@ -6408,6 +6924,7 @@ function afficherListeFormateurs() {
               ${formateur.actif ? 'Actif' : 'Inactif'}
             </span>
           </td>
+          ${colonneAcces}
           <td class="colonne-actions">
             ${creerBoutonFavori_(
               'FORMATEUR',
@@ -6415,6 +6932,7 @@ function afficherListeFormateurs() {
               'bouton-favori-tableau'
             )}
             ${actionModifier}
+            ${actionAcces}
           </td>
         </tr>
       `;
@@ -6588,7 +7106,9 @@ function chargerMonRecapitulatifFormateur() {
         `;
       }
     })
-    .getMonRecapitulatifHeuresFormateur();
+    .getMonRecapitulatifHeuresFormateur(
+      obtenirJetonUtilisateurApplication()
+    );
 }
 
 function afficherMonRecapitulatifFormateur(donnees) {
@@ -6604,21 +7124,20 @@ function afficherMonRecapitulatifFormateur(donnees) {
   }
 
   if (!donnees.estIdentifie) {
-    resume.textContent =
-      'Adresse Google indisponible avec le déploiement actuel.';
+    resume.textContent = 'Session formateur non identifiée.';
     contenu.innerHTML = `
       <div class="etat-vide etat-acces-limite">
-        Ton récapitulatif ne peut pas être isolé tant que Google ne fournit pas ton adresse.
+        Ton récapitulatif n’est pas disponible dans cette session.
       </div>
     `;
     return;
   }
 
   if (!donnees.formateurAssocie) {
-    resume.textContent = donnees.email;
+    resume.textContent = 'Compte formateur sans fiche associée';
     contenu.innerHTML = `
       <div class="etat-vide">
-        Aucun formateur n’est associé à cette adresse Google.
+        Aucun formateur n’est associé à ce compte.
       </div>
     `;
     return;
@@ -6674,8 +7193,191 @@ function rechargerFormateurs() {
     })
     .withFailureHandler(gererErreurServeur)
     .getFormateurs(
+      obtenirJetonUtilisateurApplication()
+    );
+}
+
+
+function ouvrirGestionAccesFormateur(idFormateur) {
+  if (!estAdministrateurApplication()) {
+    afficherToast('Accès réservé à l’administrateur.', true);
+    return;
+  }
+  const formateur = etatApplication.formateurs.find(function (element) {
+    return element.idFormateur === idFormateur;
+  });
+  if (!formateur) {
+    afficherToast('Formateur introuvable.', true);
+    return;
+  }
+
+  const compte = formateur.compteAcces || null;
+  document.getElementById('accesFormateurId').value = idFormateur;
+  document.getElementById('sousTitreModalAccesFormateur').textContent =
+    [formateur.prenom, formateur.nom].filter(Boolean).join(' ');
+  document.getElementById('resultatSecretAccesFormateur')
+    ?.classList.add('masque');
+  document.getElementById('motDePasseTemporaireAccesFormateur').value = '';
+  document.getElementById('creationAccesFormateur')
+    ?.classList.toggle('masque', Boolean(compte));
+  document.getElementById('gestionAccesFormateur')
+    ?.classList.toggle('masque', !compte);
+
+  if (compte) {
+    afficherResumeAccesFormateur_(compte);
+  } else {
+    document.getElementById('identifiantAccesFormateur').value = '';
+    google.script.run
+      .withSuccessHandler(function (resultat) {
+        const modal = document.getElementById('modalAccesFormateur');
+        if (!modal || modal.classList.contains('masque')) return;
+        document.getElementById('identifiantAccesFormateur').value =
+          resultat.identifiant || '';
+      })
+      .withFailureHandler(function (erreur) {
+        afficherToast(extraireMessageErreur(erreur), true);
+      })
+      .proposerIdentifiantCompteFormateur(
+        idFormateur,
+        obtenirJetonAdministrateurApplication()
+      );
+  }
+
+  document.getElementById('modalAccesFormateur')?.classList.remove('masque');
+  document.body.classList.add('modal-ouverte');
+}
+
+
+function fermerModalAccesFormateur() {
+  const secret = document.getElementById('resultatMotDePasseAccesFormateur');
+  if (secret) secret.textContent = '';
+  const champ = document.getElementById('motDePasseTemporaireAccesFormateur');
+  if (champ) champ.value = '';
+  document.getElementById('modalAccesFormateur')?.classList.add('masque');
+  document.body.classList.remove('modal-ouverte');
+}
+
+
+function afficherResumeAccesFormateur_(compte) {
+  const zone = document.getElementById('resumeAccesFormateur');
+  if (!zone) return;
+  const statut = compte.bloque
+    ? 'Bloqué jusqu’au ' + formaterDateHeureInterface_(compte.bloqueJusqua)
+    : (compte.actif ? 'Actif' : 'Désactivé');
+  zone.innerHTML = `
+    <dl>
+      <div><dt>Identifiant</dt><dd>${echapperHtml(compte.identifiant)}</dd></div>
+      <div><dt>État</dt><dd>${echapperHtml(statut)}</dd></div>
+      <div><dt>Dernière connexion</dt><dd>${echapperHtml(formaterDateHeureInterface_(compte.derniereConnexion) || 'Jamais')}</dd></div>
+      <div><dt>Changement requis</dt><dd>${compte.doitChangerMotDePasse ? 'Oui' : 'Non'}</dd></div>
+      <div><dt>Échecs récents</dt><dd>${Number(compte.nombreEchecs || 0)}</dd></div>
+    </dl>
+  `;
+  document.querySelectorAll('#gestionAccesFormateur [data-action-acces]')
+    .forEach(function (bouton) {
+      const action = bouton.dataset.actionAcces;
+      bouton.classList.toggle(
+        'masque',
+        (action === 'DESACTIVER' && !compte.actif) ||
+        (action === 'REACTIVER' && compte.actif) ||
+        (action === 'DEBLOQUER' && !compte.bloque && !compte.nombreEchecs)
+      );
+    });
+}
+
+
+function formaterDateHeureInterface_(valeur) {
+  if (!valeur) return '';
+  const date = new Date(valeur);
+  if (Number.isNaN(date.getTime())) return String(valeur);
+  return date.toLocaleString('fr-FR');
+}
+
+
+function creerAccesFormateurInterface_() {
+  const bouton = document.getElementById('boutonCreerAccesFormateur');
+  const donnees = {
+    idFormateur: document.getElementById('accesFormateurId').value,
+    identifiant: document.getElementById('identifiantAccesFormateur').value,
+    motDePasse: document.getElementById(
+      'motDePasseTemporaireAccesFormateur'
+    ).value
+  };
+  bouton.disabled = true;
+  bouton.textContent = 'Création…';
+  google.script.run
+    .withSuccessHandler(function (resultat) {
+      bouton.disabled = false;
+      bouton.textContent = 'Créer l’accès';
+      document.getElementById('motDePasseTemporaireAccesFormateur').value = '';
+      afficherResultatSecretAccesFormateur_(resultat, donnees.motDePasse);
+      rechargerFormateurs();
+    })
+    .withFailureHandler(function (erreur) {
+      bouton.disabled = false;
+      bouton.textContent = 'Créer l’accès';
+      document.getElementById('motDePasseTemporaireAccesFormateur').value = '';
+      afficherToast(extraireMessageErreur(erreur), true);
+    })
+    .creerAccesFormateur(
+      donnees,
       obtenirJetonAdministrateurApplication()
     );
+  donnees.motDePasse = '';
+}
+
+
+function executerActionAccesFormateurInterface_(action) {
+  const idFormateur = document.getElementById('accesFormateurId').value;
+  const libelles = {
+    DESACTIVER: 'désactiver cet accès',
+    REACTIVER: 'réactiver cet accès',
+    DEBLOQUER: 'débloquer cet accès',
+    FORCER_CHANGEMENT_MOT_DE_PASSE: 'forcer un changement de mot de passe',
+    REINITIALISER_MOT_DE_PASSE: 'réinitialiser le mot de passe'
+  };
+  if (!window.confirm('Confirmer : ' + (libelles[action] || action) + ' ?')) {
+    return;
+  }
+  document.querySelectorAll('#gestionAccesFormateur button')
+    .forEach(function (bouton) { bouton.disabled = true; });
+  google.script.run
+    .withSuccessHandler(function (resultat) {
+      document.querySelectorAll('#gestionAccesFormateur button')
+        .forEach(function (bouton) { bouton.disabled = false; });
+      afficherResumeAccesFormateur_(resultat.compte || {});
+      if (resultat.motDePasseAfficheUneSeuleFois) {
+        afficherResultatSecretAccesFormateur_(resultat, '');
+      }
+      afficherToast('Accès formateur mis à jour.', false);
+      rechargerFormateurs();
+    })
+    .withFailureHandler(function (erreur) {
+      document.querySelectorAll('#gestionAccesFormateur button')
+        .forEach(function (bouton) { bouton.disabled = false; });
+      afficherToast(extraireMessageErreur(erreur), true);
+    })
+    .executerActionAccesFormateur(
+      idFormateur,
+      action,
+      {},
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+
+function afficherResultatSecretAccesFormateur_(resultat, motDePasseSaisi) {
+  const compte = resultat.compte || {};
+  const secret = resultat.motDePasseTemporaire || motDePasseSaisi || '';
+  document.getElementById('resultatIdentifiantAccesFormateur').textContent =
+    compte.identifiant || '';
+  document.getElementById('resultatMotDePasseAccesFormateur').textContent =
+    secret || 'Mot de passe saisi par l’administrateur';
+  document.getElementById('resultatSecretAccesFormateur')
+    ?.classList.remove('masque');
+  document.getElementById('creationAccesFormateur')?.classList.add('masque');
+  document.getElementById('gestionAccesFormateur')?.classList.remove('masque');
+  afficherResumeAccesFormateur_(compte);
 }
 
 /* =====================================================
@@ -6722,7 +7424,7 @@ function initialiserPageReferentiel() {
       changerFormationReferentiel();
     })
     .withFailureHandler(gererErreurServeur)
-    .getFormations();
+    .getFormations(obtenirJetonUtilisateurApplication());
 }
 
 function changerFormationReferentiel() {
@@ -6824,7 +7526,10 @@ function chargerDonneesReferentiel() {
       terminerChargementReferentiel();
     })
     .withFailureHandler(erreurChargementReferentiel)
-    .getCategoriesReferentiel(formation);
+    .getCategoriesReferentiel(
+      formation,
+      obtenirJetonUtilisateurApplication()
+    );
 
   google.script.run
     .withSuccessHandler(function (items) {
@@ -6841,7 +7546,10 @@ function chargerDonneesReferentiel() {
       terminerChargementReferentiel();
     })
     .withFailureHandler(erreurChargementReferentiel)
-    .getItemsReferentiel(formation);
+    .getItemsReferentiel(
+      formation,
+      obtenirJetonUtilisateurApplication()
+    );
 }
 
 function afficherListeCategoriesReferentiel() {
@@ -8398,7 +9106,7 @@ function initialiserPageSessions() {
       terminerChargementSession();
     })
     .withFailureHandler(erreurChargementSession)
-    .getSessions();
+    .getSessions(obtenirJetonUtilisateurApplication());
 
   google.script.run
     .withSuccessHandler(function (preparation) {
@@ -8422,7 +9130,7 @@ function initialiserPageSessions() {
       terminerChargementSession();
     })
     .withFailureHandler(erreurChargementSession)
-    .getPreparationSession();
+    .getPreparationSession(obtenirJetonUtilisateurApplication());
 }
 
 function afficherListeSessions() {
@@ -8613,7 +9321,10 @@ function consulterSession(idSession) {
       masquerLoader();
       afficherToast(extraireMessageErreur(erreur), true);
     })
-    .getSessionDetaillee(identifiant);
+    .getSessionDetaillee(
+      identifiant,
+      obtenirJetonUtilisateurApplication()
+    );
 }
 
 function afficherFicheSession(session) {
@@ -9384,7 +10095,8 @@ function chargerReferentielSession(
     })
     .getReferentielSession(
       formation,
-      idSessionHistorique || ''
+      idSessionHistorique || '',
+      obtenirJetonUtilisateurApplication()
     );
 }
 
@@ -10253,7 +10965,10 @@ function soumettreSession(evenement) {
         true
       );
     })
-    .enregistrerSession(donnees);
+    .enregistrerSession(
+      donnees,
+      obtenirJetonUtilisateurApplication()
+    );
 }
 
 function obtenirLibelleBoutonEnregistrementSession() {
@@ -10280,7 +10995,7 @@ function rechargerSessions() {
       masquerLoader();
     })
     .withFailureHandler(gererErreurServeur)
-    .getSessions();
+    .getSessions(obtenirJetonUtilisateurApplication());
 }
 
 /* =====================================================
@@ -10383,7 +11098,7 @@ function chargerMoisCalendrier() {
     .getDonneesCalendrier(
       periode.dateDebut,
       periode.dateFin,
-      obtenirJetonAdministrateurApplication()
+      obtenirJetonUtilisateurApplication()
     );
 }
 
@@ -12568,6 +13283,7 @@ function afficherPrevisualisationReinitialisationProduction_(preview) {
     <div class="grille-compteurs-reinitialisation-production">
       ${creerCompteurReinitialisationProduction_('Stagiaires', compteurs.stagiaires)}
       ${creerCompteurReinitialisationProduction_('Formateurs', compteurs.formateurs)}
+      ${creerCompteurReinitialisationProduction_('Comptes formateurs', compteurs.utilisateurs)}
       ${creerCompteurReinitialisationProduction_('Séances', compteurs.sessions)}
       ${creerCompteurReinitialisationProduction_('Présences', compteurs.presences)}
       ${creerCompteurReinitialisationProduction_('Prestations', compteurs.prestations)}
@@ -12739,6 +13455,7 @@ function afficherResultatReinitialisationProduction_(resultat) {
     <div class="grille-compteurs-reinitialisation-production">
       ${creerCompteurReinitialisationProduction_('Stagiaires supprimés', compteurs.stagiaires)}
       ${creerCompteurReinitialisationProduction_('Formateurs supprimés', compteurs.formateurs)}
+      ${creerCompteurReinitialisationProduction_('Comptes supprimés', compteurs.utilisateurs)}
       ${creerCompteurReinitialisationProduction_('Séances supprimées', compteurs.sessions)}
       ${creerCompteurReinitialisationProduction_('Présences supprimées', compteurs.presences)}
       ${creerCompteurReinitialisationProduction_('Prestations supprimées', compteurs.prestations)}
@@ -15669,7 +16386,9 @@ function initialiserPageAssistantPedagogique() {
         true
       );
     })
-    .getPreparationAssistantPedagogique();
+    .getPreparationAssistantPedagogique(
+      obtenirJetonUtilisateurApplication()
+    );
 }
 
 
@@ -15996,7 +16715,11 @@ function analyserGroupeAssistantPedagogique() {
         true
       );
     })
-    .getAnalyseGroupe(ids, {});
+    .getAnalyseGroupe(
+      ids,
+      {},
+      obtenirJetonUtilisateurApplication()
+    );
 }
 
 
@@ -16591,7 +17314,7 @@ function chargerStatistiques(forcerActualisation) {
     })
     .getDonneesStatistiques(
       lireFiltresStatistiques_(forcerActualisation),
-      obtenirJetonAdministrateurApplication()
+      obtenirJetonUtilisateurApplication()
     );
 }
 

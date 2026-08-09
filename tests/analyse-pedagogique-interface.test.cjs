@@ -651,8 +651,9 @@ test('l’interface d’analyse ne contient aucune mutation métier', () => {
   assert(!/setValues|appendRow|insertSheet/.test(sourceMoteur));
 });
 
-test('la fiche existante conserve suivi, fermeture et touche Échap', () => {
-  assert(sourceInterface.includes('.getSuiviStagiaire(uuid)'));
+test('la fiche existante conserve suivi sécurisé, fermeture et touche Échap', () => {
+  assert(sourceInterface.includes('.getSuiviStagiaire('));
+  assert(sourceInterface.includes('obtenirJetonUtilisateurApplication()'));
   assert(sourceInterface.includes('function afficherSessionsFicheStagiaire'));
   assert(sourceInterface.includes('function afficherSuiviPedagogiqueFicheStagiaire'));
   assert(sourceInterface.includes('evenement.key === \'Escape\''));

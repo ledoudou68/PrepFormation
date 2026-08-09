@@ -71,8 +71,8 @@ const FEUILLES_STATISTIQUES_ = [
  * existe, la session administrateur ; les formateurs ont le même accès aux
  * agrégats non sensibles.
  */
-function getDonneesStatistiques(filtres, jetonAdministrateur) {
-  getSessionUtilisateur(jetonAdministrateur);
+function getDonneesStatistiques(filtres, jetonUtilisateur) {
+  exigerUtilisateurAuthentifie_(jetonUtilisateur);
 
   if (restaurationBloqueEcritures_()) {
     throw new Error(

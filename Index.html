@@ -13,6 +13,142 @@
 
 <body>
 
+  <main
+    id="ecranConnexion"
+    class="ecran-connexion"
+    aria-labelledby="titreConnexionPrepFormation"
+  >
+    <section class="carte-connexion">
+      <div class="marque-connexion" aria-hidden="true">PF</div>
+      <h1 id="titreConnexionPrepFormation">PrepFormation</h1>
+      <p>Connectez-vous avec votre accès formateur.</p>
+
+      <form
+        id="formulaireConnexionFormateur"
+        onsubmit="soumettreConnexionFormateur(event)"
+      >
+        <div class="groupe-champ">
+          <label for="identifiantConnexionFormateur">Identifiant</label>
+          <input
+            type="text"
+            id="identifiantConnexionFormateur"
+            class="champ"
+            autocomplete="username"
+            autocapitalize="none"
+            spellcheck="false"
+            maxlength="80"
+            required
+          >
+        </div>
+        <div class="groupe-champ">
+          <label for="motDePasseConnexionFormateur">Mot de passe</label>
+          <div class="champ-mot-de-passe">
+            <input
+              type="password"
+              id="motDePasseConnexionFormateur"
+              class="champ"
+              autocomplete="current-password"
+              minlength="15"
+              maxlength="512"
+              required
+            >
+            <button
+              type="button"
+              class="bouton-visibilite-mot-de-passe"
+              aria-controls="motDePasseConnexionFormateur"
+              aria-pressed="false"
+              onclick="basculerVisibiliteMotDePasse_('motDePasseConnexionFormateur', this)"
+            >Afficher</button>
+          </div>
+        </div>
+        <div
+          id="erreurConnexionFormateur"
+          class="erreur-connexion masque"
+          role="alert"
+        ></div>
+        <button
+          type="submit"
+          id="boutonConnexionFormateur"
+          class="bouton-principal bouton-connexion-formateur"
+        >Se connecter</button>
+      </form>
+
+      <form
+        id="formulairePremiereConnexionFormateur"
+        class="masque"
+        onsubmit="soumettrePremiereConnexionFormateur(event)"
+      >
+        <div class="message-premiere-connexion">
+          <strong>Vous devez choisir un nouveau mot de passe.</strong>
+          <span>Utilisez au moins 15 caractères. Les phrases de passe et les espaces sont acceptés.</span>
+        </div>
+        <div class="groupe-champ">
+          <label for="nouveauMotDePassePremiereConnexion">
+            Nouveau mot de passe
+          </label>
+          <div class="champ-mot-de-passe">
+            <input
+              type="password"
+              id="nouveauMotDePassePremiereConnexion"
+              class="champ"
+              autocomplete="new-password"
+              minlength="15"
+              maxlength="512"
+              required
+            >
+            <button
+              type="button"
+              class="bouton-visibilite-mot-de-passe"
+              aria-controls="nouveauMotDePassePremiereConnexion"
+              aria-pressed="false"
+              onclick="basculerVisibiliteMotDePasse_('nouveauMotDePassePremiereConnexion', this)"
+            >Afficher</button>
+          </div>
+        </div>
+        <div class="groupe-champ">
+          <label for="confirmationMotDePassePremiereConnexion">
+            Confirmation
+          </label>
+          <div class="champ-mot-de-passe">
+            <input
+              type="password"
+              id="confirmationMotDePassePremiereConnexion"
+              class="champ"
+              autocomplete="new-password"
+              minlength="15"
+              maxlength="512"
+              required
+            >
+            <button
+              type="button"
+              class="bouton-visibilite-mot-de-passe"
+              aria-controls="confirmationMotDePassePremiereConnexion"
+              aria-pressed="false"
+              onclick="basculerVisibiliteMotDePasse_('confirmationMotDePassePremiereConnexion', this)"
+            >Afficher</button>
+          </div>
+        </div>
+        <div
+          id="erreurPremiereConnexionFormateur"
+          class="erreur-connexion masque"
+          role="alert"
+        ></div>
+        <button
+          type="submit"
+          id="boutonPremiereConnexionFormateur"
+          class="bouton-principal bouton-connexion-formateur"
+        >Enregistrer et continuer</button>
+      </form>
+
+      <div class="separateur-connexion"><span>ou</span></div>
+      <button
+        type="button"
+        class="bouton-secondaire bouton-administration-connexion"
+        onclick="ouvrirModalAccesAdministrateur()"
+      >Accès administrateur</button>
+    </section>
+  </main>
+
   <div id="loader" class="loader-overlay masque">
     <div class="spinner"></div>
   </div>
@@ -50,13 +186,22 @@
             <label for="motDePasseAdministrateur">
               Mot de passe administrateur
             </label>
-            <input
-              type="password"
-              id="motDePasseAdministrateur"
-              class="champ"
-              autocomplete="off"
-              required
-            >
+            <div class="champ-mot-de-passe">
+              <input
+                type="password"
+                id="motDePasseAdministrateur"
+                class="champ"
+                autocomplete="current-password"
+                required
+              >
+              <button
+                type="button"
+                class="bouton-visibilite-mot-de-passe"
+                aria-controls="motDePasseAdministrateur"
+                aria-pressed="false"
+                onclick="basculerVisibiliteMotDePasse_('motDePasseAdministrateur', this)"
+              >Afficher</button>
+            </div>
           </div>
         </div>
 
@@ -71,6 +216,58 @@
             id="boutonValiderAccesAdministrateur"
             class="bouton-principal"
           >Déverrouiller</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div
+    id="modalMotDePasseFormateur"
+    class="modal-overlay masque"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="titreModalMotDePasseFormateur"
+  >
+    <div class="modal-contenu modal-mot-de-passe-formateur">
+      <div class="modal-entete">
+        <div>
+          <h2 id="titreModalMotDePasseFormateur">Changer mon mot de passe</h2>
+          <p>La modification déconnectera les autres sessions ouvertes.</p>
+        </div>
+        <button
+          type="button"
+          class="bouton-fermer-modal"
+          onclick="fermerModalMotDePasseFormateur()"
+          aria-label="Fermer"
+        >×</button>
+      </div>
+      <form onsubmit="soumettreChangementMotDePasseFormateur(event)">
+        <div class="modal-corps">
+          <div class="groupe-champ">
+            <label for="motDePasseActuelFormateur">Mot de passe actuel</label>
+            <div class="champ-mot-de-passe">
+              <input type="password" id="motDePasseActuelFormateur" class="champ" autocomplete="current-password" minlength="15" maxlength="512" required>
+              <button type="button" class="bouton-visibilite-mot-de-passe" aria-controls="motDePasseActuelFormateur" aria-pressed="false" onclick="basculerVisibiliteMotDePasse_('motDePasseActuelFormateur', this)">Afficher</button>
+            </div>
+          </div>
+          <div class="groupe-champ">
+            <label for="nouveauMotDePasseFormateur">Nouveau mot de passe</label>
+            <div class="champ-mot-de-passe">
+              <input type="password" id="nouveauMotDePasseFormateur" class="champ" autocomplete="new-password" minlength="15" maxlength="512" required>
+              <button type="button" class="bouton-visibilite-mot-de-passe" aria-controls="nouveauMotDePasseFormateur" aria-pressed="false" onclick="basculerVisibiliteMotDePasse_('nouveauMotDePasseFormateur', this)">Afficher</button>
+            </div>
+          </div>
+          <div class="groupe-champ">
+            <label for="confirmationNouveauMotDePasseFormateur">Confirmation</label>
+            <div class="champ-mot-de-passe">
+              <input type="password" id="confirmationNouveauMotDePasseFormateur" class="champ" autocomplete="new-password" minlength="15" maxlength="512" required>
+              <button type="button" class="bouton-visibilite-mot-de-passe" aria-controls="confirmationNouveauMotDePasseFormateur" aria-pressed="false" onclick="basculerVisibiliteMotDePasse_('confirmationNouveauMotDePasseFormateur', this)">Afficher</button>
+            </div>
+          </div>
+        </div>
+        <div class="modal-pied">
+          <button type="button" class="bouton-secondaire" onclick="fermerModalMotDePasseFormateur()">Annuler</button>
+          <button type="submit" id="boutonChangerMotDePasseFormateur" class="bouton-principal">Modifier</button>
         </div>
       </form>
     </div>
@@ -184,7 +381,7 @@
         <header class="entete-panneau-favoris">
           <div>
             <strong>Mes favoris</strong>
-            <small>Accès rapide depuis ce navigateur</small>
+          <small id="origineFavorisUtilisateur">Accès rapide synchronisé</small>
           </div>
           <button
             type="button"
@@ -230,7 +427,20 @@
       id="identiteUtilisateurApplication"
       class="identite-utilisateur-application"
       aria-live="polite"
-    >Mode formateur</div>
+    ></div>
+
+    <div class="actions-session-utilisateur" data-formateur-only="true">
+      <button
+        type="button"
+        class="bouton-session-utilisateur"
+        onclick="ouvrirModalMotDePasseFormateur()"
+      >Mot de passe</button>
+      <button
+        type="button"
+        class="bouton-session-utilisateur"
+        onclick="deconnecterFormateurInterface()"
+      >Se déconnecter</button>
+    </div>
 
   </header>
 
@@ -242,7 +452,16 @@
         id="identiteUtilisateurMenuMobile"
         class="identite-utilisateur-menu-mobile"
         aria-live="polite"
-      >Mode formateur</div>
+      ></div>
+
+      <div class="actions-session-mobile" data-formateur-only="true">
+        <button type="button" onclick="ouvrirModalMotDePasseFormateur()">
+          Changer mon mot de passe
+        </button>
+        <button type="button" onclick="deconnecterFormateurInterface()">
+          Se déconnecter
+        </button>
+      </div>
 
       <button
         type="button"
