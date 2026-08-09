@@ -256,10 +256,14 @@ assert.strictEqual(appels[0].jeton, 'JETON_ADMINISTRATION_DIRECTE');
 assert.strictEqual(bouton.disabled, true);
 assert.strictEqual(bouton.textContent, 'Benchmark en cours…');
 appels.shift().succes({
-  500: 108,
-  1000: 216,
-  1500: 327,
-  2000: 438
+  algorithme: 'PBKDF2-HMAC-SHA-256',
+  iterationsConfiguration: 1000,
+  durees: {
+    500: 108,
+    1000: 216,
+    1500: 327,
+    2000: 438
+  }
 });
 assert.strictEqual(bouton.disabled, false);
 assert.strictEqual(bouton.textContent, 'Tester les performances PBKDF2');
@@ -272,7 +276,11 @@ assert(resultatNormalise.includes('500'));
 assert(resultatNormalise.includes('1 000'));
 assert(resultatNormalise.includes('1 500'));
 assert(resultatNormalise.includes('2 000'));
-assert(resultatNormalise.includes('20 000 itérations'));
+assert(resultatNormalise.includes(
+  'Configuration actuellement utilisée'
+));
+assert(resultatNormalise.includes('1 000 itérations'));
+assert(!resultatNormalise.includes('20 000 itérations'));
 
 definirContexteAuthentification({
   contexte: 'FORMATEUR_ADMINISTRATEUR',
@@ -285,10 +293,14 @@ vm.runInContext('executerBenchmarkPbkdf2Administration();', contexte);
 assert.strictEqual(appels.length, 1);
 assert.strictEqual(appels[0].jeton, 'JETON_ADMIN_ELEVATION');
 appels.shift().succes({
-  500: 101,
-  1000: 203,
-  1500: 304,
-  2000: 407
+  algorithme: 'PBKDF2-HMAC-SHA-256',
+  iterationsConfiguration: 1000,
+  durees: {
+    500: 101,
+    1000: 203,
+    1500: 304,
+    2000: 407
+  }
 });
 assert(resultat.innerHTML.includes('407 ms'));
 
@@ -307,6 +319,12 @@ assert(sourceRenduBenchmark.includes(
   'const iterations = [500, 1000, 1500, 2000];'
 ));
 assert(!sourceRenduBenchmark.includes('[20000, 30000, 50000]'));
+assert(sourceRenduBenchmark.includes(
+  'resultat && resultat.iterationsConfiguration'
+));
+assert(!sourceRenduBenchmark.includes(
+  '<strong>1 000 itérations</strong>'
+));
 
 definirContexteAuthentification({
   contexte: 'ADMINISTRATEUR',

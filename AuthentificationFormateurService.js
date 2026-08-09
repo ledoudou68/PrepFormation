@@ -33,7 +33,7 @@ const DUREE_ABSOLUE_SESSION_FORMATEUR_MS_ = 8 * 60 * 60 * 1000;
 const DUREE_INACTIVITE_SESSION_FORMATEUR_MS_ = 60 * 60 * 1000;
 const DUREE_THROTTLE_ACTIVITE_SESSION_FORMATEUR_MS_ = 5 * 60 * 1000;
 const DUREE_CHANGEMENT_INITIAL_FORMATEUR_MS_ = 10 * 60 * 1000;
-const ITERATIONS_PBKDF2_FORMATEUR_ = 20000;
+const ITERATIONS_PBKDF2_FORMATEUR_ = 1000;
 const LONGUEUR_MIN_MOT_DE_PASSE_FORMATEUR_ = 10;
 const LONGUEUR_MAX_MOT_DE_PASSE_FORMATEUR_ = 512;
 const VERSION_VERIFICATEUR_MOT_DE_PASSE_FORMATEUR_ = 'PF2';
@@ -49,18 +49,37 @@ const MESSAGE_AUTHENTIFICATION_FORMATEUR_INVALIDE_ =
  * session métier : seul un défi opaque de changement de mot de passe est
  * retourné.
  */
-function connecterFormateur(identifiant, motDePasse) {
+function connecterFormateur(identifiant, motDePasse, optionsDiagnostic) {
+  const debutServeur = Date.now();
+  const diagnosticActif = diagnosticConnexionFormateurAutorise_(
+    optionsDiagnostic
+  );
+  const metriques = diagnosticActif
+    ? creerMetriquesConnexionFormateur_()
+    : null;
+  const debutNormalisation = Date.now();
   const identifiantNormalise = normaliserIdentifiantFormateur_(
     identifiant,
     false
   );
+  if (metriques) {
+    metriques.normalisationIdentifiantMs =
+      Date.now() - debutNormalisation;
+  }
   const tentative = normaliserMotDePasseFormateur_(motDePasse);
 
-  return executerMutationMetier_(function () {
+  const resultat = executerMutationMetier_(function () {
+    const debutRecherche = Date.now();
     const table = lireTableUtilisateursAuthentification_();
     const compte = identifiantNormalise
       ? trouverCompteParIdentifiant_(table, identifiantNormalise)
       : null;
+    if (metriques) {
+      metriques.rechercheCompteUtilisateurMs =
+        Date.now() - debutRecherche;
+    }
+
+    const debutLectureVerificateur = Date.now();
     const sel = compte
       ? valeurCompteAuthentification_(table, compte.ligne, 'PASSWORD_SALT')
       : 'SEL_FACTICE_PREPFORMATION_FORMATEUR_V2';
@@ -73,11 +92,18 @@ function connecterFormateur(identifiant, motDePasse) {
         ALGORITHME_PEPPER_FORMATEUR_,
         'HASH_FACTICE'
       ].join('$');
+    if (metriques) {
+      metriques.lectureSelHashMs =
+        Date.now() - debutLectureVerificateur;
+    }
     const verificationMotDePasse = verifierMotDePasseFormateur_(
       tentative,
       sel,
-      hashAttendu
+      hashAttendu,
+      metriques
     );
+
+    const debutControleBlocage = Date.now();
     const maintenant = Date.now();
     const formateur = compte
       ? trouverFormateurCompteAuthentification_(
@@ -110,6 +136,10 @@ function connecterFormateur(identifiant, motDePasse) {
       (!bloqueJusqua || bloqueJusqua.getTime() <= maintenant) &&
       verificationMotDePasse.valide
     );
+    if (metriques) {
+      metriques.controleBlocageMs =
+        Date.now() - debutControleBlocage;
+    }
 
     if (!authentificationValide) {
       if (compte) {
@@ -131,6 +161,7 @@ function connecterFormateur(identifiant, motDePasse) {
       throw new Error(MESSAGE_AUTHENTIFICATION_FORMATEUR_INVALIDE_);
     }
 
+    const debutMiseAJourConnexion = Date.now();
     mettreAJourCompteApresConnexion_(
       table,
       compte,
@@ -138,6 +169,10 @@ function connecterFormateur(identifiant, motDePasse) {
       verificationMotDePasse.doitMettreAJour ? tentative : ''
     );
     supprimerEchecsIdentifiantInconnu_(identifiantNormalise);
+    if (metriques) {
+      metriques.miseAJourConnexionMs =
+        Date.now() - debutMiseAJourConnexion;
+    }
 
     const doitChanger = convertirBooleenAuthentification_(
       valeurBruteCompteAuthentification_(
@@ -182,18 +217,78 @@ function connecterFormateur(identifiant, motDePasse) {
       };
     }
 
-    const session = creerSessionFormateur_(compte, table, formateur);
+    const session = creerSessionFormateur_(
+      compte,
+      table,
+      formateur,
+      metriques
+    );
     journaliserConnexionFormateur_(session.sessionServeur);
+    const debutConstructionContexte = Date.now();
+    const sessionUtilisateur = construireSessionUtilisateur_(
+      null,
+      session.sessionServeur
+    );
+    if (metriques) {
+      metriques.constructionContexteUtilisateurMs =
+        Date.now() - debutConstructionContexte;
+    }
     return {
       authentifie: true,
       changementMotDePasseRequis: false,
       jeton: session.jeton,
-      sessionUtilisateur: construireSessionUtilisateur_(
-        null,
-        session.sessionServeur
-      )
+      sessionUtilisateur: sessionUtilisateur
     };
   });
+
+  if (metriques) {
+    metriques.totalServeurMs = Date.now() - debutServeur;
+    resultat.diagnosticConnexion = {
+      serveur: metriques
+    };
+  }
+
+  return resultat;
+}
+
+
+function creerMetriquesConnexionFormateur_() {
+  return {
+    normalisationIdentifiantMs: 0,
+    rechercheCompteUtilisateurMs: 0,
+    controleBlocageMs: 0,
+    lectureSelHashMs: 0,
+    derivationPbkdf2PepperMs: 0,
+    comparaisonVerificateurMs: 0,
+    miseAJourConnexionMs: 0,
+    creationSessionMs: 0,
+    ecritureScriptPropertiesMs: 0,
+    constructionContexteUtilisateurMs: 0,
+    totalServeurMs: 0
+  };
+}
+
+
+function diagnosticConnexionFormateurAutorise_(optionsDiagnostic) {
+  const options = optionsDiagnostic || {};
+  if (options.actif !== true) return false;
+  if (options.modeClientExplicite === true) return true;
+
+  const jetonAdministrateur = String(
+    options.jetonAdministrateur || ''
+  ).trim();
+  if (!jetonAdministrateur) return false;
+
+  try {
+    if (typeof exigerAdministrateurLectureSeule_ === 'function') {
+      exigerAdministrateurLectureSeule_(jetonAdministrateur);
+    } else {
+      exigerAdministrateur_(jetonAdministrateur);
+    }
+    return true;
+  } catch (erreur) {
+    return false;
+  }
 }
 
 
@@ -805,7 +900,8 @@ function obtenirSessionFormateurValide_(
 }
 
 
-function creerSessionFormateur_(compte, table, formateur) {
+function creerSessionFormateur_(compte, table, formateur, metriques) {
+  const debutCreationSession = Date.now();
   const jeton = creerSecretAleatoireSecurite_();
   const maintenant = Date.now();
   const sessionServeur = {
@@ -831,6 +927,11 @@ function creerSessionFormateur_(compte, table, formateur) {
     derniereActivite: maintenant,
     expireAbsolueA: maintenant + DUREE_ABSOLUE_SESSION_FORMATEUR_MS_
   };
+  if (metriques) {
+    metriques.creationSessionMs = Date.now() - debutCreationSession;
+  }
+
+  const debutEcritureProprietes = Date.now();
   const proprietes = PropertiesService.getScriptProperties();
   const verrou = LockService.getScriptLock();
   if (!verrou.tryLock(10000)) {
@@ -850,6 +951,10 @@ function creerSessionFormateur_(compte, table, formateur) {
     enregistrerActiviteSessionFormateurCache_(cle, maintenant);
   } finally {
     verrou.releaseLock();
+  }
+  if (metriques) {
+    metriques.ecritureScriptPropertiesMs =
+      Date.now() - debutEcritureProprietes;
   }
   return { jeton: jeton, sessionServeur: sessionServeur };
 }
@@ -1629,7 +1734,12 @@ function calculerVerificateurMotDePasseFormateur_(
 }
 
 
-function verifierMotDePasseFormateur_(motDePasse, sel, hashAttendu) {
+function verifierMotDePasseFormateur_(
+  motDePasse,
+  sel,
+  hashAttendu,
+  metriques
+) {
   const valeur = normaliserMotDePasseFormateur_(motDePasse);
   const attendu = String(hashAttendu || '');
   let iterations = ITERATIONS_PBKDF2_FORMATEUR_;
@@ -1658,6 +1768,7 @@ function verifierMotDePasseFormateur_(motDePasse, sel, hashAttendu) {
     iterations < 1 ||
     iterations > 200000
   ) {
+    const debutDerivationFactice = Date.now();
     const cleFactice = calculerClePbkdf2Formateur_(
       'TENTATIVE_INVALIDE_LONGUEUR_MINIMALE',
       sel,
@@ -1667,9 +1778,15 @@ function verifierMotDePasseFormateur_(motDePasse, sel, hashAttendu) {
       cleFactice,
       obtenirPepperMotDePasseFormateur_()
     );
+    if (metriques) {
+      metriques.derivationPbkdf2PepperMs =
+        Date.now() - debutDerivationFactice;
+      metriques.comparaisonVerificateurMs = 0;
+    }
     return { valide: false, doitMettreAJour: false };
   }
 
+  const debutDerivation = Date.now();
   const cleDerivee = calculerClePbkdf2Formateur_(valeur, sel, iterations);
   let calcule;
   if (format === 'PF2') {
@@ -1690,14 +1807,22 @@ function verifierMotDePasseFormateur_(motDePasse, sel, hashAttendu) {
   } else {
     calcule = 'FORMAT_INVALIDE';
   }
+  if (metriques) {
+    metriques.derivationPbkdf2PepperMs =
+      Date.now() - debutDerivation;
+  }
 
+  const debutComparaison = Date.now();
   const valide = comparaisonConstanteSecurite_(calcule, attendu);
+  if (metriques) {
+    metriques.comparaisonVerificateurMs =
+      Date.now() - debutComparaison;
+  }
   return {
     valide: valide,
-    doitMettreAJour: valide && (
-      format !== 'PF2' ||
-      iterations !== ITERATIONS_PBKDF2_FORMATEUR_
-    )
+    // Un vérificateur PF2 conserve toujours son coût jusqu'à un changement
+    // explicite du mot de passe. Seuls les anciens formats sont réencodés.
+    doitMettreAJour: valide && format !== 'PF2'
   };
 }
 
@@ -1779,7 +1904,11 @@ function benchmarkerDerivationMotDePasseFormateur(jetonAdministrateur) {
     durees[String(iterations)] = Date.now() - debut;
   });
 
-  return durees;
+  return {
+    algorithme: ALGORITHME_PBKDF2_FORMATEUR_,
+    iterationsConfiguration: ITERATIONS_PBKDF2_FORMATEUR_,
+    durees: durees
+  };
 }
 
 

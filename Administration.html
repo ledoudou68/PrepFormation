@@ -48,6 +48,29 @@
       role="status"
       aria-live="polite"
     ></div>
+
+    <div class="diagnostic-connexion-administration">
+      <div class="entete-diagnostic-connexion-administration">
+        <div>
+          <h3>Diagnostic connexion</h3>
+          <p>
+            Active une mesure unique lors de la prochaine connexion formateur.
+            Le rapport ne contient aucun identifiant, jeton ou secret.
+          </p>
+        </div>
+        <button
+          type="button"
+          class="bouton-secondaire"
+          onclick="activerDiagnosticConnexionProchaineConnexion()"
+        >Activer pour la prochaine connexion</button>
+      </div>
+      <div
+        id="resultatDiagnosticConnexionAdministration"
+        class="etat-vide"
+        role="status"
+        aria-live="polite"
+      >Aucune mesure de connexion disponible dans cette session navigateur.</div>
+    </div>
   </section>
 
   <section class="bloc bloc-mise-production-administration">

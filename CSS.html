@@ -4623,6 +4623,52 @@ body:not(.application-authentifiee) > .application {
   gap: 16px;
 }
 
+.diagnostic-connexion-administration {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--bordure);
+}
+
+.entete-diagnostic-connexion-administration {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.entete-diagnostic-connexion-administration h3 {
+  margin: 0 0 6px;
+}
+
+.entete-diagnostic-connexion-administration p {
+  margin: 0;
+  color: var(--texte-secondaire);
+}
+
+.details-diagnostic-connexion-administration {
+  margin-top: 12px;
+}
+
+.details-diagnostic-connexion-administration summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.liste-diagnostic-connexion-administration {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.liste-diagnostic-connexion-administration > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--bordure);
+}
+
 .entete-diagnostic-administration h2,
 .grille-details-diagnostic-administration h3,
 .erreurs-diagnostic-administration h3 {
@@ -5746,6 +5792,15 @@ body:not(.application-authentifiee) > .application {
 
   .entete-diagnostic-administration {
     flex-direction: column;
+  }
+
+  .entete-diagnostic-connexion-administration {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .entete-diagnostic-connexion-administration button {
+    width: 100%;
   }
 
   .entete-sauvegardes-administration,

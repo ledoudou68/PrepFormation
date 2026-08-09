@@ -11,10 +11,7 @@ const sourceProduction = fs.readFileSync(
   path.join(racine, 'AuthentificationFormateurService.js'),
   'utf8'
 );
-const sourceTest = sourceProduction.replace(
-  'const ITERATIONS_PBKDF2_FORMATEUR_ = 20000;',
-  'const ITERATIONS_PBKDF2_FORMATEUR_ = 24;'
-);
+const sourceTest = sourceProduction;
 const sourceSecurite = fs.readFileSync(
   path.join(racine, 'SecuriteService.js'),
   'utf8'
@@ -553,7 +550,7 @@ test('le mot de passe clair n’est jamais stocké', () => {
   const texte = JSON.stringify(compte.ligne);
   assert(!texte.includes('phrase de passe commune'));
   assert(String(compte.ligne[compte.index.PASSWORD_HASH])
-    .startsWith('PF2$PBKDF2-HMAC-SHA-256$24$HMAC-SHA-256$'));
+    .startsWith('PF2$PBKDF2-HMAC-SHA-256$1000$HMAC-SHA-256$'));
   assert(environnement.proprietes.FORMATEUR_PASSWORD_PEPPER);
 });
 
@@ -623,6 +620,12 @@ test('la règle de 10 caractères est commune à tous les parcours formateur', (
     motDePasse: '1234567890'
   }, 'JETON_ADMIN_TEST');
   assert.strictEqual(creation.compte.idFormateur, 'F1');
+  let compte = ligneCompte(envParcours, 'F1');
+  const pepperInitial = envParcours.proprietes.FORMATEUR_PASSWORD_PEPPER;
+  assert.strictEqual(
+    String(compte.ligne[compte.index.PASSWORD_HASH]).split('$')[2],
+    '1000'
+  );
 
   const premiereConnexion = envParcours.contexte.connecterFormateur(
     'parcours.dix',
@@ -633,6 +636,11 @@ test('la règle de 10 caractères est commune à tous les parcours formateur', (
     'abcdefghij',
     'abcdefghij'
   );
+  compte = ligneCompte(envParcours, 'F1');
+  assert.strictEqual(
+    String(compte.ligne[compte.index.PASSWORD_HASH]).split('$')[2],
+    '1000'
+  );
   const changement = envParcours.contexte.changerMotDePasseFormateur(
     session.jeton,
     'abcdefghij',
@@ -640,6 +648,11 @@ test('la règle de 10 caractères est commune à tous les parcours formateur', (
     'klmnopqrst'
   );
   assert.strictEqual(changement.sessionUtilisateur.idFormateur, 'F1');
+  compte = ligneCompte(envParcours, 'F1');
+  assert.strictEqual(
+    String(compte.ligne[compte.index.PASSWORD_HASH]).split('$')[2],
+    '1000'
+  );
 
   const reinitialisation = envParcours.contexte.executerActionAccesFormateur(
     'F1',
@@ -648,6 +661,15 @@ test('la règle de 10 caractères est commune à tous les parcours formateur', (
     'JETON_ADMIN_TEST'
   );
   assert.strictEqual(reinitialisation.motDePasseTemporaire, 'uvwxyzABCD');
+  compte = ligneCompte(envParcours, 'F1');
+  assert.strictEqual(
+    String(compte.ligne[compte.index.PASSWORD_HASH]).split('$')[2],
+    '1000'
+  );
+  assert.strictEqual(
+    envParcours.proprietes.FORMATEUR_PASSWORD_PEPPER,
+    pepperInitial
+  );
 });
 
 
@@ -689,7 +711,7 @@ test('le format PBKDF2 versionné relit son propre nombre d’itérations', () =
     hash
   );
   assert.strictEqual(resultat.valide, true);
-  assert.strictEqual(resultat.doitMettreAJour, true);
+  assert.strictEqual(resultat.doitMettreAJour, false);
 });
 
 
@@ -714,6 +736,74 @@ test('les anciens vérificateurs PBKDF2 restent lisibles et sont migrables', () 
 });
 
 
+test('un compte PF2 à 20 000 reste intact puis passe à 1 000 au changement', () => {
+  const envAncien = creerEnvironnement();
+  const ancienMotDePasse = 'ancienne phrase compte 20000';
+  creerCompte(
+    envAncien,
+    'F1',
+    'ancien.compte',
+    ancienMotDePasse
+  );
+  let compte = ligneCompte(envAncien, 'F1');
+  const selInitial = compte.ligne[compte.index.PASSWORD_SALT];
+  const pepperInitial = envAncien.proprietes.FORMATEUR_PASSWORD_PEPPER;
+  const hash20000 = envAncien.contexte.deriverMotDePasseFormateur_(
+    ancienMotDePasse,
+    selInitial,
+    20000
+  );
+  compte.ligne[compte.index.PASSWORD_HASH] = hash20000;
+  compte.ligne[compte.index.DOIT_CHANGER_MOT_DE_PASSE] = 'Non';
+
+  const iterationsObservees = [];
+  const calculerOriginal = envAncien.contexte
+    .calculerClePbkdf2Formateur_;
+  envAncien.contexte.calculerClePbkdf2Formateur_ = function (
+    motDePasse,
+    sel,
+    iterations
+  ) {
+    iterationsObservees.push(Number(iterations));
+    return calculerOriginal(motDePasse, sel, iterations);
+  };
+
+  const connexion = envAncien.contexte.connecterFormateur(
+    'ancien.compte',
+    ancienMotDePasse
+  );
+  assert.strictEqual(connexion.authentifie, true);
+  assert(iterationsObservees.includes(20000));
+  compte = ligneCompte(envAncien, 'F1');
+  assert.strictEqual(compte.ligne[compte.index.PASSWORD_HASH], hash20000);
+  assert.strictEqual(compte.ligne[compte.index.PASSWORD_SALT], selInitial);
+  assert.strictEqual(
+    envAncien.proprietes.FORMATEUR_PASSWORD_PEPPER,
+    pepperInitial
+  );
+
+  envAncien.contexte.changerMotDePasseFormateur(
+    connexion.jeton,
+    ancienMotDePasse,
+    'nouvelle phrase compte mille',
+    'nouvelle phrase compte mille'
+  );
+  compte = ligneCompte(envAncien, 'F1');
+  assert.strictEqual(
+    String(compte.ligne[compte.index.PASSWORD_HASH]).split('$')[2],
+    '1000'
+  );
+  assert.notStrictEqual(
+    compte.ligne[compte.index.PASSWORD_SALT],
+    selInitial
+  );
+  assert.strictEqual(
+    envAncien.proprietes.FORMATEUR_PASSWORD_PEPPER,
+    pepperInitial
+  );
+});
+
+
 test('les mots de passe temporaires sont longs, aléatoires et conformes', () => {
   const premier = environnement.contexte.creerMotDePasseTemporaireFormateur_();
   const second = environnement.contexte.creerMotDePasseTemporaireFormateur_();
@@ -725,6 +815,147 @@ test('les mots de passe temporaires sont longs, aléatoires et conformes', () =>
     premier
   );
   assert(sourceProduction.includes('secret.slice(0, 32)'));
+});
+
+
+test('le diagnostic de connexion est absent par défaut et exige une activation autorisée', () => {
+  const envDiagnostic = creerEnvironnement();
+  creerCompte(
+    envDiagnostic,
+    'F1',
+    'alice.diagnostic',
+    'phrase temporaire diagnostic'
+  );
+  const premiere = envDiagnostic.contexte.connecterFormateur(
+    'alice.diagnostic',
+    'phrase temporaire diagnostic'
+  );
+  envDiagnostic.contexte.terminerPremiereConnexionFormateur(
+    premiere.jetonChangementMotDePasse,
+    'phrase définitive diagnostic',
+    'phrase définitive diagnostic'
+  );
+
+  const sansDiagnostic = envDiagnostic.contexte.connecterFormateur(
+    'alice.diagnostic',
+    'phrase définitive diagnostic'
+  );
+  assert.strictEqual(sansDiagnostic.diagnosticConnexion, undefined);
+
+  const optionInactive = envDiagnostic.contexte.connecterFormateur(
+    'alice.diagnostic',
+    'phrase définitive diagnostic',
+    {
+      actif: false,
+      modeClientExplicite: true,
+      jetonAdministrateur: 'JETON_ADMIN_TEST'
+    }
+  );
+  assert.strictEqual(optionInactive.diagnosticConnexion, undefined);
+
+  const fauxJetonAdmin = envDiagnostic.contexte.connecterFormateur(
+    'alice.diagnostic',
+    'phrase définitive diagnostic',
+    {
+      actif: true,
+      jetonAdministrateur: 'JETON_ADMIN_INVALIDE'
+    }
+  );
+  assert.strictEqual(fauxJetonAdmin.diagnosticConnexion, undefined);
+});
+
+
+test('le diagnostic admin retourne une chronologie serveur cohérente sans secret', () => {
+  const envDiagnostic = creerEnvironnement();
+  creerCompte(
+    envDiagnostic,
+    'F1',
+    'alice.metriques',
+    'phrase temporaire métriques'
+  );
+  const premiere = envDiagnostic.contexte.connecterFormateur(
+    'alice.metriques',
+    'phrase temporaire métriques'
+  );
+  envDiagnostic.contexte.terminerPremiereConnexionFormateur(
+    premiere.jetonChangementMotDePasse,
+    'phrase définitive métriques',
+    'phrase définitive métriques'
+  );
+
+  const resultat = envDiagnostic.contexte.connecterFormateur(
+    'alice.metriques',
+    'phrase définitive métriques',
+    {
+      actif: true,
+      jetonAdministrateur: 'JETON_ADMIN_TEST'
+    }
+  );
+  const metriques = resultat.diagnosticConnexion.serveur;
+  [
+    'normalisationIdentifiantMs',
+    'rechercheCompteUtilisateurMs',
+    'controleBlocageMs',
+    'lectureSelHashMs',
+    'derivationPbkdf2PepperMs',
+    'comparaisonVerificateurMs',
+    'miseAJourConnexionMs',
+    'creationSessionMs',
+    'ecritureScriptPropertiesMs',
+    'constructionContexteUtilisateurMs',
+    'totalServeurMs'
+  ].forEach(cle => {
+    assert(Number.isFinite(metriques[cle]), cle + ' doit être numérique');
+    assert(metriques[cle] >= 0, cle + ' doit être positive');
+    assert(
+      metriques.totalServeurMs >= metriques[cle],
+      'le total serveur doit couvrir ' + cle
+    );
+  });
+  assert(metriques.derivationPbkdf2PepperMs >= 0);
+
+  const diagnosticJson = JSON.stringify(resultat.diagnosticConnexion);
+  const compte = ligneCompte(envDiagnostic, 'F1');
+  [
+    'phrase définitive métriques',
+    compte.ligne[compte.index.PASSWORD_HASH],
+    compte.ligne[compte.index.PASSWORD_SALT],
+    envDiagnostic.proprietes.FORMATEUR_PASSWORD_PEPPER,
+    resultat.jeton,
+    'alice.metriques'
+  ].forEach(secret => {
+    assert(!diagnosticJson.includes(String(secret)));
+  });
+});
+
+
+test('le mode client explicitement activé obtient uniquement les durées', () => {
+  const envDiagnostic = creerEnvironnement();
+  creerCompte(
+    envDiagnostic,
+    'F1',
+    'alice.mode-client',
+    'phrase temporaire mode client'
+  );
+  const premiere = envDiagnostic.contexte.connecterFormateur(
+    'alice.mode-client',
+    'phrase temporaire mode client'
+  );
+  envDiagnostic.contexte.terminerPremiereConnexionFormateur(
+    premiere.jetonChangementMotDePasse,
+    'phrase définitive mode client',
+    'phrase définitive mode client'
+  );
+  const resultat = envDiagnostic.contexte.connecterFormateur(
+    'alice.mode-client',
+    'phrase définitive mode client',
+    { actif: true, modeClientExplicite: true }
+  );
+  assert(resultat.diagnosticConnexion);
+  assert.deepStrictEqual(
+    Object.keys(resultat.diagnosticConnexion),
+    ['serveur']
+  );
 });
 
 
@@ -1493,8 +1724,13 @@ test('le benchmark accepte les deux modes administrateur et refuse le jeton form
       administrationDirecte.jeton
     );
   assert.deepStrictEqual(
-    Object.keys(resultatDirect).sort(),
+    Object.keys(resultatDirect.durees).sort(),
     ['1000', '1500', '2000', '500']
+  );
+  assert.strictEqual(resultatDirect.iterationsConfiguration, 1000);
+  assert.strictEqual(
+    resultatDirect.algorithme,
+    'PBKDF2-HMAC-SHA-256'
   );
   assert(!JSON.stringify(resultatDirect).includes(
     envDirect.proprietes.FORMATEUR_PASSWORD_PEPPER
@@ -1525,10 +1761,10 @@ test('le benchmark accepte les deux modes administrateur et refuse le jeton form
     elevation.sessionUtilisateur.modeAccesAdministration,
     'ELEVATION_FORMATEUR'
   );
-  assert.strictEqual(typeof resultatEleve['500'], 'number');
-  assert.strictEqual(typeof resultatEleve['1000'], 'number');
-  assert.strictEqual(typeof resultatEleve['1500'], 'number');
-  assert.strictEqual(typeof resultatEleve['2000'], 'number');
+  assert.strictEqual(typeof resultatEleve.durees['500'], 'number');
+  assert.strictEqual(typeof resultatEleve.durees['1000'], 'number');
+  assert.strictEqual(typeof resultatEleve.durees['1500'], 'number');
+  assert.strictEqual(typeof resultatEleve.durees['2000'], 'number');
 });
 
 
@@ -1748,9 +1984,9 @@ test('le bouton afficher/masquer modifie réellement le type du champ', () => {
 });
 
 
-test('la dérivation réelle est PBKDF2-HMAC-SHA-256 à 20 000 itérations', () => {
+test('la dérivation réelle est PBKDF2-HMAC-SHA-256 à 1 000 itérations', () => {
   assert(sourceProduction.includes(
-    'const ITERATIONS_PBKDF2_FORMATEUR_ = 20000;'
+    'const ITERATIONS_PBKDF2_FORMATEUR_ = 1000;'
   ));
   assert(sourceProduction.includes('Utilities.computeHmacSha256Signature'));
   assert(sourceProduction.includes("'PF2'"));
