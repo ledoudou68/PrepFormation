@@ -93,6 +93,18 @@ function creerEnvironnementServeur() {
   };
   let ouvertures = 0;
 
+  function lireInstantaneSynchronisation(nom) {
+    const donnees = classeur
+      .getSheetByName(nom)
+      .getDataRange()
+      .getValues();
+    const index = {};
+    donnees[0].forEach(function (entete, position) {
+      index[String(entete)] = position;
+    });
+    return { index: index, lignes: donnees.slice(1) };
+  }
+
   const contexte = vm.createContext({
     SpreadsheetApp: {
       getActiveSpreadsheet() {
@@ -165,20 +177,31 @@ function creerEnvironnementServeur() {
         }];
       }
     },
-    synchroniserStatutsStagiaires_(diagnostic) {
-      if (!diagnostic) return { migres: 0, automatiquesMisAJour: 0 };
-      diagnostic.ouvertureSpreadsheetMs = 2;
-      diagnostic.getDataRangeMs = 3;
-      diagnostic.getValuesMs = 4;
-      diagnostic.recherchesMs = 5;
-      diagnostic.transformationsMs = 6;
-      diagnostic.totalServeurMs = 20;
-      diagnostic.lecturesFeuilles.push(
-        { feuille: 'STAGIAIRES', totalLectureMs: 7 },
-        { feuille: 'SESSIONS', totalLectureMs: 5 },
-        { feuille: 'PRESENCES_STAGIAIRES', totalLectureMs: 4 }
-      );
-      return { migres: 0, automatiquesMisAJour: 0 };
+    synchroniserStatutsStagiairesPourAccueil_(diagnostic) {
+      const instantanesAccueil = {
+        STAGIAIRES: lireInstantaneSynchronisation('STAGIAIRES'),
+        SESSIONS: lireInstantaneSynchronisation('SESSIONS'),
+        PRESENCES_STAGIAIRES:
+          lireInstantaneSynchronisation('PRESENCES_STAGIAIRES')
+      };
+      if (diagnostic) {
+        diagnostic.ouvertureSpreadsheetMs = 2;
+        diagnostic.getDataRangeMs = 3;
+        diagnostic.getValuesMs = 4;
+        diagnostic.recherchesMs = 5;
+        diagnostic.transformationsMs = 6;
+        diagnostic.totalServeurMs = 20;
+        diagnostic.lecturesFeuilles.push(
+          { feuille: 'STAGIAIRES', totalLectureMs: 7 },
+          { feuille: 'SESSIONS', totalLectureMs: 5 },
+          { feuille: 'PRESENCES_STAGIAIRES', totalLectureMs: 4 }
+        );
+      }
+      return {
+        migres: 0,
+        automatiquesMisAJour: 0,
+        instantanesAccueil: instantanesAccueil
+      };
     },
     obtenirDateSansHeure_(valeur) {
       const date = new Date(valeur);
@@ -256,7 +279,7 @@ function assertLectureUniqueAccueil(lectures) {
   );
   assert.strictEqual(
     diagnostic.diagnosticAccueil.lecturesFeuilles.length,
-    8
+    5
   );
   assert.deepStrictEqual(
     Array.from(
@@ -264,9 +287,6 @@ function assertLectureUniqueAccueil(lectures) {
       lecture => lecture.feuille
     ),
     [
-      'STAGIAIRES',
-      'SESSIONS',
-      'PRESENCES_STAGIAIRES',
       'PRESTATIONS_FORMATEURS',
       'FORMATEURS',
       'CATEGORIES',
@@ -277,6 +297,21 @@ function assertLectureUniqueAccueil(lectures) {
   assert.strictEqual(
     diagnostic.diagnosticAccueil.appelsAutresServices[1].operation,
     'SYNCHRONISATION_STATUTS_STAGIAIRES'
+  );
+  assert.deepStrictEqual(
+    Array.from(
+      diagnostic.diagnosticAccueil.mutualisationLectures,
+      lecture => [lecture.feuille, lecture.mode]
+    ),
+    [
+      ['STAGIAIRES', 'REUTILISEE'],
+      ['SESSIONS', 'REUTILISEE'],
+      ['PRESENCES_STAGIAIRES', 'REUTILISEE']
+    ]
+  );
+  assert.strictEqual(
+    diagnostic.diagnosticAccueil.nombreLecturesSheetsEvitees,
+    3
   );
   [
     'ouvertureSpreadsheetMs',
@@ -379,6 +414,8 @@ assert(sourceClient.includes("'Temps serveur cumulé'"));
 assert(sourceClient.includes("'Temps google.script.run cumulé'"));
 assert(sourceClient.includes("'Traitements client'"));
 assert(sourceClient.includes("'Total chargement accueil'"));
+assert(sourceClient.includes('Mutualisation des lectures'));
+assert(sourceClient.includes('nombreLecturesSheetsEvitees'));
 
 [
   'motDePasse',

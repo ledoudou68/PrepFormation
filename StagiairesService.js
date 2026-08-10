@@ -167,8 +167,17 @@ function lireStagiairesSansSynchronisation_() {
  * automatiquement. La feuille est modifiée uniquement lorsque
  * le statut calculé change ou que la date initiale manque.
  */
-function synchroniserStatutsStagiaires_(diagnostic) {
+function synchroniserStatutsStagiairesPourAccueil_(diagnostic) {
+  return synchroniserStatutsStagiaires_(diagnostic, true);
+}
+
+
+function synchroniserStatutsStagiaires_(
+  diagnostic,
+  inclureInstantanesAccueil
+) {
   const debutTotalDiagnostic = diagnostic ? Date.now() : 0;
+  const instantanesAccueil = inclureInstantanesAccueil ? {} : null;
   if (restaurationBloqueEcritures_()) {
     if (diagnostic) {
       diagnostic.totalServeurMs = Date.now() - debutTotalDiagnostic;
@@ -205,6 +214,14 @@ function synchroniserStatutsStagiaires_(diagnostic) {
     }
 
     if (donnees.length <= 1) {
+      if (instantanesAccueil) {
+        instantanesAccueil.STAGIAIRES = {
+          index: donnees.length
+            ? creerIndexEntetes_(donnees[0])
+            : {},
+          lignes: []
+        };
+      }
       return {
         migres: 0,
         automatiquesMisAJour: 0
@@ -223,7 +240,10 @@ function synchroniserStatutsStagiaires_(diagnostic) {
       });
     }
     const nombreSessionsParStagiaire =
-      compterSessionsRealiseesParStagiaire_(diagnostic);
+      compterSessionsRealiseesParStagiaire_(
+        diagnostic,
+        instantanesAccueil
+      );
     const maintenant = new Date();
     const aujourdHui = obtenirDateSansHeure_(maintenant);
     let migres = 0;
@@ -348,6 +368,13 @@ function synchroniserStatutsStagiaires_(diagnostic) {
       }
     }
 
+    if (instantanesAccueil) {
+      instantanesAccueil.STAGIAIRES = {
+        index: index,
+        lignes: donnees.slice(1)
+      };
+    }
+
     return {
       migres: migres,
       automatiquesMisAJour: automatiquesMisAJour
@@ -356,11 +383,17 @@ function synchroniserStatutsStagiaires_(diagnostic) {
   if (diagnostic) {
     diagnostic.totalServeurMs = Date.now() - debutTotalDiagnostic;
   }
+  if (instantanesAccueil && resultat) {
+    resultat.instantanesAccueil = instantanesAccueil;
+  }
   return resultat;
 }
 
 
-function compterSessionsRealiseesParStagiaire_(diagnostic) {
+function compterSessionsRealiseesParStagiaire_(
+  diagnostic,
+  instantanesAccueil
+) {
   const debutOuverture = diagnostic ? Date.now() : 0;
   const classeur = SpreadsheetApp.getActiveSpreadsheet();
   if (diagnostic) {
@@ -376,6 +409,10 @@ function compterSessionsRealiseesParStagiaire_(diagnostic) {
     'PRESENCES_STAGIAIRES',
     diagnostic
   );
+  if (instantanesAccueil) {
+    instantanesAccueil.SESSIONS = tableSessions;
+    instantanesAccueil.PRESENCES_STAGIAIRES = tablePresences;
+  }
   const datesSessions = {};
   const aujourdHui = obtenirDateSansHeure_(new Date());
   let debutEtape = diagnostic ? Date.now() : 0;

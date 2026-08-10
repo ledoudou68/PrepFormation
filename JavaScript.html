@@ -501,6 +501,7 @@ function normaliserDiagnosticServeurAccueil_(diagnosticServeur) {
     'journalisationMs',
     'constructionHtmlMs',
     'constructionReponseMs',
+    'nombreLecturesSheetsEvitees',
     'totalServeurMs'
   ].forEach(function (cle) {
     const valeur = Number(source[cle]);
@@ -512,6 +513,19 @@ function normaliserDiagnosticServeurAccueil_(diagnosticServeur) {
   resultat.lecturesFeuilles = (source.lecturesFeuilles || [])
     .map(normaliserLectureFeuilleDiagnosticAccueil_)
     .filter(Boolean);
+  resultat.mutualisationLectures = (
+    source.mutualisationLectures || []
+  ).map(function (lecture) {
+    const feuille = String(lecture && lecture.feuille || '').trim();
+    const mode = String(lecture && lecture.mode || '').trim();
+    if (
+      !/^[A-Z0-9_]{1,80}$/.test(feuille) ||
+      !['REUTILISEE', 'RELUE'].includes(mode)
+    ) {
+      return null;
+    }
+    return { feuille: feuille, mode: mode };
+  }).filter(Boolean);
   resultat.lecturesIndirectes = (source.lecturesIndirectes || [])
     .map(function (nomFeuille) {
       return String(nomFeuille || '').trim();
@@ -13958,6 +13972,27 @@ function creerOperationDiagnosticAccueilAdministration_(operation) {
           lecture.totalLectureMs
         );
       }).join('')}
+    `);
+  }
+  if ((serveur.mutualisationLectures || []).length) {
+    details.push(`
+      <h5>Mutualisation des lectures</h5>
+      ${(serveur.mutualisationLectures || []).map(function (lecture) {
+        return `
+          <div>
+            <span>${echapperHtml(lecture.feuille)}</span>
+            <strong>${lecture.mode === 'REUTILISEE'
+              ? 'Réutilisée'
+              : 'Relue'}</strong>
+          </div>
+        `;
+      }).join('')}
+      <div>
+        <span>Lectures Sheets évitées</span>
+        <strong>${Number(
+          serveur.nombreLecturesSheetsEvitees || 0
+        )}</strong>
+      </div>
     `);
   }
   services.forEach(function (service) {

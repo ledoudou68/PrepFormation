@@ -35,7 +35,12 @@ function getDonneesTableauBordAccueil(
     ? creerDiagnosticServiceAccueil_('SYNCHRONISATION_STATUTS_STAGIAIRES')
     : null;
   const debutSynchronisation = diagnostic ? Date.now() : 0;
-  synchroniserStatutsStagiaires_(diagnosticSynchronisation);
+  const resultatSynchronisation =
+    synchroniserStatutsStagiairesPourAccueil_(
+      diagnosticSynchronisation
+    );
+  const instantanesAccueil = resultatSynchronisation &&
+    resultatSynchronisation.instantanesAccueil || {};
   if (diagnostic) {
     diagnostic.synchronisationStatutsMs =
       Date.now() - debutSynchronisation;
@@ -62,11 +67,30 @@ function getDonneesTableauBordAccueil(
     'REFERENTIEL',
     'EVALUATIONS'
   ].forEach(function (nomFeuille) {
-    tables[nomFeuille] = lireTableAccueil_(
-      classeur,
-      nomFeuille,
-      diagnostic
-    );
+    const instantane = instantanesAccueil[nomFeuille];
+    const reutilisable = estInstantaneTableAccueil_(instantane);
+
+    if (reutilisable) {
+      tables[nomFeuille] = instantane;
+    } else {
+      tables[nomFeuille] = lireTableAccueil_(
+        classeur,
+        nomFeuille,
+        diagnostic
+      );
+    }
+
+    if ([
+      'STAGIAIRES',
+      'SESSIONS',
+      'PRESENCES_STAGIAIRES'
+    ].includes(nomFeuille)) {
+      enregistrerMutualisationLectureAccueil_(
+        diagnostic,
+        nomFeuille,
+        reutilisable
+      );
+    }
   });
 
   const aujourdHui = new Date();
@@ -754,10 +778,38 @@ function creerDiagnosticServeurChargementAccueil_(operation) {
     transformationsMs: 0,
     constructionReponseMs: 0,
     totalServeurMs: 0,
+    nombreLecturesSheetsEvitees: 0,
+    mutualisationLectures: [],
     lecturesFeuilles: [],
     appelsAutresServices: [],
     etapesTraitement: []
   };
+}
+
+
+function estInstantaneTableAccueil_(instantane) {
+  return Boolean(
+    instantane &&
+    instantane.index &&
+    typeof instantane.index === 'object' &&
+    Array.isArray(instantane.lignes)
+  );
+}
+
+
+function enregistrerMutualisationLectureAccueil_(
+  diagnostic,
+  nomFeuille,
+  reutilisee
+) {
+  if (!diagnostic) return;
+  diagnostic.mutualisationLectures.push({
+    feuille: String(nomFeuille || ''),
+    mode: reutilisee ? 'REUTILISEE' : 'RELUE'
+  });
+  if (reutilisee) {
+    diagnostic.nombreLecturesSheetsEvitees++;
+  }
 }
 
 
