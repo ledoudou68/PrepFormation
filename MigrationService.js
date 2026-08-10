@@ -324,6 +324,16 @@ function executerMigrationsInterne_(automatique, session) {
       migrationsExecutees.length ||
       changementsStructure.length
     ) {
+      if (typeof invaliderGenerationSourcesStatuts_ === 'function') {
+        invaliderGenerationSourcesStatuts_(
+          [
+            'STAGIAIRES',
+            'SESSIONS',
+            'PRESENCES_STAGIAIRES'
+          ],
+          'MIGRATION'
+        );
+      }
       journaliserActionSensible_(
         'MIGRATIONS_EXECUTION',
         'SCHEMA_BASE',

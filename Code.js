@@ -179,6 +179,16 @@ function initialiserApplicationInterne_(sessionUtilisateur) {
   appliquerFormats_(classeur);
 
   SpreadsheetApp.flush();
+  if (typeof invaliderGenerationSourcesStatuts_ === 'function') {
+    invaliderGenerationSourcesStatuts_(
+      [
+        'STAGIAIRES',
+        'SESSIONS',
+        'PRESENCES_STAGIAIRES'
+      ],
+      'INITIALISATION_APPLICATION'
+    );
+  }
 
   journaliserActionSensible_(
     'APPLICATION_INITIALISATION',

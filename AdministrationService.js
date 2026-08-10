@@ -328,6 +328,17 @@ function enregistrerFormationAdministrationInterne_(
 
     SpreadsheetApp.flush();
 
+    if (
+      formationExistante &&
+      formationExistante.libelle !== libelle &&
+      typeof invaliderGenerationSourcesStatuts_ === 'function'
+    ) {
+      invaliderGenerationSourcesStatuts_(
+        ['STAGIAIRES', 'SESSIONS'],
+        'RENOMMAGE_FORMATION_UTILISEE'
+      );
+    }
+
     journaliserActionSensible_(
       formationExistante
         ? 'FORMATION_MODIFICATION'

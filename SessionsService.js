@@ -1335,6 +1335,16 @@ function enregistrerSessionInterne_(donnees, sessionUtilisateur) {
 
     SpreadsheetApp.flush();
 
+    if (typeof invaliderGenerationSourcesStatuts_ === 'function') {
+      invaliderGenerationSourcesStatuts_(
+        ['SESSIONS', 'PRESENCES_STAGIAIRES'],
+        idSessionEdition
+          ? 'MODIFICATION_SESSION'
+          : idSessionSource
+            ? 'DUPLICATION_SESSION'
+            : 'CREATION_SESSION'
+      );
+    }
     synchroniserStatutsStagiaires_();
 
     journaliserActionSensible_(
@@ -1372,6 +1382,12 @@ function enregistrerSessionInterne_(donnees, sessionUtilisateur) {
   } catch (erreur) {
     if (transaction) {
       annulerTransactionSession_(transaction);
+      if (typeof invaliderGenerationSourcesStatuts_ === 'function') {
+        invaliderGenerationSourcesStatuts_(
+          ['SESSIONS', 'PRESENCES_STAGIAIRES'],
+          'ROLLBACK_SESSION'
+        );
+      }
     }
 
     throw erreur;

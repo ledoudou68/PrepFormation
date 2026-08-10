@@ -499,9 +499,11 @@ function normaliserDiagnosticServeurAccueil_(diagnosticServeur) {
     'transformationsMs',
     'ecrituresMs',
     'journalisationMs',
+    'dureeSynchronisationReelleMs',
     'constructionHtmlMs',
     'constructionReponseMs',
     'nombreLecturesSheetsEvitees',
+    'feuillesLuesUneSeuleFois',
     'totalServeurMs'
   ].forEach(function (cle) {
     const valeur = Number(source[cle]);
@@ -520,12 +522,47 @@ function normaliserDiagnosticServeurAccueil_(diagnosticServeur) {
     const mode = String(lecture && lecture.mode || '').trim();
     if (
       !/^[A-Z0-9_]{1,80}$/.test(feuille) ||
-      !['REUTILISEE', 'RELUE'].includes(mode)
+      ![
+        'REUTILISEE',
+        'PREMIERE_LECTURE',
+        'RELUE'
+      ].includes(mode)
     ) {
       return null;
     }
     return { feuille: feuille, mode: mode };
   }).filter(Boolean);
+  const statutSynchronisation = String(
+    source.statutSynchronisation || ''
+  );
+  if (['EXECUTEE', 'SAUTEE'].includes(statutSynchronisation)) {
+    resultat.statutSynchronisation = statutSynchronisation;
+  }
+  const motifSynchronisation = String(
+    source.motifSynchronisation || ''
+  );
+  if ([
+    'JOUR_CHANGE',
+    'GENERATION_CHANGE',
+    'MARQUEUR_ABSENT',
+    'ECHEC_PRECEDENT',
+    'RESTAURATION',
+    'FRAICHE'
+  ].includes(motifSynchronisation)) {
+    resultat.motifSynchronisation = motifSynchronisation;
+  }
+  ['generationCourante', 'generationSynchronisee'].forEach(function (cle) {
+    const valeur = String(source[cle] || '');
+    if (/^[A-Z0-9_-]{0,80}$/.test(valeur)) {
+      resultat[cle] = valeur;
+    }
+  });
+  ['jourCourant', 'jourSynchronise'].forEach(function (cle) {
+    const valeur = String(source[cle] || '');
+    if (!valeur || /^\d{4}-\d{2}-\d{2}$/.test(valeur)) {
+      resultat[cle] = valeur;
+    }
+  });
   resultat.lecturesIndirectes = (source.lecturesIndirectes || [])
     .map(function (nomFeuille) {
       return String(nomFeuille || '').trim();
@@ -13983,7 +14020,9 @@ function creerOperationDiagnosticAccueilAdministration_(operation) {
             <span>${echapperHtml(lecture.feuille)}</span>
             <strong>${lecture.mode === 'REUTILISEE'
               ? 'Réutilisée'
-              : 'Relue'}</strong>
+              : lecture.mode === 'PREMIERE_LECTURE'
+                ? 'Première lecture'
+                : 'Relue'}</strong>
           </div>
         `;
       }).join('')}
@@ -13991,6 +14030,12 @@ function creerOperationDiagnosticAccueilAdministration_(operation) {
         <span>Lectures Sheets évitées</span>
         <strong>${Number(
           serveur.nombreLecturesSheetsEvitees || 0
+        )}</strong>
+      </div>
+      <div>
+        <span>Feuilles lues une seule fois</span>
+        <strong>${Number(
+          serveur.feuillesLuesUneSeuleFois || 0
         )}</strong>
       </div>
     `);
@@ -14055,6 +14100,34 @@ function creerOperationDiagnosticAccueilAdministration_(operation) {
 function creerBlocServiceDiagnosticAccueil_(service, profondeur) {
   const niveau = Math.max(0, Math.min(3, Number(profondeur || 0)));
   const mesures = creerMesuresServeurDiagnosticAccueil_(service);
+  const detailsFraicheur = service.statutSynchronisation ? `
+    <div>
+      <span>Synchronisation statuts</span>
+      <strong>${echapperHtml(
+        service.statutSynchronisation === 'SAUTEE'
+          ? 'Sautée'
+          : 'Exécutée'
+      )}</strong>
+    </div>
+    <div>
+      <span>Motif</span>
+      <strong>${echapperHtml(service.motifSynchronisation || '')}</strong>
+    </div>
+    <div>
+      <span>Génération courante / synchronisée</span>
+      <strong>${echapperHtml(
+        String(service.generationCourante || '') + ' / ' +
+        String(service.generationSynchronisee || '')
+      )}</strong>
+    </div>
+    <div>
+      <span>Jour courant / synchronisé</span>
+      <strong>${echapperHtml(
+        String(service.jourCourant || '') + ' / ' +
+        String(service.jourSynchronise || '')
+      )}</strong>
+    </div>
+  ` : '';
   return `
     <h5>${'↳ '.repeat(niveau)}Service · ${echapperHtml(
       service.operation || 'Service interne'
@@ -14063,6 +14136,7 @@ function creerBlocServiceDiagnosticAccueil_(service, profondeur) {
       'Durée totale',
       service.totalServeurMs
     )}
+    ${detailsFraicheur}
     ${mesures}
     ${(service.lecturesFeuilles || []).map(function (lecture) {
       return creerLigneDiagnosticAccueil_(
@@ -14109,6 +14183,7 @@ function creerMesuresServeurDiagnosticAccueil_(serveur) {
     transformationsMs: 'Transformations',
     ecrituresMs: 'Écritures existantes de synchronisation',
     journalisationMs: 'Journalisation existante',
+    dureeSynchronisationReelleMs: 'Durée synchronisation réelle',
     constructionHtmlMs: 'Construction du HTML',
     constructionReponseMs: 'Construction de la réponse'
   };

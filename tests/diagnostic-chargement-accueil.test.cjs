@@ -313,6 +313,10 @@ function assertLectureUniqueAccueil(lectures) {
     diagnostic.diagnosticAccueil.nombreLecturesSheetsEvitees,
     3
   );
+  assert.strictEqual(
+    diagnostic.diagnosticAccueil.feuillesLuesUneSeuleFois,
+    3
+  );
   [
     'ouvertureSpreadsheetMs',
     'recherchesMs',
@@ -416,6 +420,8 @@ assert(sourceClient.includes("'Traitements client'"));
 assert(sourceClient.includes("'Total chargement accueil'"));
 assert(sourceClient.includes('Mutualisation des lectures'));
 assert(sourceClient.includes('nombreLecturesSheetsEvitees'));
+assert(sourceClient.includes('feuillesLuesUneSeuleFois'));
+assert(sourceClient.includes("'PREMIERE_LECTURE'"));
 
 [
   'motDePasse',

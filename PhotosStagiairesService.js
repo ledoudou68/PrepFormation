@@ -131,6 +131,12 @@ function enregistrerPhotoStagiaireInterne_(donnees, session) {
       ).setNumberFormat('dd/MM/yyyy HH:mm');
       SpreadsheetApp.flush();
       ecritureFeuilleConfirmee = true;
+      if (typeof invaliderGenerationSourcesStatuts_ === 'function') {
+        invaliderGenerationSourcesStatuts_(
+          'STAGIAIRES',
+          'MODIFICATION_PHOTO_STAGIAIRE'
+        );
+      }
     } catch (erreurFeuille) {
       try {
         reference.feuille.getRange(
@@ -260,6 +266,13 @@ function supprimerPhotoStagiaire(donnees, jetonAdministrateur) {
       SpreadsheetApp.flush();
       throw new Error(
         'La photo n’a pas pu être placée dans la corbeille ; sa référence a été restaurée.'
+      );
+    }
+
+    if (typeof invaliderGenerationSourcesStatuts_ === 'function') {
+      invaliderGenerationSourcesStatuts_(
+        'STAGIAIRES',
+        'SUPPRESSION_PHOTO_STAGIAIRE'
       );
     }
 

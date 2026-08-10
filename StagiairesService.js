@@ -168,6 +168,12 @@ function lireStagiairesSansSynchronisation_() {
  * le statut calculé change ou que la date initiale manque.
  */
 function synchroniserStatutsStagiairesPourAccueil_(diagnostic) {
+  if (
+    typeof synchroniserStatutsStagiairesAccueilSiNecessaire_ ===
+    'function'
+  ) {
+    return synchroniserStatutsStagiairesAccueilSiNecessaire_(diagnostic);
+  }
   return synchroniserStatutsStagiaires_(diagnostic, true);
 }
 
@@ -1706,6 +1712,14 @@ function enregistrerStagiaireInterne_(donnees, sessionUtilisateur) {
     numeroLigne
   );
 
+  if (typeof invaliderGenerationSourcesStatuts_ === 'function') {
+    invaliderGenerationSourcesStatuts_(
+      'STAGIAIRES',
+      donnees.uuid
+        ? 'MODIFICATION_STAGIAIRE'
+        : 'CREATION_STAGIAIRE'
+    );
+  }
   synchroniserStatutsStagiaires_();
 
   journaliserActionSensible_(
@@ -1823,6 +1837,12 @@ function cloturerPreparationStagiaireInterne_(
       .setValue(commentaire);
 
     SpreadsheetApp.flush();
+    if (typeof invaliderGenerationSourcesStatuts_ === 'function') {
+      invaliderGenerationSourcesStatuts_(
+        'STAGIAIRES',
+        'CLOTURE_STAGIAIRE'
+      );
+    }
 
     journaliserActionSensible_(
       resultat === 'Clôturé'
@@ -1935,6 +1955,12 @@ function reactiverPreparationStagiaireInterne_(
       .setNumberFormat('dd/mm/yyyy hh:mm');
 
     SpreadsheetApp.flush();
+    if (typeof invaliderGenerationSourcesStatuts_ === 'function') {
+      invaliderGenerationSourcesStatuts_(
+        'STAGIAIRES',
+        'REACTIVATION_STAGIAIRE'
+      );
+    }
     synchroniserStatutsStagiaires_();
 
     const statutRecalcule = String(

@@ -1890,6 +1890,16 @@ function finaliserRollbackRestauration_(etat, proprietes) {
   etat.modeRecuperation = '';
   etat.dateFin = new Date().toISOString();
   etat.dureeMs = Date.now() - new Date(etat.dateDebut).getTime();
+  if (typeof invaliderGenerationSourcesStatuts_ === 'function') {
+    invaliderGenerationSourcesStatuts_(
+      [
+        'STAGIAIRES',
+        'SESSIONS',
+        'PRESENCES_STAGIAIRES'
+      ],
+      'ROLLBACK_RESTAURATION'
+    );
+  }
   proprietes.setProperty(
     PROPRIETE_DERNIERE_RESTAURATION_,
     JSON.stringify(construireEtatArchiveRestauration_(etat))
@@ -1904,7 +1914,6 @@ function finaliserRollbackRestauration_(etat, proprietes) {
   if (typeof invaliderCacheCalendrier_ === 'function') {
     invaliderCacheCalendrier_();
   }
-
   return {
     complet: true,
     nombreErreurs: 0,
@@ -2177,6 +2186,16 @@ function finaliserOperationRestauration_(
     };
   }
 
+  if (typeof invaliderGenerationSourcesStatuts_ === 'function') {
+    invaliderGenerationSourcesStatuts_(
+      [
+        'STAGIAIRES',
+        'SESSIONS',
+        'PRESENCES_STAGIAIRES'
+      ],
+      'RESTAURATION'
+    );
+  }
   proprietes.setProperty(
     PROPRIETE_DERNIERE_RESTAURATION_,
     JSON.stringify(construireEtatArchiveRestauration_(etat))
@@ -2189,7 +2208,6 @@ function finaliserOperationRestauration_(
   if (typeof invaliderCacheCalendrier_ === 'function') {
     invaliderCacheCalendrier_();
   }
-
   return {
     succes: true,
     backupId: etat.backupIdCible,

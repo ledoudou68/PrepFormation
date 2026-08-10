@@ -88,7 +88,11 @@ function getDonneesTableauBordAccueil(
       enregistrerMutualisationLectureAccueil_(
         diagnostic,
         nomFeuille,
-        reutilisable
+        reutilisable,
+        feuilleLuePendantSynchronisationAccueil_(
+          diagnosticSynchronisation,
+          nomFeuille
+        )
       );
     }
   });
@@ -779,6 +783,7 @@ function creerDiagnosticServeurChargementAccueil_(operation) {
     constructionReponseMs: 0,
     totalServeurMs: 0,
     nombreLecturesSheetsEvitees: 0,
+    feuillesLuesUneSeuleFois: 0,
     mutualisationLectures: [],
     lecturesFeuilles: [],
     appelsAutresServices: [],
@@ -800,16 +805,39 @@ function estInstantaneTableAccueil_(instantane) {
 function enregistrerMutualisationLectureAccueil_(
   diagnostic,
   nomFeuille,
-  reutilisee
+  reutilisee,
+  dejaLuePendantSynchronisation
 ) {
   if (!diagnostic) return;
+  const mode = reutilisee
+    ? 'REUTILISEE'
+    : dejaLuePendantSynchronisation
+      ? 'RELUE'
+      : 'PREMIERE_LECTURE';
   diagnostic.mutualisationLectures.push({
     feuille: String(nomFeuille || ''),
-    mode: reutilisee ? 'REUTILISEE' : 'RELUE'
+    mode: mode
   });
   if (reutilisee) {
     diagnostic.nombreLecturesSheetsEvitees++;
   }
+  if (mode !== 'RELUE') {
+    diagnostic.feuillesLuesUneSeuleFois++;
+  }
+}
+
+
+function feuilleLuePendantSynchronisationAccueil_(
+  diagnosticSynchronisation,
+  nomFeuille
+) {
+  if (!diagnosticSynchronisation) return false;
+  return (diagnosticSynchronisation.lecturesFeuilles || []).some(
+    function (lecture) {
+      return String(lecture && lecture.feuille || '') ===
+        String(nomFeuille || '');
+    }
+  );
 }
 
 
@@ -827,6 +855,7 @@ function creerDiagnosticServiceAccueil_(operation) {
     transformationsMs: 0,
     ecrituresMs: 0,
     journalisationMs: 0,
+    dureeSynchronisationReelleMs: 0,
     totalServeurMs: 0,
     lecturesFeuilles: [],
     etapesTraitement: []

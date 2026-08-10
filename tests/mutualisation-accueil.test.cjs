@@ -14,6 +14,10 @@ const sourceAccueil = fs.readFileSync(
   path.join(racine, 'AccueilService.js'),
   'utf8'
 );
+const sourceAccueilCache = fs.readFileSync(
+  path.join(racine, 'AccueilCacheService.js'),
+  'utf8'
+);
 
 
 function clonerValeur(valeur) {
@@ -155,10 +159,28 @@ function creerDonnees() {
 function creerEnvironnement(options) {
   const parametres = options || {};
   const donnees = creerDonnees();
+  if (parametres.stagiairesEntetesSeulement) {
+    donnees.STAGIAIRES = [donnees.STAGIAIRES[0]];
+  }
+  if (parametres.unStagiaire) {
+    donnees.STAGIAIRES = [
+      donnees.STAGIAIRES[0],
+      donnees.STAGIAIRES[1]
+    ];
+  }
+  if (parametres.ligneStagiaireSansUuid) {
+    const ligneSansUuid = donnees.STAGIAIRES[1].slice();
+    ligneSansUuid[0] = '';
+    donnees.STAGIAIRES = [donnees.STAGIAIRES[0], ligneSansUuid];
+  }
   const compteurs = {};
   const feuilles = {};
   const journaux = [];
+  const proprietes = {};
+  let sequenceUuid = 0;
   let flushs = 0;
+  let verrouDocument = false;
+  let verrouScript = false;
 
   Object.keys(donnees).forEach(function (nom) {
     compteurs[nom] = {
@@ -189,6 +211,10 @@ function creerEnvironnement(options) {
       getScriptTimeZone() { return 'Europe/Paris'; }
     },
     Utilities: {
+      getUuid() {
+        sequenceUuid++;
+        return 'uuid_test_' + sequenceUuid;
+      },
       formatDate(date, fuseau, format) {
         const valeur = new Date(date);
         const annee = valeur.getFullYear();
@@ -199,7 +225,49 @@ function creerEnvironnement(options) {
         return jour + '/' + mois + '/' + annee + ' 12:00';
       }
     },
-    restaurationBloqueEcritures_() { return false; },
+    PropertiesService: {
+      getScriptProperties() {
+        return {
+          getProperties() { return Object.assign({}, proprietes); },
+          getProperty(cle) { return proprietes[cle] || null; },
+          setProperty(cle, valeur) {
+            proprietes[cle] = String(valeur);
+            return this;
+          },
+          setProperties(valeurs) {
+            Object.keys(valeurs).forEach(function (cle) {
+              proprietes[cle] = String(valeurs[cle]);
+            });
+            return this;
+          }
+        };
+      }
+    },
+    LockService: {
+      getDocumentLock() {
+        return {
+          hasLock() { return verrouDocument; },
+          tryLock() {
+            verrouDocument = true;
+            return true;
+          },
+          releaseLock() { verrouDocument = false; }
+        };
+      },
+      getScriptLock() {
+        return {
+          hasLock() { return verrouScript; },
+          tryLock() {
+            verrouScript = true;
+            return true;
+          },
+          releaseLock() { verrouScript = false; }
+        };
+      }
+    },
+    restaurationBloqueEcritures_() {
+      return Boolean(parametres.restaurationSuspendue);
+    },
     executerMutationMetier_(traitement) { return traitement(); },
     journaliserActionSensible_() {
       journaux.push(Array.from(arguments));
@@ -229,7 +297,13 @@ function creerEnvironnement(options) {
   vm.runInContext(sourceStagiaires, contexte, {
     filename: 'StagiairesService.js'
   });
+  vm.runInContext(sourceAccueilCache, contexte, {
+    filename: 'AccueilCacheService.js'
+  });
   contexte.obtenirFeuilleStagiaires_ = function () {
+    if (parametres.erreurSynchronisation) {
+      throw new Error('Échec de synchronisation simulé.');
+    }
     return classeur.getSheetByName('STAGIAIRES');
   };
   vm.runInContext(sourceAccueil, contexte, {
@@ -243,17 +317,12 @@ function creerEnvironnement(options) {
       return contexte.synchroniserStatutsStagiaires_(diagnostic);
     };
   }
-  if (parametres.erreurSynchronisation) {
-    contexte.synchroniserStatutsStagiairesPourAccueil_ = function () {
-      throw new Error('Échec de synchronisation simulé.');
-    };
-  }
-
   return {
     contexte,
     compteurs,
     feuilles,
     journaux,
+    proprietes,
     obtenirFlushs() { return flushs; }
   };
 }
@@ -350,6 +419,19 @@ function normaliserReponse(reponse) {
       return journal.slice(0, 4);
     }))
   );
+
+  const statuts = {};
+  mutualise.feuilles.STAGIAIRES.lireMatrice().slice(1)
+    .forEach(function (ligne) {
+      statuts[ligne[0]] = ligne[6];
+    });
+  assert.strictEqual(statuts.STG_PASSE, 'Stage passé');
+  assert.strictEqual(statuts.STG_PREPARATION, 'En préparation');
+  assert.strictEqual(statuts.STG_AUJOURD_HUI, 'Stage aujourd\'hui');
+  assert.strictEqual(statuts.STG_A_PREPARER, 'À préparer');
+  assert.strictEqual(statuts.STG_CLOTURE, 'Clôturé');
+  assert.strictEqual(statuts.STG_ABANDON, 'Abandon');
+  assert.strictEqual(statuts.STG_MIGRATION, 'Clôturé');
 }
 
 
@@ -373,6 +455,120 @@ function normaliserReponse(reponse) {
 
 {
   const environnement = creerEnvironnement({
+    stagiairesEntetesSeulement: true
+  });
+  const resultat = environnement.contexte.getDonneesTableauBordAccueil(
+    'jeton_test',
+    { actif: true, modeClientExplicite: true }
+  );
+  assert.deepStrictEqual(
+    Array.from(
+      resultat.diagnosticAccueil.mutualisationLectures,
+      function (lecture) { return lecture.mode; }
+    ),
+    ['REUTILISEE', 'PREMIERE_LECTURE', 'PREMIERE_LECTURE']
+  );
+  assert.strictEqual(
+    resultat.diagnosticAccueil.nombreLecturesSheetsEvitees,
+    1
+  );
+  assert.strictEqual(
+    resultat.diagnosticAccueil.feuillesLuesUneSeuleFois,
+    3
+  );
+  assert.strictEqual(environnement.compteurs.STAGIAIRES.getValues, 1);
+  assert.strictEqual(environnement.compteurs.SESSIONS.getValues, 1);
+  assert.strictEqual(
+    environnement.compteurs.PRESENCES_STAGIAIRES.getValues,
+    1
+  );
+}
+
+
+{
+  const environnement = creerEnvironnement({ unStagiaire: true });
+  const resultat = environnement.contexte.getDonneesTableauBordAccueil(
+    'jeton_test',
+    { actif: true, modeClientExplicite: true }
+  );
+  assert.deepStrictEqual(
+    Array.from(
+      resultat.diagnosticAccueil.mutualisationLectures,
+      function (lecture) { return lecture.mode; }
+    ),
+    ['REUTILISEE', 'REUTILISEE', 'REUTILISEE']
+  );
+  assert.strictEqual(
+    resultat.diagnosticAccueil.nombreLecturesSheetsEvitees,
+    3
+  );
+  assert.strictEqual(
+    resultat.diagnosticAccueil.feuillesLuesUneSeuleFois,
+    3
+  );
+}
+
+
+{
+  const environnement = creerEnvironnement({
+    ligneStagiaireSansUuid: true
+  });
+  const resultat = environnement.contexte.getDonneesTableauBordAccueil(
+    'jeton_test',
+    { actif: true, modeClientExplicite: true }
+  );
+  assert.deepStrictEqual(
+    Array.from(
+      resultat.diagnosticAccueil.mutualisationLectures,
+      function (lecture) { return lecture.mode; }
+    ),
+    ['REUTILISEE', 'REUTILISEE', 'REUTILISEE']
+  );
+  assert.strictEqual(
+    resultat.diagnosticAccueil.nombreLecturesSheetsEvitees,
+    3
+  );
+  assert.strictEqual(
+    resultat.diagnosticAccueil.feuillesLuesUneSeuleFois,
+    3
+  );
+}
+
+
+{
+  const environnement = creerEnvironnement({
+    restaurationSuspendue: true
+  });
+  const resultat = environnement.contexte.getDonneesTableauBordAccueil(
+    'jeton_test',
+    { actif: true, modeClientExplicite: true }
+  );
+  assert.deepStrictEqual(
+    Array.from(
+      resultat.diagnosticAccueil.mutualisationLectures,
+      function (lecture) { return lecture.mode; }
+    ),
+    ['PREMIERE_LECTURE', 'PREMIERE_LECTURE', 'PREMIERE_LECTURE']
+  );
+  assert.strictEqual(
+    resultat.diagnosticAccueil.nombreLecturesSheetsEvitees,
+    0
+  );
+  assert.strictEqual(
+    resultat.diagnosticAccueil.feuillesLuesUneSeuleFois,
+    3
+  );
+  const diagnosticSynchronisation =
+    resultat.diagnosticAccueil.appelsAutresServices[1];
+  assert.strictEqual(
+    diagnosticSynchronisation.motifSynchronisation,
+    'RESTAURATION'
+  );
+}
+
+
+{
+  const environnement = creerEnvironnement({
     erreurSynchronisation: true
   });
   assert.throws(
@@ -385,6 +581,13 @@ function normaliserReponse(reponse) {
     assert.strictEqual(environnement.compteurs[nom].getValues, 0, nom);
   });
   assert.strictEqual(environnement.journaux.length, 0);
+  const etatFraicheur = JSON.parse(
+    environnement.proprietes.PREPFORMATION_STATUTS_ACCUEIL_ETAT
+  );
+  assert.strictEqual(
+    etatFraicheur.marqueur.succesDerniereSynchronisation,
+    false
+  );
 }
 
 

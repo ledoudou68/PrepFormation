@@ -330,6 +330,16 @@ function executerReinitialisationProductionInterne_(
         restaurerInstantanesReinitialisation_(instantanes);
         SpreadsheetApp.flush();
         verifierRollbackReinitialisation_(instantanes);
+        if (typeof invaliderGenerationSourcesStatuts_ === 'function') {
+          invaliderGenerationSourcesStatuts_(
+            [
+              'STAGIAIRES',
+              'SESSIONS',
+              'PRESENCES_STAGIAIRES'
+            ],
+            'ROLLBACK_REINITIALISATION_PRODUCTION'
+          );
+        }
       } catch (erreurRollback) {
         throw new Error(
           'La réinitialisation a échoué et le rollback automatique est incomplet. La sauvegarde ' +
@@ -818,6 +828,16 @@ function resumerDiagnosticReinitialisation_(diagnostic) {
 
 
 function invaliderCachesApresReinitialisation_() {
+  if (typeof invaliderGenerationSourcesStatuts_ === 'function') {
+    invaliderGenerationSourcesStatuts_(
+      [
+        'STAGIAIRES',
+        'SESSIONS',
+        'PRESENCES_STAGIAIRES'
+      ],
+      'REINITIALISATION_PRODUCTION'
+    );
+  }
   try {
     if (typeof invaliderCacheStatistiques_ === 'function') {
       invaliderCacheStatistiques_();
