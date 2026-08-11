@@ -1,14 +1,3 @@
-function initialiserApplication(jetonAdministrateur) {
-  const sessionUtilisateur = exigerAdministrateur_(
-    jetonAdministrateur
-  );
-
-  return executerMutationMetier_(function () {
-    return initialiserApplicationInterne_(sessionUtilisateur);
-  });
-}
-
-
 function initialiserApplicationInterne_(sessionUtilisateur) {
   const classeur = SpreadsheetApp.getActiveSpreadsheet();
 

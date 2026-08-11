@@ -97,12 +97,10 @@ test('le viewport est unique, exact et ajouté par HtmlOutput', () => {
       metaTags.push({ nom, contenu });
       return this;
     },
-    setTitle() { return this; },
-    setXFrameOptionsMode() { return this; }
+    setTitle() { return this; }
   };
   const contexte = {
     HtmlService: {
-      XFrameOptionsMode: { ALLOWALL: 'ALLOWALL' },
       createTemplateFromFile: () => ({ evaluate: () => sortie }),
       createHtmlOutputFromFile: () => ({ getContent: () => '' })
     },
@@ -115,7 +113,8 @@ test('le viewport est unique, exact et ajouté par HtmlOutput', () => {
   };
   vm.createContext(contexte);
   vm.runInContext(uiService, contexte);
-  contexte.doGet();
+  const resultat = contexte.doGet();
+  assert.strictEqual(resultat, sortie);
   assert.deepStrictEqual(metaTags, [{
     nom: 'viewport',
     contenu: 'width=device-width, initial-scale=1, viewport-fit=cover'
