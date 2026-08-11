@@ -339,31 +339,6 @@ function supprimerFavori(
 }
 
 
-function estFavori(
-  type,
-  identifiant,
-  utilisateurCle,
-  jetonUtilisateur
-) {
-  const session = exigerUtilisateurAuthentifie_(jetonUtilisateur);
-  const typeValide = validerTypeFavori_(type);
-  const idValide = validerIdentifiantFavori_(identifiant);
-  const cle = resoudreCleProprietaireFavoris_(session, utilisateurCle);
-  const tableFavoris = lireTableFavoris_(
-    SpreadsheetApp.getActiveSpreadsheet(),
-    'FAVORIS',
-    true
-  );
-
-  return Boolean(trouverLigneFavori_(
-    tableFavoris,
-    typeValide,
-    idValide,
-    cle
-  ));
-}
-
-
 function importerFavorisLocauxFormateur(
   utilisateurCleLocale,
   jetonUtilisateur

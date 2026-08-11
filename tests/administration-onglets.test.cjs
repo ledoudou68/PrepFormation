@@ -303,7 +303,7 @@ assert(!initialisation.includes('verifierIntegriteBase'));
 assert(!initialisation.includes('listerSauvegardesRestaurabilite'));
 assert(!initialisation.includes('getConfigurationMetierAdministration'));
 assert(initialisation.includes('chargerEtatRestaurationInitialAdministration_'));
-assert(serveur.includes('function getDonneesAdministration('));
+assert(!serveur.includes('function getDonneesAdministration('));
 const debutConfigurationServeur = serveur.indexOf(
   'function getConfigurationMetierAdministration('
 );

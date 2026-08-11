@@ -20,17 +20,6 @@ const PROPRIETE_OPERATION_RESTAURATION_ACTIVE_ =
   'PREPFORMATION_RESTORE_ACTIVE_OPERATION';
 const CONTEXTE_ECRITURE_RESTAURATION_ = {};
 
-const COLONNES_HISTORIQUE_SECURITE = [
-  'ID_HISTORIQUE',
-  'DATE_ACTION',
-  'UTILISATEUR',
-  'ACTION',
-  'OBJET',
-  'IDENTIFIANT',
-  'DETAILS'
-];
-
-
 /**
  * Retourne le contexte courant à partir d'un jeton opaque. L'adresse Google,
  * lorsqu'elle est disponible, reste purement informative.
@@ -46,11 +35,6 @@ function getSessionUtilisateur(jetonUtilisateur) {
     sessions.sessionAdministration,
     sessions.sessionFormateur
   );
-}
-
-
-function obtenirSessionUtilisateur_(jetonUtilisateur) {
-  return getSessionUtilisateur(jetonUtilisateur);
 }
 
 
@@ -1672,17 +1656,6 @@ function creerIndexSecurite_(entetes) {
   });
 
   return index;
-}
-
-
-function trouverColonneSecurite_(index, noms) {
-  for (let i = 0; i < noms.length; i++) {
-    if (Number.isInteger(index[noms[i]])) {
-      return index[noms[i]];
-    }
-  }
-
-  return null;
 }
 
 

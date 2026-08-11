@@ -792,15 +792,6 @@ function getPreparationSession(jetonUtilisateur) {
 
 
 /**
- * Retourne le référentiel actif d'une formation.
- */
-function getReferentielFormation(formation, jetonUtilisateur) {
-  exigerUtilisateurAuthentifie_(jetonUtilisateur);
-  return construireReferentielSession_(formation, '');
-}
-
-
-/**
  * Retourne le référentiel actif et, pour une édition ou une
  * duplication, les éléments inactifs déjà utilisés.
  */
@@ -2198,18 +2189,6 @@ function annulerTransactionSession_(transaction) {
   } catch (erreurFlush) {
     console.error(erreurFlush);
   }
-}
-
-
-/**
- * Crée la feuille de liaison des items travaillés si elle
- * n'existe pas et complète ses entêtes sans effacer de données.
- */
-function obtenirFeuilleItemsSessions_(classeur) {
-  return assurerFeuilleMigration_(
-    classeur,
-    'ITEMS_SESSIONS'
-  );
 }
 
 

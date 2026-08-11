@@ -446,15 +446,22 @@ test('les cinq types autorisés peuvent être ajoutés et lus ensemble', () => {
 });
 
 
-test('estFavori respecte le type, l’identifiant et la clé locale', () => {
+test('getFavoris respecte le type, l’identifiant et la clé locale', () => {
   const environnement = creerContexteService();
   const cle = 'pfav_ffffffffffffffffffff';
   environnement.contexte.ajouterFavori('SESSION', 'S1', cle);
-  assert.strictEqual(environnement.contexte.estFavori('SESSION', 'S1', cle), true);
   assert.strictEqual(
-    environnement.contexte.estFavori(
-      'SESSION', 'S1', 'pfav_gggggggggggggggggggg'
-    ),
+    environnement.contexte.getFavoris(cle).some(function (favori) {
+      return favori.type === 'SESSION' && favori.identifiant === 'S1';
+    }),
+    true
+  );
+  assert.strictEqual(
+    environnement.contexte
+      .getFavoris('pfav_gggggggggggggggggggg')
+      .some(function (favori) {
+        return favori.type === 'SESSION' && favori.identifiant === 'S1';
+      }),
     false
   );
 });

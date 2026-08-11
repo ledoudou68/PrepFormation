@@ -7,22 +7,6 @@ const STATUTS_INDEMNISATION = [
   'À corriger'
 ];
 
-const COLONNES_HISTORIQUE_INDEMNISATIONS = [
-  'ID_HISTORIQUE',
-  'ID_OPERATION',
-  'ID_PRESTATION',
-  'ANCIEN_STATUT',
-  'NOUVEAU_STATUT',
-  'ANCIENNE_DATE_DEMANDE',
-  'NOUVELLE_DATE_DEMANDE',
-  'ANCIENNE_REFERENCE',
-  'NOUVELLE_REFERENCE',
-  'REMARQUE_ACTION',
-  'UTILISATEUR',
-  'DATE_ACTION'
-];
-
-
 /**
  * Retourne toutes les prestations existantes, enrichies avec
  * les informations des séances et des formateurs.

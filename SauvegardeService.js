@@ -508,19 +508,6 @@ function telechargerSauvegarde(
 }
 
 
-function obtenirEtatSauvegardesAdministrationSansErreur_() {
-  try {
-    return obtenirEtatSauvegardesAdministration_();
-  } catch (erreur) {
-    return {
-      disponible: false,
-      derniereSauvegarde: null,
-      erreur: String(erreur.message || erreur)
-    };
-  }
-}
-
-
 function obtenirEtatSauvegardesAdministration_() {
   return executerMutationMetier_(function () {
     return obtenirEtatSauvegardesAdministrationSansVerrou_();

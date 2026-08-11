@@ -14,30 +14,6 @@ const CLES_PARAMETRES_EMAIL_INDEMNISATION_ = [
 ];
 
 
-function getDonneesAdministration(jetonAdministrateur) {
-  const session = exigerAdministrateur_(jetonAdministrateur);
-  const etatSauvegardes =
-    obtenirEtatSauvegardesAdministrationSansErreur_();
-
-  etatSauvegardes.inventaire =
-    construireInventaireSauvegardesRestaurabilite_();
-  etatSauvegardes.planification =
-    obtenirConfigurationSauvegardesAutomatiques_();
-
-  return {
-    session: session,
-    formations: lireFormationsAdministration_(),
-    parametresIndemnisation:
-      lireParametresEmailIndemnisation_(),
-    diagnostic: verifierIntegriteBase(jetonAdministrateur),
-    sauvegardes: etatSauvegardes,
-    restauration: getEtatRestaurationAdministration(
-      jetonAdministrateur
-    )
-  };
-}
-
-
 /**
  * Lecture différée de la configuration métier de l'Administration.
  * Ce point d'entrée reste strictement réservé à l'administrateur et n'est

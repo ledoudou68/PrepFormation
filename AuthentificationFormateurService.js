@@ -467,16 +467,6 @@ function changerMotDePasseFormateur(
 }
 
 
-function renouvelerSessionFormateur(jetonFormateur) {
-  const session = obtenirSessionFormateurValide_(
-    jetonFormateur,
-    true,
-    true
-  );
-  return construireSessionUtilisateur_(null, session);
-}
-
-
 function deconnecterFormateur(jetonFormateur, jetonAdministrateurAssocie) {
   const session = obtenirSessionFormateurValide_(
     jetonFormateur,

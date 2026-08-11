@@ -1841,13 +1841,6 @@ function creerCleFavoriClient_(type, identifiant) {
 }
 
 
-function estFavoriClient_(type, identifiant) {
-  return Boolean(obtenirEtatFavoris_().parCle[
-    creerCleFavoriClient_(type, identifiant)
-  ]);
-}
-
-
 function creerBoutonFavori_(type, identifiant, classeSupplementaire) {
   const typeNormalise = String(type || '').trim().toUpperCase();
   if (![
