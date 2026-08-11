@@ -3309,11 +3309,7 @@ function remplirFiltresStagiaires() {
     'Toutes les formations'
   );
 
-  remplirSelect(
-    'filtreStatutStagiaire',
-    etatApplication.statutsStagiaires,
-    'Tous les statuts'
-  );
+  remplirFiltreStatutsStagiaires_();
 
   remplirSelect(
     'stagiaireFormation',
@@ -3321,6 +3317,96 @@ function remplirFiltresStagiaires() {
     'Sélectionner une formation'
   );
 
+}
+
+function remplirFiltreStatutsStagiaires_() {
+  const zone = document.getElementById(
+    'optionsFiltreStatutsStagiaire'
+  );
+
+  if (!zone) {
+    return;
+  }
+
+  const selectionActuelle = new Set(
+    obtenirStatutsStagiairesParDefaut_()
+  );
+
+  zone.innerHTML = etatApplication.statutsStagiaires
+    .map(function (statut) {
+      return `
+        <label class="option-filtre-statut">
+          <input
+            type="checkbox"
+            name="filtreStatutStagiaire"
+            value="${echapperHtml(statut)}"
+            ${selectionActuelle.has(statut) ? 'checked' : ''}
+            onchange="changerFiltreStatutsStagiaires()"
+          >
+          <span>${echapperHtml(statut)}</span>
+        </label>
+      `;
+    })
+    .join('');
+
+  mettreAJourResumeFiltreStatutsStagiaires_();
+}
+
+function obtenirStatutsStagiairesParDefaut_() {
+  return etatApplication.statutsStagiaires.slice(0, 3);
+}
+
+function obtenirStatutsSelectionnesStagiaires_() {
+  return [...document.querySelectorAll(
+    'input[name="filtreStatutStagiaire"]:checked'
+  )].map(function (champ) {
+    return String(champ.value || '');
+  }).filter(Boolean);
+}
+
+function mettreAJourResumeFiltreStatutsStagiaires_() {
+  const resume = document.getElementById(
+    'resumeFiltreStatutsStagiaire'
+  );
+
+  if (!resume) {
+    return;
+  }
+
+  const selection = obtenirStatutsSelectionnesStagiaires_();
+  const nombreStatuts = etatApplication.statutsStagiaires.length;
+
+  if (!selection.length || selection.length === nombreStatuts) {
+    resume.textContent = 'Statuts : Tous';
+    return;
+  }
+
+  resume.textContent = selection.length <= 2
+    ? selection.join(' · ')
+    : 'Statuts : ' + selection.length + ' sélectionnés';
+}
+
+function changerFiltreStatutsStagiaires() {
+  mettreAJourResumeFiltreStatutsStagiaires_();
+  filtrerStagiaires();
+}
+
+function reinitialiserFiltreStatutsStagiaires() {
+  document.querySelectorAll(
+    'input[name="filtreStatutStagiaire"]'
+  ).forEach(function (champ) {
+    champ.checked = false;
+  });
+
+  const filtre = document.getElementById(
+    'filtreStatutStagiaire'
+  );
+
+  if (filtre) {
+    filtre.open = false;
+  }
+
+  changerFiltreStatutsStagiaires();
 }
 
 function remplirSelect(
@@ -3426,13 +3512,27 @@ function obtenirStagiairesFiltres() {
     )?.value || ''
   );
 
-  const statut = String(
-    document.getElementById(
-      'filtreStatutStagiaire'
-    )?.value || ''
+  return filtrerStagiairesSelonCriteres_(
+    etatApplication.stagiaires,
+    recherche,
+    formation,
+    obtenirStatutsSelectionnesStagiaires_()
+  );
+}
+
+function filtrerStagiairesSelonCriteres_(
+  stagiaires,
+  recherche,
+  formation,
+  statutsSelectionnes
+) {
+  const statuts = new Set(
+    Array.isArray(statutsSelectionnes)
+      ? statutsSelectionnes
+      : []
   );
 
-  return etatApplication.stagiaires.filter(
+  return (Array.isArray(stagiaires) ? stagiaires : []).filter(
     function (stagiaire) {
       const identite =
         (stagiaire.nom + ' ' + stagiaire.prenom)
@@ -3448,8 +3548,8 @@ function obtenirStagiairesFiltres() {
         stagiaire.formation === formation;
 
       const correspondStatut =
-        !statut ||
-        stagiaire.statut === statut;
+        !statuts.size ||
+        statuts.has(stagiaire.statut);
 
       return (
         correspondRecherche &&
@@ -10479,6 +10579,14 @@ function reinitialiserEtatFormulaireSession() {
   etatApplication.idsFormateursHistoriquesSession = {};
   etatApplication.idsStagiairesHistoriquesSession = {};
   etatApplication.confirmationsStagiairesFermesSession = {};
+
+  const afficherInactifs = document.getElementById(
+    'afficherStagiairesInactifsSession'
+  );
+
+  if (afficherInactifs) {
+    afficherInactifs.checked = false;
+  }
 }
 
 function creerIdentifiantOperationSession() {
@@ -10799,6 +10907,16 @@ function afficherStagiairesSession() {
       ?.value || ''
   );
 
+  const afficherInactifs = Boolean(
+    document.getElementById(
+      'afficherStagiairesInactifsSession'
+    )?.checked
+  );
+
+  const idsSelectionnes = new Set(
+    obtenirIdsStagiairesSession()
+  );
+
   if (!formation) {
     zone.innerHTML = `
       <div class="etat-selection-session">
@@ -10809,17 +10927,20 @@ function afficherStagiairesSession() {
     return;
   }
 
-  const stagiaires = etatApplication.stagiairesSession
-    .filter(function (stagiaire) {
-      return (
-        stagiaire.formation === formation
-      );
-    });
+  const stagiaires = filtrerStagiairesDisponiblesSession_(
+    etatApplication.stagiairesSession,
+    formation,
+    afficherInactifs,
+    etatApplication.idsStagiairesHistoriquesSession,
+    idsSelectionnes
+  );
 
   if (!stagiaires.length) {
     zone.innerHTML = `
       <div class="etat-selection-session">
-        Aucun stagiaire pour cette formation.
+        ${afficherInactifs
+          ? 'Aucun stagiaire pour cette formation.'
+          : 'Aucun stagiaire actif pour cette formation. Tu peux afficher les stagiaires inactifs.'}
       </div>
     `;
     mettreAJourCompteursParticipantsSession();
@@ -10828,19 +10949,32 @@ function afficherStagiairesSession() {
 
   zone.innerHTML = stagiaires
     .map(function (stagiaire) {
+      const inactif = estStatutStagiaireInactif_(
+        stagiaire.statut
+      );
+
+      const historique = Boolean(
+        etatApplication.idsStagiairesHistoriquesSession[
+          stagiaire.uuid
+        ]
+      );
+
       return `
-        <label class="option-selection-session">
+        <label class="option-selection-session${inactif ? ' option-selection-session-inactive' : ''}">
           <input
             type="checkbox"
             name="stagiaireSession"
             value="${echapperHtml(stagiaire.uuid)}"
+            ${idsSelectionnes.has(stagiaire.uuid) ? 'checked' : ''}
             onchange="changerStagiairesSession(this)"
           >
-          <span>
+          <span class="identite-participant-session">
+            <span>
             <strong>${echapperHtml(stagiaire.nom)}</strong>
             ${echapperHtml(stagiaire.prenom)}
-            <small class="indicateur-participant-historique-session">
-              ${echapperHtml(stagiaire.statut)}
+            </span>
+            <small class="statut-participant-session${inactif ? ' statut-participant-inactif-session' : ''}">
+              ${historique ? 'Déjà présent · ' : ''}${echapperHtml(stagiaire.statut)}
             </small>
           </span>
         </label>
@@ -10851,7 +10985,48 @@ function afficherStagiairesSession() {
   mettreAJourCompteursParticipantsSession();
 }
 
+function estStatutStagiaireInactif_(statut) {
+  return ['Clôturé', 'Abandon'].includes(
+    String(statut || '').trim()
+  );
+}
+
+function filtrerStagiairesDisponiblesSession_(
+  stagiaires,
+  formation,
+  afficherInactifs,
+  idsHistoriques,
+  idsSelectionnes
+) {
+  const historiques = idsHistoriques || {};
+  const selectionnes = idsSelectionnes instanceof Set
+    ? idsSelectionnes
+    : new Set(idsSelectionnes || []);
+
+  return (Array.isArray(stagiaires) ? stagiaires : [])
+    .filter(function (stagiaire) {
+      if (stagiaire.formation !== formation) {
+        return false;
+      }
+
+      return (
+        !estStatutStagiaireInactif_(stagiaire.statut) ||
+        Boolean(afficherInactifs) ||
+        Boolean(historiques[stagiaire.uuid]) ||
+        selectionnes.has(stagiaire.uuid)
+      );
+    });
+}
+
+function changerAffichageStagiairesInactifsSession() {
+  capturerValidationsSession();
+  afficherStagiairesSession();
+  afficherValidationsSession();
+}
+
 function changerStagiairesSession(champ) {
+  let actualiserListe = false;
+
   if (champ) {
     const stagiaire = etatApplication.stagiairesSession.find(
       function (element) {
@@ -10862,6 +11037,21 @@ function changerStagiairesSession(champ) {
     if (!champ.checked) {
       delete etatApplication
         .confirmationsStagiairesFermesSession[champ.value];
+
+      const afficherInactifs = Boolean(
+        document.getElementById(
+          'afficherStagiairesInactifsSession'
+        )?.checked
+      );
+
+      actualiserListe = Boolean(
+        stagiaire &&
+        estStatutStagiaireInactif_(stagiaire.statut) &&
+        !afficherInactifs &&
+        !etatApplication.idsStagiairesHistoriquesSession[
+          champ.value
+        ]
+      );
     } else if (stagiaire) {
       if (stagiaire.statut === 'Stage passé') {
         window.alert(
@@ -10871,7 +11061,7 @@ function changerStagiairesSession(champ) {
         );
       }
 
-      if (['Clôturé', 'Abandon'].includes(stagiaire.statut)) {
+      if (estStatutStagiaireInactif_(stagiaire.statut)) {
         const confirme = window.confirm(
           stagiaire.prenom + ' ' + stagiaire.nom +
           ' est au statut « ' + stagiaire.statut +
@@ -10891,7 +11081,13 @@ function changerStagiairesSession(champ) {
   }
 
   capturerValidationsSession();
-  mettreAJourCompteursParticipantsSession();
+
+  if (actualiserListe) {
+    afficherStagiairesSession();
+  } else {
+    mettreAJourCompteursParticipantsSession();
+  }
+
   afficherValidationsSession();
 }
 
@@ -11514,7 +11710,7 @@ function soumettreSession(evenement) {
 
       return (
         stagiaire &&
-        ['Clôturé', 'Abandon'].includes(stagiaire.statut) &&
+        estStatutStagiaireInactif_(stagiaire.statut) &&
         !etatApplication.confirmationsStagiairesFermesSession[
           idStagiaire
         ] &&

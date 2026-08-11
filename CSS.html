@@ -379,6 +379,95 @@ textarea {
   margin-bottom: 12px;
 }
 
+.filtre-multi-statut {
+  position: relative;
+  min-width: 0;
+}
+
+.filtre-multi-statut-resume {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--texte);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.filtre-multi-statut-resume::-webkit-details-marker {
+  display: none;
+}
+
+.filtre-multi-statut-resume span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filtre-multi-statut-resume::after {
+  content: '⌄';
+  margin-left: auto;
+  color: var(--texte-secondaire);
+  font-size: 16px;
+}
+
+.filtre-multi-statut[open] .filtre-multi-statut-resume {
+  border-color: var(--bleu);
+  outline: 2px solid rgba(21, 101, 192, 0.18);
+}
+
+.filtre-multi-statut[open] .filtre-multi-statut-resume::after {
+  transform: rotate(180deg);
+}
+
+.panneau-filtre-multi-statut {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 6px);
+  right: 0;
+  width: min(320px, calc(100vw - 32px));
+  padding: 8px;
+  border: 1px solid var(--bordure);
+  border-radius: 10px;
+  background: var(--blanc);
+  box-shadow: 0 12px 30px rgba(28, 39, 49, 0.16);
+}
+
+.option-filtre-statut {
+  min-height: 44px;
+  padding: 9px 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.option-filtre-statut:hover {
+  background: #f1f6fb;
+}
+
+.option-filtre-statut input {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  accent-color: var(--bleu);
+}
+
+.bouton-lien-filtre-statut {
+  width: 100%;
+  min-height: 42px;
+  margin-top: 4px;
+  border: 0;
+  border-top: 1px solid var(--bordure);
+  background: transparent;
+  color: var(--bleu);
+  font-weight: 750;
+  cursor: pointer;
+}
+
 .compteur-resultats {
   margin-bottom: 12px;
   color: var(--texte-secondaire);
@@ -846,6 +935,13 @@ body:not(.application-authentifiee) > .application {
 
   .barre-filtres {
     grid-template-columns: 1fr;
+  }
+
+  .panneau-filtre-multi-statut {
+    position: static;
+    width: 100%;
+    margin-top: 6px;
+    box-shadow: none;
   }
 
   .grille-formulaire {
@@ -3396,6 +3492,26 @@ body:not(.application-authentifiee) > .application {
   font-size: 12px;
 }
 
+.option-affichage-inactifs-session {
+  min-height: 44px;
+  padding: 9px 14px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border-bottom: 1px solid var(--bordure);
+  color: var(--texte-secondaire);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.option-affichage-inactifs-session input {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  accent-color: var(--bleu);
+}
+
 .liste-selection-session {
   max-height: 235px;
   padding: 8px;
@@ -3422,6 +3538,34 @@ body:not(.application-authentifiee) > .application {
   height: 18px;
   flex-shrink: 0;
   accent-color: var(--bleu);
+}
+
+.option-selection-session-inactive {
+  background: #fff8f0;
+}
+
+.identite-participant-session {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.statut-participant-session {
+  padding: 3px 7px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #eef2f6;
+  color: var(--texte-secondaire);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.statut-participant-inactif-session {
+  background: #fde8d7;
+  color: #93420d;
 }
 
 .indicateur-participant-historique-session {

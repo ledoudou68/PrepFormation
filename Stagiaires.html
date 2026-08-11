@@ -40,13 +40,35 @@
         <option value="">Toutes les formations</option>
       </select>
 
-      <select
+      <details
         id="filtreStatutStagiaire"
-        class="champ"
-        onchange="filtrerStagiaires()"
+        class="filtre-multi-statut"
       >
-        <option value="">Tous les statuts</option>
-      </select>
+        <summary
+          class="champ filtre-multi-statut-resume"
+          aria-label="Filtrer les stagiaires par statut"
+        >
+          <span id="resumeFiltreStatutsStagiaire">
+            Statuts : Tous
+          </span>
+        </summary>
+
+        <div
+          class="panneau-filtre-multi-statut"
+          role="group"
+          aria-label="Statuts à afficher"
+        >
+          <div id="optionsFiltreStatutsStagiaire"></div>
+
+          <button
+            type="button"
+            class="bouton-lien-filtre-statut"
+            onclick="reinitialiserFiltreStatutsStagiaires()"
+          >
+            Tous les statuts
+          </button>
+        </div>
+      </details>
 
     </div>
 

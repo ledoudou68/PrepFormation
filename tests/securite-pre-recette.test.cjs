@@ -114,9 +114,9 @@ test('aucun mécanisme applicatif équivalent n’autorise les iframes', () => {
   assert.strictEqual(/frame-ancestors\s+\*/i.test(sourceApplication), false);
 });
 
-test('la version applicative reste strictement 2.0.0', () => {
+test('la version applicative reste strictement 2.0.1', () => {
   assert(version.includes(
-    "const VERSION_APPLICATION_PREPFORMATION_ = '2.0.0';"
+    "const VERSION_APPLICATION_PREPFORMATION_ = '2.0.1';"
   ));
 });
 

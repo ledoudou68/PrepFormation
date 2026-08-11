@@ -88,7 +88,7 @@ assert(!baliseAutreModal[0].includes(
 ));
 
 assert(metadonnees.includes(
-  "VERSION_APPLICATION_PREPFORMATION_ = '2.0.0'"
+  "VERSION_APPLICATION_PREPFORMATION_ = '2.0.1'"
 ));
 
 process.stdout.write(

@@ -741,9 +741,9 @@ test('le service n’ajoute ni migration ni restauration réelle', () => {
 });
 
 
-test('la version applicative est centralisée à 2.0.0', () => {
+test('la version applicative est centralisée à 2.0.1', () => {
   assert(METADONNEES.includes(
-    "VERSION_APPLICATION_PREPFORMATION_ = '2.0.0'"
+    "VERSION_APPLICATION_PREPFORMATION_ = '2.0.1'"
   ));
 });
 
