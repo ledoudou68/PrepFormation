@@ -370,8 +370,14 @@ test('l’administration et les actions sensibles restent dans les composants co
   const administration = lire('Administration.html');
   assert(administration.includes('page-administration'));
   assert(administration.includes('modal-contenu'));
+  assert(administration.includes('role="tablist"'));
+  assert.equal((administration.match(/role="tab"/g) || []).length, 6);
+  assert.equal((administration.match(/role="tabpanel"/g) || []).length, 6);
   assert(indexHtml.includes('actions-acces-administration'));
   assert(css.includes('.actions-acces-administration {\n    width: auto;'));
+  assert(css.includes('.navigation-onglets-administration'));
+  assert(css.includes('overflow-x: auto'));
+  assert(css.includes('scroll-snap-type: x proximity'));
 });
 
 test('les cibles tactiles importantes utilisent un minimum commun de 44 px', () => {

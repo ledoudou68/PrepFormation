@@ -2,8 +2,35 @@
 
   <div class="entete-page">
     <h1>Administration</h1>
-    <p>Gestion des formations et état de la session administrateur.</p>
+    <p>Configuration, sécurité, sauvegardes et maintenance de PrepFormation.</p>
   </div>
+
+  <nav
+    id="navigationOngletsAdministration"
+    class="navigation-onglets-administration"
+    role="tablist"
+    aria-label="Rubriques de l’administration"
+  >
+    <button type="button" id="ongletAdministrationGeneral" class="onglet-administration actif" role="tab" aria-selected="true" aria-controls="panneauAdministrationGeneral" tabindex="0" data-onglet-administration="general" data-autorise-pendant-restauration="true" onclick="activerOngletAdministration('general')">Général</button>
+    <button type="button" id="ongletAdministrationConfiguration" class="onglet-administration" role="tab" aria-selected="false" aria-controls="panneauAdministrationConfiguration" tabindex="-1" data-onglet-administration="configuration" data-autorise-pendant-restauration="true" onclick="activerOngletAdministration('configuration')">Configuration métier</button>
+    <button type="button" id="ongletAdministrationSecurite" class="onglet-administration" role="tab" aria-selected="false" aria-controls="panneauAdministrationSecurite" tabindex="-1" data-onglet-administration="securite" data-autorise-pendant-restauration="true" onclick="activerOngletAdministration('securite')">Utilisateurs &amp; sécurité</button>
+    <button type="button" id="ongletAdministrationSauvegardes" class="onglet-administration" role="tab" aria-selected="false" aria-controls="panneauAdministrationSauvegardes" tabindex="-1" data-onglet-administration="sauvegardes" data-autorise-pendant-restauration="true" onclick="activerOngletAdministration('sauvegardes')">Sauvegardes &amp; restauration</button>
+    <button type="button" id="ongletAdministrationDiagnostic" class="onglet-administration" role="tab" aria-selected="false" aria-controls="panneauAdministrationDiagnostic" tabindex="-1" data-onglet-administration="diagnostic" data-autorise-pendant-restauration="true" onclick="activerOngletAdministration('diagnostic')">Diagnostic &amp; système</button>
+    <button type="button" id="ongletAdministrationMaintenance" class="onglet-administration" role="tab" aria-selected="false" aria-controls="panneauAdministrationMaintenance" tabindex="-1" data-onglet-administration="maintenance" data-autorise-pendant-restauration="true" onclick="activerOngletAdministration('maintenance')">Maintenance</button>
+  </nav>
+
+  <section
+    id="panneauAdministrationGeneral"
+    class="panneau-onglet-administration"
+    role="tabpanel"
+    aria-labelledby="ongletAdministrationGeneral"
+    data-panneau-administration="general"
+  >
+    <div
+      id="etatOngletAdministrationGeneral"
+      class="etat-onglet-administration masque"
+      aria-live="polite"
+    ></div>
 
   <section class="bloc bloc-parametre-administration">
     <div>
@@ -19,6 +46,37 @@
       class="diagnostic-identification-administration"
     ></div>
   </section>
+
+    <section class="bloc resume-general-administration">
+      <div>
+        <h2>Centre d’administration</h2>
+        <p>
+          Les rubriques techniques sont chargées uniquement lorsque tu les
+          ouvres. Les contrôles d’autorisation restent systématiquement
+          effectués côté serveur.
+        </p>
+      </div>
+      <div
+        id="etatRestaurationGlobaleAdministration"
+        class="etat-restauration-globale-administration"
+        aria-live="polite"
+      >Vérification de l’état de restauration…</div>
+    </section>
+  </section>
+
+  <section
+    id="panneauAdministrationSecurite"
+    class="panneau-onglet-administration"
+    role="tabpanel"
+    aria-labelledby="ongletAdministrationSecurite"
+    data-panneau-administration="securite"
+    hidden
+  >
+    <div
+      id="etatOngletAdministrationSecurite"
+      class="etat-onglet-administration masque"
+      aria-live="polite"
+    ></div>
 
   <section
     class="bloc bloc-securite-authentification-administration"
@@ -48,40 +106,54 @@
       role="status"
       aria-live="polite"
     ></div>
+  </section>
 
-    <div class="diagnostic-connexion-administration">
-      <div class="entete-diagnostic-connexion-administration">
+    <section class="bloc acces-comptes-formateurs-administration">
+      <div>
+        <h2>Comptes formateurs</h2>
+        <p>
+          La création, l’activation, le déblocage et la réinitialisation des
+          accès restent centralisés dans le module Formateurs.
+        </p>
+      </div>
+      <button
+        type="button"
+        class="bouton-secondaire"
+        onclick="chargerPage('Formateurs')"
+      >Ouvrir la gestion des formateurs</button>
+    </section>
+  </section>
+
+  <section
+    id="panneauAdministrationMaintenance"
+    class="panneau-onglet-administration"
+    role="tabpanel"
+    aria-labelledby="ongletAdministrationMaintenance"
+    data-panneau-administration="maintenance"
+    hidden
+  >
+    <div
+      id="etatOngletAdministrationMaintenance"
+      class="etat-onglet-administration masque"
+      aria-live="polite"
+    ></div>
+
+    <section class="bloc maintenance-migrations-administration">
+      <div class="entete-page entete-page-actions">
         <div>
-          <h3>Diagnostic connexion</h3>
+          <h2>Migrations du schéma</h2>
           <p>
-            Active une mesure unique lors de la prochaine connexion formateur.
-            Le rapport ne contient aucun identifiant, jeton ou secret.
+            Vérifie et applique uniquement les migrations manquantes. Un
+            diagnostic complet est relancé après l’opération.
           </p>
         </div>
         <button
           type="button"
-          class="bouton-secondaire"
-          onclick="activerDiagnosticConnexionProchaineConnexion()"
-        >Activer pour la prochaine connexion</button>
+          class="bouton-principal"
+          onclick="executerMigrationsAdministration()"
+        >Exécuter les migrations</button>
       </div>
-      <div
-        id="resultatDiagnosticConnexionAdministration"
-        class="etat-vide"
-        role="status"
-        aria-live="polite"
-      >Aucune mesure de connexion disponible dans cette session navigateur.</div>
-
-      <div class="diagnostic-chargement-accueil-administration">
-        <h4>Diagnostic chargement accueil</h4>
-        <div
-          id="resultatDiagnosticChargementAccueilAdministration"
-          class="etat-vide"
-          role="status"
-          aria-live="polite"
-        >Aucune mesure détaillée du chargement de l’accueil disponible.</div>
-      </div>
-    </div>
-  </section>
+    </section>
 
   <section class="bloc bloc-mise-production-administration">
     <div class="entete-page entete-page-actions">
@@ -105,6 +177,32 @@
       obligatoires avant toute suppression.
     </div>
   </section>
+  </section>
+
+  <section
+    id="panneauAdministrationConfiguration"
+    class="panneau-onglet-administration"
+    role="tabpanel"
+    aria-labelledby="ongletAdministrationConfiguration"
+    data-panneau-administration="configuration"
+    hidden
+  >
+    <div class="entete-onglet-administration">
+      <div>
+        <h2>Configuration métier</h2>
+        <p>Formations et paramètres utilisés par les indemnisations.</p>
+      </div>
+      <button
+        type="button"
+        class="bouton-secondaire"
+        onclick="actualiserOngletAdministration('configuration')"
+      >Actualiser</button>
+    </div>
+    <div
+      id="etatOngletAdministrationConfiguration"
+      class="etat-onglet-administration"
+      aria-live="polite"
+    >Ouvre cet onglet pour charger sa configuration.</div>
 
   <section class="bloc bloc-parametres-email-indemnisation">
     <div class="entete-page entete-page-actions">
@@ -168,6 +266,56 @@
     </div>
   </section>
 
+    <div id="conteneurFormationsAdministration"></div>
+  </section>
+
+  <section
+    id="panneauAdministrationDiagnostic"
+    class="panneau-onglet-administration"
+    role="tabpanel"
+    aria-labelledby="ongletAdministrationDiagnostic"
+    data-panneau-administration="diagnostic"
+    hidden
+  >
+    <div
+      id="etatOngletAdministrationDiagnostic"
+      class="etat-onglet-administration"
+      aria-live="polite"
+    >Ouvre cet onglet pour lancer le diagnostic de la base.</div>
+
+    <section class="bloc diagnostic-connexion-administration">
+      <div class="entete-diagnostic-connexion-administration">
+        <div>
+          <h2>Diagnostic connexion</h2>
+          <p>
+            Active une mesure unique lors de la prochaine connexion formateur.
+            Le rapport ne contient aucun identifiant, jeton ou secret.
+          </p>
+        </div>
+        <button
+          type="button"
+          class="bouton-secondaire"
+          onclick="activerDiagnosticConnexionProchaineConnexion()"
+        >Activer pour la prochaine connexion</button>
+      </div>
+      <div
+        id="resultatDiagnosticConnexionAdministration"
+        class="etat-vide"
+        role="status"
+        aria-live="polite"
+      >Aucune mesure de connexion disponible dans cette session navigateur.</div>
+
+      <div class="diagnostic-chargement-accueil-administration">
+        <h4>Diagnostic chargement accueil</h4>
+        <div
+          id="resultatDiagnosticChargementAccueilAdministration"
+          class="etat-vide"
+          role="status"
+          aria-live="polite"
+        >Aucune mesure détaillée du chargement de l’accueil disponible.</div>
+      </div>
+    </section>
+
   <section class="bloc bloc-diagnostic-administration">
     <div class="entete-page entete-page-actions entete-diagnostic-administration">
       <div>
@@ -183,11 +331,6 @@
           class="bouton-secondaire"
           onclick="lancerDiagnosticAdministration()"
         >Lancer un diagnostic</button>
-        <button
-          type="button"
-          class="bouton-principal"
-          onclick="executerMigrationsAdministration()"
-        >Exécuter les migrations</button>
       </div>
     </div>
 
@@ -232,6 +375,21 @@
       </div>
     </div>
   </section>
+  </section>
+
+  <section
+    id="panneauAdministrationSauvegardes"
+    class="panneau-onglet-administration"
+    role="tabpanel"
+    aria-labelledby="ongletAdministrationSauvegardes"
+    data-panneau-administration="sauvegardes"
+    hidden
+  >
+    <div
+      id="etatOngletAdministrationSauvegardes"
+      class="etat-onglet-administration"
+      aria-live="polite"
+    >Ouvre cet onglet pour charger les sauvegardes.</div>
 
   <section class="bloc bloc-sauvegardes-administration">
     <div class="entete-page entete-page-actions entete-sauvegardes-administration">
@@ -243,6 +401,11 @@
       </div>
 
       <span class="badge-phase-sauvegarde">Phase 4 · Gestion et planification</span>
+      <button
+        type="button"
+        class="bouton-secondaire"
+        onclick="actualiserOngletAdministration('sauvegardes')"
+      >Actualiser l’onglet</button>
     </div>
 
     <p class="avertissement-sauvegarde-photos">
@@ -444,8 +607,9 @@
       <div class="etat-vide">Chargement de l’inventaire…</div>
     </div>
   </section>
+  </section>
 
-  <section class="bloc">
+  <section id="sectionFormationsAdministration" class="bloc" hidden>
     <div class="entete-page entete-page-actions entete-formations-administration">
       <div>
         <h2>Formations</h2>

@@ -38,6 +38,24 @@ function getDonneesAdministration(jetonAdministrateur) {
 }
 
 
+/**
+ * Lecture différée de la configuration métier de l'Administration.
+ * Ce point d'entrée reste strictement réservé à l'administrateur et n'est
+ * appelé qu'à l'ouverture de l'onglet correspondant.
+ */
+function getConfigurationMetierAdministration(
+  jetonAdministrateur
+) {
+  exigerAdministrateur_(jetonAdministrateur);
+
+  return {
+    formations: lireFormationsAdministration_(),
+    parametresIndemnisation:
+      lireParametresEmailIndemnisation_()
+  };
+}
+
+
 function enregistrerParametresEmailIndemnisationAdministration(
   donnees,
   jetonAdministrateur

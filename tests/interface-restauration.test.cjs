@@ -244,19 +244,19 @@ assert.strictEqual(boutonFinal.disabled, false);
 assert.strictEqual(boutonFinal.textContent, 'Fermer');
 assert.strictEqual(boutonFinal.classList.contains('bouton-principal'), true);
 
-let inventairesActualises = 0;
-let etatsActualises = 0;
-context.__inventaire = () => { inventairesActualises++; };
-context.__etat = () => { etatsActualises++; };
+let panneauxInvalides = 0;
+let ongletsSauvegardesRecharges = 0;
+context.__invalidation = () => { panneauxInvalides++; };
+context.__rechargement = () => { ongletsSauvegardesRecharges++; };
 vm.runInContext(`
-  actualiserInventaireSauvegardesAdministration = __inventaire;
-  actualiserEtatRestaurationAdministration_ = __etat;
+  invaliderPanneauxAdministrationApresOperationMajeure_ = __invalidation;
+  chargerSauvegardesAdministration_ = __rechargement;
 `, context);
 
 boutonFinal.click();
 
 assert.strictEqual(modal.classList.contains('masque'), true);
-assert.strictEqual(inventairesActualises, 1);
-assert.strictEqual(etatsActualises, 1);
+assert.strictEqual(panneauxInvalides, 1);
+assert.strictEqual(ongletsSauvegardesRecharges, 1);
 
 process.stdout.write('✓ bouton final actif et polling tardif neutralisé\n');

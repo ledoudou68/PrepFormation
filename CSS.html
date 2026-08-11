@@ -4577,6 +4577,154 @@ body:not(.application-authentifiee) > .application {
   max-width: 1320px;
 }
 
+.navigation-onglets-administration {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  width: 100%;
+  max-width: 100%;
+  margin: 0 0 18px;
+  padding: 6px;
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid var(--bordure);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.06);
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.onglet-administration {
+  min-height: 42px;
+  padding: 9px 14px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--texte-secondaire);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.onglet-administration:hover {
+  background: #f3f6f9;
+  color: var(--texte-principal);
+}
+
+.onglet-administration.actif,
+.onglet-administration[aria-selected="true"] {
+  background: var(--bleu);
+  color: #fff;
+  box-shadow: 0 3px 10px rgba(21, 101, 192, 0.24);
+}
+
+.onglet-administration:focus-visible {
+  outline: 3px solid rgba(21, 101, 192, 0.3);
+  outline-offset: 2px;
+}
+
+.panneau-onglet-administration[hidden] {
+  display: none !important;
+}
+
+.panneau-onglet-administration {
+  min-width: 0;
+}
+
+.entete-onglet-administration,
+.resume-general-administration,
+.acces-comptes-formateurs-administration {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.entete-onglet-administration {
+  margin: 0 0 16px;
+  padding: 16px 18px;
+  border: 1px solid var(--bordure);
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.entete-onglet-administration h2,
+.resume-general-administration h2,
+.acces-comptes-formateurs-administration h2,
+.maintenance-migrations-administration h2 {
+  margin: 0 0 6px;
+}
+
+.entete-onglet-administration p,
+.resume-general-administration p,
+.acces-comptes-formateurs-administration p,
+.maintenance-migrations-administration p {
+  margin: 0;
+  color: var(--texte-secondaire);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.etat-onglet-administration {
+  margin: 0 0 14px;
+  padding: 11px 13px;
+  border: 1px solid #d8e2ec;
+  border-radius: 9px;
+  background: #f8fafc;
+  color: var(--texte-secondaire);
+  font-size: 13px;
+}
+
+.etat-onglet-administration.masque {
+  display: none;
+}
+
+.etat-onglet-administration[data-statut="chargement"] {
+  border-color: #b7d3f4;
+  background: #eef6ff;
+  color: #174f87;
+}
+
+.etat-onglet-administration[data-statut="erreur"] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-color: #efc3c3;
+  background: #fff1f1;
+  color: #8d1c1c;
+}
+
+.etat-restauration-globale-administration {
+  min-width: min(420px, 100%);
+  padding: 12px 14px;
+  border: 1px solid #d8e2ec;
+  border-radius: 9px;
+  background: #f8fafc;
+  color: var(--texte-secondaire);
+  font-size: 13px;
+}
+
+.etat-restauration-globale-administration[data-statut="actif"],
+.etat-restauration-globale-administration[data-statut="interrompu"] {
+  border-color: #f0c36b;
+  background: #fff8eb;
+  color: #7a4b00;
+}
+
+.etat-restauration-globale-administration[data-statut="erreur"] {
+  border-color: #efc3c3;
+  background: #fff1f1;
+  color: #8d1c1c;
+}
+
 .bloc-parametre-administration {
   display: grid;
   grid-template-columns: minmax(220px, 1fr) minmax(300px, 1.2fr);
@@ -4738,6 +4886,38 @@ body:not(.application-authentifiee) > .application {
 }
 
 @media (max-width: 700px) {
+
+  .navigation-onglets-administration {
+    margin-right: 0;
+    margin-left: 0;
+    padding: 5px;
+    scroll-snap-type: x proximity;
+  }
+
+  .onglet-administration {
+    min-height: var(--cible-tactile);
+    padding: 9px 13px;
+    scroll-snap-align: start;
+  }
+
+  .entete-onglet-administration,
+  .resume-general-administration,
+  .acces-comptes-formateurs-administration,
+  .etat-onglet-administration[data-statut="erreur"] {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .entete-onglet-administration button,
+  .acces-comptes-formateurs-administration button,
+  .etat-onglet-administration[data-statut="erreur"] button {
+    width: 100%;
+  }
+
+  .etat-restauration-globale-administration {
+    min-width: 0;
+    width: 100%;
+  }
 
   .bloc-mise-production-administration .entete-page-actions {
     align-items: stretch;

@@ -97,6 +97,8 @@ const etatApplication = {
   filtreSauvegardesAdministration: 'TOUTES',
   backupSuppressionAdministration: null,
   benchmarkPbkdf2AdministrationEnCours: false,
+  ongletsAdministration: null,
+  generationPageAdministration: 0,
   diagnosticConnexionEnCours: null,
   dernierDiagnosticConnexion: null,
   derniereActiviteAdministration: 0,
@@ -14015,56 +14017,478 @@ function initialiserPageAdministration() {
     return;
   }
 
+  const generationPage =
+    Number(etatApplication.generationPageAdministration || 0) + 1;
+  etatApplication.generationPageAdministration = generationPage;
+  etatApplication.ongletsAdministration = {
+    generationPage: generationPage,
+    actif: 'general',
+    panneaux: {
+      general: creerEtatPanneauAdministration_(true),
+      configuration: creerEtatPanneauAdministration_(false),
+      securite: creerEtatPanneauAdministration_(true),
+      sauvegardes: creerEtatPanneauAdministration_(false),
+      diagnostic: creerEtatPanneauAdministration_(false),
+      maintenance: creerEtatPanneauAdministration_(true)
+    }
+  };
+
+  installerContenusOngletsAdministration_();
+  installerNavigationClavierAdministration_();
   etatApplication.benchmarkPbkdf2AdministrationEnCours = false;
-  mettreAJourDisponibiliteBenchmarkPbkdf2Administration_(false);
+  afficherDiagnosticAdministration(
+    etatApplication.sessionUtilisateur || {}
+  );
   afficherDiagnosticConnexionAdministration_();
-  afficherLoader();
+  mettreAJourDisponibiliteBenchmarkPbkdf2Administration_(true);
+  selectionnerOngletAdministration_('general');
+  chargerEtatRestaurationInitialAdministration_(generationPage);
+}
+
+
+function creerEtatPanneauAdministration_(charge) {
+  return {
+    charge: Boolean(charge),
+    chargement: false,
+    erreur: '',
+    generation: 0
+  };
+}
+
+
+function installerContenusOngletsAdministration_() {
+  const conteneurFormations = document.getElementById(
+    'conteneurFormationsAdministration'
+  );
+  const sectionFormations = document.getElementById(
+    'sectionFormationsAdministration'
+  );
+
+  if (conteneurFormations && sectionFormations) {
+    conteneurFormations.appendChild(sectionFormations);
+    sectionFormations.hidden = false;
+  }
+}
+
+
+function installerNavigationClavierAdministration_() {
+  const navigation = document.getElementById(
+    'navigationOngletsAdministration'
+  );
+
+  if (!navigation) return;
+  navigation.addEventListener(
+    'keydown',
+    gererClavierOngletsAdministration_
+  );
+}
+
+
+function gererClavierOngletsAdministration_(evenement) {
+  const touches = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
+  if (!touches.includes(evenement.key)) return;
+
+  const onglets = Array.from(document.querySelectorAll(
+    '[role="tab"][data-onglet-administration]'
+  ));
+  const position = onglets.indexOf(document.activeElement);
+  if (position < 0 || !onglets.length) return;
+
+  evenement.preventDefault();
+  let cible = position;
+  if (evenement.key === 'ArrowLeft') {
+    cible = (position - 1 + onglets.length) % onglets.length;
+  } else if (evenement.key === 'ArrowRight') {
+    cible = (position + 1) % onglets.length;
+  } else if (evenement.key === 'Home') {
+    cible = 0;
+  } else if (evenement.key === 'End') {
+    cible = onglets.length - 1;
+  }
+
+  onglets[cible].focus();
+  activerOngletAdministration(
+    onglets[cible].dataset.ongletAdministration
+  );
+}
+
+
+function activerOngletAdministration(identifiant) {
+  if (!selectionnerOngletAdministration_(identifiant)) return;
+  chargerDonneesOngletAdministration_(identifiant, false);
+}
+
+
+function actualiserOngletAdministration(identifiant) {
+  if (!selectionnerOngletAdministration_(identifiant)) return;
+  chargerDonneesOngletAdministration_(identifiant, true);
+}
+
+
+function selectionnerOngletAdministration_(identifiant) {
+  const etat = etatApplication.ongletsAdministration;
+  const panneau = etat && etat.panneaux[identifiant];
+  if (!etat || !panneau || etatApplication.pageActive !== 'Administration') {
+    return false;
+  }
+
+  etat.actif = identifiant;
+  document.querySelectorAll(
+    '[data-onglet-administration]'
+  ).forEach(function (onglet) {
+    const actif = onglet.dataset.ongletAdministration === identifiant;
+    onglet.classList.toggle('actif', actif);
+    onglet.setAttribute('aria-selected', actif ? 'true' : 'false');
+    onglet.setAttribute('tabindex', actif ? '0' : '-1');
+    if (actif && typeof onglet.scrollIntoView === 'function') {
+      onglet.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+  });
+  document.querySelectorAll(
+    '[data-panneau-administration]'
+  ).forEach(function (element) {
+    element.hidden =
+      element.dataset.panneauAdministration !== identifiant;
+  });
+
+  return true;
+}
+
+
+function chargerDonneesOngletAdministration_(identifiant, forcer) {
+  if (identifiant === 'configuration') {
+    chargerConfigurationMetierAdministration_(forcer);
+  } else if (identifiant === 'sauvegardes') {
+    chargerSauvegardesAdministration_(forcer);
+  } else if (identifiant === 'diagnostic') {
+    chargerDiagnosticAdministration_(forcer);
+  } else if (identifiant === 'securite') {
+    afficherDiagnosticConnexionAdministration_();
+    mettreAJourDisponibiliteBenchmarkPbkdf2Administration_(true);
+  }
+}
+
+
+function commencerChargementOngletAdministration_(identifiant, forcer) {
+  const etat = etatApplication.ongletsAdministration;
+  const panneau = etat && etat.panneaux[identifiant];
+  if (!etat || !panneau || panneau.chargement) return null;
+  if (panneau.charge && !forcer) return null;
+
+  panneau.chargement = true;
+  panneau.erreur = '';
+  panneau.generation++;
+  afficherEtatOngletAdministration_(
+    identifiant,
+    'chargement',
+    'Chargement en cours…'
+  );
+
+  return {
+    generationPage: etat.generationPage,
+    generationRequete: panneau.generation
+  };
+}
+
+
+function reponseOngletAdministrationValide_(identifiant, requete) {
+  const etat = etatApplication.ongletsAdministration;
+  const panneau = etat && etat.panneaux[identifiant];
+  return Boolean(
+    requete &&
+    etatApplication.pageActive === 'Administration' &&
+    etat &&
+    panneau &&
+    etat.generationPage === requete.generationPage &&
+    panneau.generation === requete.generationRequete
+  );
+}
+
+
+function terminerChargementOngletAdministration_(identifiant, requete) {
+  if (!reponseOngletAdministrationValide_(identifiant, requete)) {
+    return false;
+  }
+
+  const panneau = etatApplication.ongletsAdministration
+    .panneaux[identifiant];
+  panneau.chargement = false;
+  panneau.charge = true;
+  panneau.erreur = '';
+  afficherEtatOngletAdministration_(identifiant, 'succes', '');
+  reappliquerBlocageRestaurationAdministration_();
+  return true;
+}
+
+
+function echouerChargementOngletAdministration_(
+  identifiant,
+  requete,
+  erreur
+) {
+  if (!reponseOngletAdministrationValide_(identifiant, requete)) {
+    return false;
+  }
+
+  const panneau = etatApplication.ongletsAdministration
+    .panneaux[identifiant];
+  const message = extraireMessageErreur(erreur);
+  panneau.chargement = false;
+  panneau.charge = false;
+  panneau.erreur = message;
+  afficherEtatOngletAdministration_(identifiant, 'erreur', message);
+  reappliquerBlocageRestaurationAdministration_();
+  return true;
+}
+
+
+function afficherEtatOngletAdministration_(identifiant, statut, message) {
+  const zone = document.getElementById(
+    'etatOngletAdministration' +
+    identifiant.charAt(0).toUpperCase() + identifiant.slice(1)
+  );
+  if (!zone) return;
+
+  if (statut === 'succes' || (!message && statut !== 'erreur')) {
+    zone.className = 'etat-onglet-administration masque';
+    zone.removeAttribute('data-statut');
+    zone.innerHTML = '';
+    return;
+  }
+
+  zone.className = 'etat-onglet-administration';
+  zone.dataset.statut = statut || '';
+  zone.innerHTML = statut === 'erreur'
+    ? `<span>${echapperHtml(message)}</span><button type="button" class="bouton-secondaire" data-autorise-pendant-restauration="true" onclick="actualiserOngletAdministration('${echapperHtml(identifiant)}')">Réessayer</button>`
+    : echapperHtml(message || 'Chargement en cours…');
+}
+
+
+function chargerEtatRestaurationInitialAdministration_(generationPage) {
+  google.script.run
+    .withSuccessHandler(function (etat) {
+      const onglets = etatApplication.ongletsAdministration;
+      if (
+        etatApplication.pageActive !== 'Administration' ||
+        !onglets ||
+        onglets.generationPage !== generationPage
+      ) {
+        return;
+      }
+
+      etatApplication.restaurationAdministration = etat || {};
+      afficherEtatRestaurationAdministration(etat || {});
+    })
+    .withFailureHandler(function (erreur) {
+      const onglets = etatApplication.ongletsAdministration;
+      if (
+        etatApplication.pageActive !== 'Administration' ||
+        !onglets ||
+        onglets.generationPage !== generationPage
+      ) {
+        return;
+      }
+      afficherErreurEtatRestaurationGlobaleAdministration_(
+        extraireMessageErreur(erreur)
+      );
+    })
+    .getEtatRestaurationAdministration(
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+
+function chargerConfigurationMetierAdministration_(forcer) {
+  const requete = commencerChargementOngletAdministration_(
+    'configuration',
+    forcer
+  );
+  if (!requete) return;
 
   google.script.run
     .withSuccessHandler(function (donnees) {
+      if (!reponseOngletAdministrationValide_(
+        'configuration',
+        requete
+      )) return;
+
       etatApplication.formationsAdministration =
         Array.isArray(donnees.formations)
           ? donnees.formations
           : [];
       etatApplication.parametresEmailIndemnisationAdministration =
         donnees.parametresIndemnisation || {};
-      etatApplication.diagnosticAdministration =
-        donnees.diagnostic || null;
-      etatApplication.sauvegardesAdministration =
-        donnees.sauvegardes || null;
-      etatApplication.restaurationAdministration =
-        donnees.restauration || null;
-
-      afficherDiagnosticAdministration(donnees.session || {});
       afficherParametresEmailIndemnisationAdministration(
         etatApplication.parametresEmailIndemnisationAdministration
       );
-      afficherDiagnosticBaseAdministration(
-        etatApplication.diagnosticAdministration
-      );
-      afficherSauvegardesAdministration(
-        etatApplication.sauvegardesAdministration
-      );
-      afficherPlanificationSauvegardesAdministration(
-        (etatApplication.sauvegardesAdministration || {})
-          .planification
-      );
-      afficherInventaireSauvegardesAdministration(
-        (etatApplication.sauvegardesAdministration || {})
-          .inventaire
-      );
-      afficherEtatRestaurationAdministration(
-        etatApplication.restaurationAdministration
-      );
       afficherFormationsAdministration();
-      afficherDiagnosticConnexionAdministration_();
-      mettreAJourDisponibiliteBenchmarkPbkdf2Administration_(true);
-      masquerLoader();
+      terminerChargementOngletAdministration_(
+        'configuration',
+        requete
+      );
     })
-    .withFailureHandler(gererErreurServeur)
-    .getDonneesAdministration(
+    .withFailureHandler(function (erreur) {
+      echouerChargementOngletAdministration_(
+        'configuration',
+        requete,
+        erreur
+      );
+    })
+    .getConfigurationMetierAdministration(
       obtenirJetonAdministrateurApplication()
     );
+}
+
+
+function chargerSauvegardesAdministration_(forcer) {
+  const requete = commencerChargementOngletAdministration_(
+    'sauvegardes',
+    forcer
+  );
+  if (!requete) return;
+
+  let restantes = 4;
+  const erreurs = [];
+
+  function acheverPartie(erreur) {
+    if (!reponseOngletAdministrationValide_(
+      'sauvegardes',
+      requete
+    )) return;
+    if (erreur) erreurs.push(erreur);
+    restantes--;
+    if (restantes > 0) return;
+
+    if (erreurs.length) {
+      echouerChargementOngletAdministration_(
+        'sauvegardes',
+        requete,
+        erreurs[0]
+      );
+      return;
+    }
+    terminerChargementOngletAdministration_(
+      'sauvegardes',
+      requete
+    );
+  }
+
+  google.script.run
+    .withSuccessHandler(function (etat) {
+      if (!reponseOngletAdministrationValide_('sauvegardes', requete)) {
+        return;
+      }
+      etatApplication.sauvegardesAdministration =
+        etatApplication.sauvegardesAdministration || {};
+      Object.assign(etatApplication.sauvegardesAdministration, etat || {});
+      afficherSauvegardesAdministration(etat || {});
+      acheverPartie();
+    })
+    .withFailureHandler(acheverPartie)
+    .getEtatSauvegardesAdministration(
+      obtenirJetonAdministrateurApplication()
+    );
+
+  google.script.run
+    .withSuccessHandler(function (inventaire) {
+      if (!reponseOngletAdministrationValide_('sauvegardes', requete)) {
+        return;
+      }
+      etatApplication.sauvegardesAdministration =
+        etatApplication.sauvegardesAdministration || {};
+      etatApplication.sauvegardesAdministration.inventaire = inventaire;
+      afficherInventaireSauvegardesAdministration(inventaire);
+      acheverPartie();
+    })
+    .withFailureHandler(acheverPartie)
+    .listerSauvegardesRestaurabilite(
+      obtenirJetonAdministrateurApplication()
+    );
+
+  google.script.run
+    .withSuccessHandler(function (configuration) {
+      if (!reponseOngletAdministrationValide_('sauvegardes', requete)) {
+        return;
+      }
+      etatApplication.sauvegardesAdministration =
+        etatApplication.sauvegardesAdministration || {};
+      etatApplication.sauvegardesAdministration.planification =
+        configuration;
+      afficherPlanificationSauvegardesAdministration(configuration);
+      acheverPartie();
+    })
+    .withFailureHandler(acheverPartie)
+    .getConfigurationSauvegardesAutomatiques(
+      obtenirJetonAdministrateurApplication()
+    );
+
+  google.script.run
+    .withSuccessHandler(function (etat) {
+      if (!reponseOngletAdministrationValide_('sauvegardes', requete)) {
+        return;
+      }
+      etatApplication.restaurationAdministration = etat || {};
+      afficherEtatRestaurationAdministration(etat || {});
+      acheverPartie();
+    })
+    .withFailureHandler(acheverPartie)
+    .getEtatRestaurationAdministration(
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+
+function chargerDiagnosticAdministration_(forcer) {
+  const requete = commencerChargementOngletAdministration_(
+    'diagnostic',
+    forcer
+  );
+  if (!requete) return;
+
+  afficherDiagnosticConnexionAdministration_();
+  google.script.run
+    .withSuccessHandler(function (rapport) {
+      if (!reponseOngletAdministrationValide_('diagnostic', requete)) {
+        return;
+      }
+      etatApplication.diagnosticAdministration = rapport;
+      afficherDiagnosticBaseAdministration(rapport);
+      terminerChargementOngletAdministration_('diagnostic', requete);
+    })
+    .withFailureHandler(function (erreur) {
+      echouerChargementOngletAdministration_(
+        'diagnostic',
+        requete,
+        erreur
+      );
+    })
+    .verifierIntegriteBase(
+      obtenirJetonAdministrateurApplication()
+    );
+}
+
+
+function invaliderOngletAdministration_(identifiant) {
+  const etat = etatApplication.ongletsAdministration;
+  const panneau = etat && etat.panneaux[identifiant];
+  if (!panneau) return;
+  panneau.charge = false;
+  panneau.erreur = '';
+}
+
+
+function invaliderPanneauxAdministrationApresOperationMajeure_() {
+  ['configuration', 'sauvegardes', 'diagnostic'].forEach(
+    invaliderOngletAdministration_
+  );
+}
+
+
+function reappliquerBlocageRestaurationAdministration_() {
+  const etat = etatApplication.restaurationAdministration || {};
+  if (etat.operationActive) {
+    basculerInterfacePendantRestauration_(true);
+  }
 }
 
 
@@ -15033,7 +15457,13 @@ function fermerReinitialisationProduction() {
   const rafraichir = Boolean(etat && etat.rafraichirApresFermeture);
   etatApplication.reinitialisationProduction = null;
   if (rafraichir && etatApplication.pageActive === 'Administration') {
-    initialiserPageAdministration();
+    invaliderPanneauxAdministrationApresOperationMajeure_();
+    const onglets = etatApplication.ongletsAdministration;
+    if (onglets) {
+      chargerEtatRestaurationInitialAdministration_(
+        onglets.generationPage
+      );
+    }
   }
 }
 
@@ -15237,20 +15667,7 @@ function lancerDiagnosticAdministration() {
     afficherToast('Accès réservé à l’administrateur.', true);
     return;
   }
-
-  afficherLoader();
-
-  google.script.run
-    .withSuccessHandler(function (rapport) {
-      etatApplication.diagnosticAdministration = rapport;
-      afficherDiagnosticBaseAdministration(rapport);
-      masquerLoader();
-      afficherToast('Diagnostic terminé.', false);
-    })
-    .withFailureHandler(gererErreurServeur)
-    .verifierIntegriteBase(
-      obtenirJetonAdministrateurApplication()
-    );
+  chargerDiagnosticAdministration_(true);
 }
 
 function executerMigrationsAdministration() {
@@ -15263,8 +15680,11 @@ function executerMigrationsAdministration() {
 
   google.script.run
     .withSuccessHandler(function (resultat) {
+      masquerLoader();
       afficherToast(resultat.message, false);
-      lancerDiagnosticAdministration();
+      invaliderPanneauxAdministrationApresOperationMajeure_();
+      selectionnerOngletAdministration_('diagnostic');
+      chargerDiagnosticAdministration_(true);
     })
     .withFailureHandler(gererErreurServeur)
     .executerMigrations(
@@ -16419,7 +16839,8 @@ function confirmerSuppressionSauvegardeAdministration() {
 
       fermerModalSuppressionSauvegardeAdministration();
       afficherToast(resultat.message, false);
-      initialiserPageAdministration();
+      invaliderOngletAdministration_('sauvegardes');
+      chargerSauvegardesAdministration_(true);
     })
     .withFailureHandler(function (erreur) {
       if (bouton) {
@@ -16939,8 +17360,8 @@ function fermerModalPreparationRestaurationAdministration() {
   etatApplication.rafraichirRestaurationApresFermeture = false;
 
   if (actualiserApresFermeture) {
-    actualiserInventaireSauvegardesAdministration(false);
-    actualiserEtatRestaurationAdministration_(true);
+    invaliderPanneauxAdministrationApresOperationMajeure_();
+    chargerSauvegardesAdministration_(true);
   }
 }
 
@@ -17268,6 +17689,7 @@ function actualiserEtatRestaurationAdministration_(
 
 
 function afficherEtatRestaurationAdministration(etat) {
+  afficherEtatRestaurationGlobaleAdministration_(etat || {});
   const zone = document.getElementById(
     'etatRestaurationAdministration'
   );
@@ -17317,6 +17739,54 @@ function afficherEtatRestaurationAdministration(etat) {
         <span>${echapperHtml(derniere.backupId || '')}${derniere.dureeMs ? ' · ' + echapperHtml(formaterDureeRestauration_(derniere.dureeMs)) : ''}</span>
       </div>`
     : '';
+}
+
+
+function afficherEtatRestaurationGlobaleAdministration_(etat) {
+  const zone = document.getElementById(
+    'etatRestaurationGlobaleAdministration'
+  );
+  if (!zone) return;
+
+  const active = etat && etat.operationActive;
+  const interrompue = Boolean(etat && etat.restaurationInterrompue);
+  if (!active) {
+    zone.dataset.statut = 'inactif';
+    zone.innerHTML = `
+      <strong>✓ Aucune restauration active</strong><br>
+      <span>Les écritures administratives ne sont pas bloquées.</span>
+    `;
+    return;
+  }
+
+  zone.dataset.statut = interrompue ? 'interrompu' : 'actif';
+  zone.innerHTML = `
+    <strong>${interrompue
+      ? 'Restauration interrompue : récupération requise'
+      : 'Restauration en cours'}</strong><br>
+    <span>Étape ${echapperHtml(
+      libelleEtapeRestauration_(active.etape)
+    )} · ${Number(active.progression || 0)} %</span><br>
+    <button
+      type="button"
+      class="bouton-secondaire"
+      data-autorise-pendant-restauration="true"
+      onclick="activerOngletAdministration('sauvegardes')"
+    >Ouvrir le suivi</button>
+  `;
+}
+
+
+function afficherErreurEtatRestaurationGlobaleAdministration_(message) {
+  const zone = document.getElementById(
+    'etatRestaurationGlobaleAdministration'
+  );
+  if (!zone) return;
+  zone.dataset.statut = 'erreur';
+  zone.innerHTML = `
+    <strong>État de restauration indisponible</strong><br>
+    <span>${echapperHtml(message)}</span>
+  `;
 }
 
 
@@ -17531,7 +18001,8 @@ function reprendreRollbackRestaurationAdministration() {
   google.script.run
     .withSuccessHandler(function (resultat) {
       afficherToast(resultat.message, !resultat.succes);
-      actualiserEtatRestaurationAdministration_();
+      invaliderPanneauxAdministrationApresOperationMajeure_();
+      chargerSauvegardesAdministration_(true);
     })
     .withFailureHandler(function (erreur) {
       afficherToast(extraireMessageErreur(erreur), true);
@@ -17552,7 +18023,8 @@ function reprendreFinalisationRestaurationAdministration() {
   google.script.run
     .withSuccessHandler(function (resultat) {
       afficherToast(resultat.message, !resultat.succes);
-      actualiserEtatRestaurationAdministration_();
+      invaliderPanneauxAdministrationApresOperationMajeure_();
+      chargerSauvegardesAdministration_(true);
     })
     .withFailureHandler(function (erreur) {
       afficherToast(extraireMessageErreur(erreur), true);
@@ -17753,7 +18225,8 @@ function soumettreFormationAdministration(evenement) {
       bouton.textContent = 'Enregistrer';
       fermerModalFormationAdministration();
       afficherToast(resultat.message, false);
-      initialiserPageAdministration();
+      invaliderOngletAdministration_('configuration');
+      chargerConfigurationMetierAdministration_(true);
     })
     .withFailureHandler(function (erreur) {
       bouton.disabled = false;
@@ -17770,7 +18243,8 @@ function basculerFormationAdministration(idFormation, actif) {
   google.script.run
     .withSuccessHandler(function (resultat) {
       afficherToast(resultat.message, false);
-      initialiserPageAdministration();
+      invaliderOngletAdministration_('configuration');
+      chargerConfigurationMetierAdministration_(true);
     })
     .withFailureHandler(gererErreurServeur)
     .basculerActifFormationAdministration(
@@ -17803,7 +18277,8 @@ function supprimerFormationAdministration(idFormation) {
   google.script.run
     .withSuccessHandler(function (resultat) {
       afficherToast(resultat.message, false);
-      initialiserPageAdministration();
+      invaliderOngletAdministration_('configuration');
+      chargerConfigurationMetierAdministration_(true);
     })
     .withFailureHandler(gererErreurServeur)
     .supprimerFormationAdministration(
