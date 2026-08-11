@@ -334,6 +334,9 @@ function executerMigrationsInterne_(automatique, session) {
           'MIGRATION'
         );
       }
+      if (typeof invaliderTousCachesCiblesAccueil_ === 'function') {
+        invaliderTousCachesCiblesAccueil_('MIGRATION');
+      }
       journaliserActionSensible_(
         'MIGRATIONS_EXECUTION',
         'SCHEMA_BASE',

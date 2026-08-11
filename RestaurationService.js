@@ -1900,6 +1900,9 @@ function finaliserRollbackRestauration_(etat, proprietes) {
       'ROLLBACK_RESTAURATION'
     );
   }
+  if (typeof invaliderTousCachesCiblesAccueil_ === 'function') {
+    invaliderTousCachesCiblesAccueil_('ROLLBACK_RESTAURATION');
+  }
   proprietes.setProperty(
     PROPRIETE_DERNIERE_RESTAURATION_,
     JSON.stringify(construireEtatArchiveRestauration_(etat))
@@ -2195,6 +2198,9 @@ function finaliserOperationRestauration_(
       ],
       'RESTAURATION'
     );
+  }
+  if (typeof invaliderTousCachesCiblesAccueil_ === 'function') {
+    invaliderTousCachesCiblesAccueil_('RESTAURATION');
   }
   proprietes.setProperty(
     PROPRIETE_DERNIERE_RESTAURATION_,

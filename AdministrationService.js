@@ -338,6 +338,15 @@ function enregistrerFormationAdministrationInterne_(
         'RENOMMAGE_FORMATION_UTILISEE'
       );
     }
+    if (
+      formationExistante &&
+      formationExistante.libelle !== libelle &&
+      typeof invaliderCacheReferentielAccueil_ === 'function'
+    ) {
+      invaliderCacheReferentielAccueil_(
+        'RENOMMAGE_FORMATION_UTILISEE'
+      );
+    }
 
     journaliserActionSensible_(
       formationExistante

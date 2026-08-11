@@ -189,6 +189,9 @@ function initialiserApplicationInterne_(sessionUtilisateur) {
       'INITIALISATION_APPLICATION'
     );
   }
+  if (typeof invaliderTousCachesCiblesAccueil_ === 'function') {
+    invaliderTousCachesCiblesAccueil_('INITIALISATION_APPLICATION');
+  }
 
   journaliserActionSensible_(
     'APPLICATION_INITIALISATION',

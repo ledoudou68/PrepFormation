@@ -340,6 +340,11 @@ function executerReinitialisationProductionInterne_(
             'ROLLBACK_REINITIALISATION_PRODUCTION'
           );
         }
+        if (typeof invaliderTousCachesCiblesAccueil_ === 'function') {
+          invaliderTousCachesCiblesAccueil_(
+            'ROLLBACK_REINITIALISATION_PRODUCTION'
+          );
+        }
       } catch (erreurRollback) {
         throw new Error(
           'La réinitialisation a échoué et le rollback automatique est incomplet. La sauvegarde ' +
@@ -835,6 +840,11 @@ function invaliderCachesApresReinitialisation_() {
         'SESSIONS',
         'PRESENCES_STAGIAIRES'
       ],
+      'REINITIALISATION_PRODUCTION'
+    );
+  }
+  if (typeof invaliderTousCachesCiblesAccueil_ === 'function') {
+    invaliderTousCachesCiblesAccueil_(
       'REINITIALISATION_PRODUCTION'
     );
   }

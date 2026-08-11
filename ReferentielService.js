@@ -1370,5 +1370,11 @@ function verifierFormationActiveReferentiel_(formation) {
 
 
 function avecVerrouReferentiel_(traitement) {
-  return executerMutationMetier_(traitement);
+  return executerMutationMetier_(function () {
+    const resultat = traitement();
+    if (typeof invaliderCacheReferentielAccueil_ === 'function') {
+      invaliderCacheReferentielAccueil_('MUTATION_REFERENTIEL');
+    }
+    return resultat;
+  });
 }

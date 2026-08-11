@@ -288,10 +288,10 @@ function assertLectureUniqueAccueil(lectures) {
     ),
     [
       'PRESTATIONS_FORMATEURS',
+      'EVALUATIONS',
       'FORMATEURS',
       'CATEGORIES',
-      'REFERENTIEL',
-      'EVALUATIONS'
+      'REFERENTIEL'
     ]
   );
   assert.strictEqual(
@@ -420,6 +420,9 @@ assert(sourceClient.includes("'Traitements client'"));
 assert(sourceClient.includes("'Total chargement accueil'"));
 assert(sourceClient.includes('Mutualisation des lectures'));
 assert(sourceClient.includes('nombreLecturesSheetsEvitees'));
+assert(sourceClient.includes('nombreLecturesSheetsEviteesCaches'));
+assert(sourceClient.includes('Caches ciblés'));
+assert(sourceClient.includes("['HIT', 'MISS', 'RECONSTRUIT']"));
 assert(sourceClient.includes('feuillesLuesUneSeuleFois'));
 assert(sourceClient.includes("'PREMIERE_LECTURE'"));
 

@@ -20,6 +20,33 @@ const CONFIG_FRAICHEUR_STATUTS_ACCUEIL_ = Object.freeze({
 
 
 /**
+ * Caches ciblés du tableau de bord. Seules des structures dérivées, petites
+ * et relativement stables sont conservées dans CacheService. Les générations
+ * opaques sont les seules informations persistées dans Script Properties ;
+ * Google Sheets reste systématiquement la source d'autorité.
+ */
+const CONFIG_CACHES_CIBLES_ACCUEIL_ = Object.freeze({
+  cleGenerations: 'PREPFORMATION_ACCUEIL_CACHES_GENERATIONS',
+  versionGenerations: 1,
+  versionContenu: 1,
+  expirationSecondes: 21600,
+  tailleMaxJson: 80000,
+  familles: Object.freeze({
+    FORMATEURS: Object.freeze({
+      cleCache: 'PF_ACCUEIL_FORMATEURS_V1',
+      feuilles: Object.freeze(['FORMATEURS']),
+      lecturesSheets: 1
+    }),
+    REFERENTIEL: Object.freeze({
+      cleCache: 'PF_ACCUEIL_REFERENTIEL_V1',
+      feuilles: Object.freeze(['CATEGORIES', 'REFERENTIEL']),
+      lecturesSheets: 2
+    })
+  })
+});
+
+
+/**
  * Point d'entrée privé réservé au chargement de l'Accueil. Deux appels
  * concurrents relisent le marqueur sous DocumentLock : un seul effectue la
  * synchronisation, l'autre réutilise ensuite sa preuve de fraîcheur.
@@ -439,7 +466,538 @@ function renseignerDiagnosticFraicheurStatutsAccueil_(
 
 
 /**
- * Les éditions humaines dans les trois feuilles sources n'empruntent pas les
+ * Retourne l'index compact réellement utilisé par l'Accueil : identifiant du
+ * formateur vers son nom complet. La feuille complète n'est jamais stockée.
+ */
+function obtenirIndexFormateursCacheAccueil_(
+  classeur,
+  diagnostic
+) {
+  const resultat = obtenirValeurCacheCibleAccueil_(
+    'FORMATEURS',
+    diagnostic,
+    function () {
+      const debutLecture = Date.now();
+      const table = lireTableAccueil_(
+        classeur,
+        'FORMATEURS',
+        diagnostic
+      );
+      return {
+        donnees: lireFormateursAccueil_(table),
+        dureeLectureSheetsMs: Date.now() - debutLecture
+      };
+    }
+  );
+
+  return clonerIndexFormateursCacheAccueil_(resultat);
+}
+
+
+/**
+ * Retourne la structure active nécessaire aux progressions. Dans le cache,
+ * les ensembles sont sérialisés sous forme de tableaux d'identifiants ; ils
+ * sont recréés en mémoire avant tout calcul métier.
+ */
+function obtenirReferentielActifCacheAccueil_(
+  classeur,
+  diagnostic
+) {
+  const resultat = obtenirValeurCacheCibleAccueil_(
+    'REFERENTIEL',
+    diagnostic,
+    function () {
+      const debutLecture = Date.now();
+      const categories = lireTableAccueil_(
+        classeur,
+        'CATEGORIES',
+        diagnostic
+      );
+      const items = lireTableAccueil_(
+        classeur,
+        'REFERENTIEL',
+        diagnostic
+      );
+      const ensembles = lireItemsActifsParFormationAccueil_(
+        categories,
+        items
+      );
+      const serialisable = {};
+
+      Object.keys(ensembles).forEach(function (formation) {
+        serialisable[formation] = Array.from(ensembles[formation]);
+      });
+
+      return {
+        donnees: serialisable,
+        dureeLectureSheetsMs: Date.now() - debutLecture
+      };
+    }
+  );
+  const ensembles = {};
+
+  Object.keys(resultat || {}).forEach(function (formation) {
+    ensembles[formation] = new Set(resultat[formation]);
+  });
+
+  return ensembles;
+}
+
+
+function obtenirValeurCacheCibleAccueil_(
+  famille,
+  diagnostic,
+  construireDepuisSheets
+) {
+  const configuration = obtenirConfigurationCacheCibleAccueil_(famille);
+  const debutCache = Date.now();
+  const restaurationActive =
+    typeof restaurationBloqueEcritures_ === 'function' &&
+    restaurationBloqueEcritures_();
+  const generationsInitiales = lireGenerationsCachesCiblesAccueil_();
+  const generationInitiale = generationsInitiales[famille];
+
+  if (restaurationActive || generationsInitiales.__etatValide !== true) {
+    const construction = construireDepuisSheets();
+    renseignerDiagnosticCacheCibleAccueil_(diagnostic, {
+      cache: famille,
+      statut: 'MISS',
+      origine: restaurationActive
+        ? 'RESTAURATION'
+        : 'GENERATIONS_INDISPONIBLES',
+      generationCache: '',
+      generationSource: generationInitiale,
+      dureeCacheMs: Date.now() - debutCache,
+      dureeLectureSheetsEviteeMs: 0,
+      lecturesSheetsEvitees: 0
+    });
+    return construction.donnees;
+  }
+
+  const lectureInitiale = lireEntreeCacheCibleAccueil_(
+    configuration,
+    famille,
+    generationInitiale
+  );
+  if (lectureInitiale.valide) {
+    renseignerDiagnosticCacheCibleAccueil_(diagnostic, {
+      cache: famille,
+      statut: 'HIT',
+      origine: 'HIT',
+      generationCache: lectureInitiale.generationCache,
+      generationSource: generationInitiale,
+      dureeCacheMs: Date.now() - debutCache,
+      dureeLectureSheetsEviteeMs:
+        lectureInitiale.dureeLectureSheetsMs,
+      lecturesSheetsEvitees: configuration.lecturesSheets
+    });
+    return lectureInitiale.donnees;
+  }
+
+  const verrou = LockService.getDocumentLock();
+  const verrouDejaDetenu = typeof verrou.hasLock === 'function' &&
+    verrou.hasLock();
+  const verrouObtenu = verrouDejaDetenu || verrou.tryLock(15000);
+
+  if (!verrouObtenu) {
+    const constructionSansPublication = construireDepuisSheets();
+    renseignerDiagnosticCacheCibleAccueil_(diagnostic, {
+      cache: famille,
+      statut: 'MISS',
+      origine: 'VERROU_INDISPONIBLE',
+      generationCache: lectureInitiale.generationCache,
+      generationSource: generationInitiale,
+      dureeCacheMs: Date.now() - debutCache,
+      dureeLectureSheetsEviteeMs: 0,
+      lecturesSheetsEvitees: 0
+    });
+    return constructionSansPublication.donnees;
+  }
+
+  try {
+    // Un autre appel a pu reconstruire le cache pendant l'attente du verrou.
+    const generationsVerrouillees =
+      lireGenerationsCachesCiblesAccueil_();
+    const generationVerrouillee = generationsVerrouillees[famille];
+    const lectureApresVerrou =
+      generationsVerrouillees.__etatValide === true
+        ? lireEntreeCacheCibleAccueil_(
+          configuration,
+          famille,
+          generationVerrouillee
+        )
+        : creerLectureCacheInvalideAccueil_(
+          'GENERATIONS_INDISPONIBLES',
+          ''
+        );
+    const origineReconstruction =
+      lectureApresVerrou.origine === 'MISS' &&
+      lectureInitiale.origine !== 'MISS'
+        ? lectureInitiale.origine
+        : lectureApresVerrou.origine;
+
+    if (lectureApresVerrou.valide) {
+      renseignerDiagnosticCacheCibleAccueil_(diagnostic, {
+        cache: famille,
+        statut: 'HIT',
+        origine: 'RECONSTRUCTION_CONCURRENTE',
+        generationCache: lectureApresVerrou.generationCache,
+        generationSource: generationVerrouillee,
+        dureeCacheMs: Date.now() - debutCache,
+        dureeLectureSheetsEviteeMs:
+          lectureApresVerrou.dureeLectureSheetsMs,
+        lecturesSheetsEvitees: configuration.lecturesSheets
+      });
+      return lectureApresVerrou.donnees;
+    }
+
+    const construction = construireDepuisSheets();
+    const generationsApresConstruction =
+      lireGenerationsCachesCiblesAccueil_();
+    const generationApres = generationsApresConstruction[famille];
+    let publie = false;
+
+    if (
+      generationsVerrouillees.__etatValide === true &&
+      generationsApresConstruction.__etatValide === true &&
+      generationApres === generationVerrouillee
+    ) {
+      publie = publierEntreeCacheCibleAccueil_(
+        configuration,
+        famille,
+        generationVerrouillee,
+        construction
+      );
+    }
+
+    renseignerDiagnosticCacheCibleAccueil_(diagnostic, {
+      cache: famille,
+      statut: publie ? 'RECONSTRUIT' : 'MISS',
+      origine: generationsApresConstruction.__etatValide !== true ||
+        generationsVerrouillees.__etatValide !== true
+        ? 'GENERATIONS_INDISPONIBLES'
+        : generationApres !== generationVerrouillee
+        ? 'GENERATION_MODIFIEE_PENDANT_CONSTRUCTION'
+        : origineReconstruction,
+      generationCache: publie ? generationVerrouillee : '',
+      generationSource: generationApres,
+      dureeCacheMs: Date.now() - debutCache,
+      dureeLectureSheetsEviteeMs: 0,
+      lecturesSheetsEvitees: 0
+    });
+    return construction.donnees;
+  } finally {
+    if (!verrouDejaDetenu) {
+      verrou.releaseLock();
+    }
+  }
+}
+
+
+function lireEntreeCacheCibleAccueil_(
+  configuration,
+  famille,
+  generationSource
+) {
+  let contenu = '';
+  try {
+    contenu = CacheService
+      .getScriptCache()
+      .get(configuration.cleCache) || '';
+  } catch (erreurLecture) {
+    return creerLectureCacheInvalideAccueil_(
+      'CACHE_INDISPONIBLE',
+      ''
+    );
+  }
+
+  if (!contenu) {
+    return creerLectureCacheInvalideAccueil_('MISS', '');
+  }
+
+  let entree;
+  try {
+    entree = JSON.parse(contenu);
+  } catch (erreurJson) {
+    supprimerEntreeCacheCibleAccueilSansBloquer_(configuration);
+    return creerLectureCacheInvalideAccueil_('CORROMPU', '');
+  }
+
+  const generationCache = String(entree && entree.generation || '');
+  if (
+    !entree ||
+    Number(entree.version) !==
+      CONFIG_CACHES_CIBLES_ACCUEIL_.versionContenu ||
+    String(entree.famille || '') !== famille ||
+    !validerDonneesCacheCibleAccueil_(famille, entree.donnees)
+  ) {
+    supprimerEntreeCacheCibleAccueilSansBloquer_(configuration);
+    return creerLectureCacheInvalideAccueil_(
+      'CORROMPU',
+      generationCache
+    );
+  }
+
+  if (generationCache !== generationSource) {
+    supprimerEntreeCacheCibleAccueilSansBloquer_(configuration);
+    return creerLectureCacheInvalideAccueil_(
+      'GENERATION_DIFFERENTE',
+      generationCache
+    );
+  }
+
+  return {
+    valide: true,
+    origine: 'HIT',
+    generationCache: generationCache,
+    donnees: entree.donnees,
+    dureeLectureSheetsMs: Math.max(
+      0,
+      Number(entree.dureeLectureSheetsMs || 0)
+    )
+  };
+}
+
+
+function creerLectureCacheInvalideAccueil_(origine, generationCache) {
+  return {
+    valide: false,
+    origine: String(origine || 'MISS'),
+    generationCache: String(generationCache || ''),
+    donnees: null,
+    dureeLectureSheetsMs: 0
+  };
+}
+
+
+function publierEntreeCacheCibleAccueil_(
+  configuration,
+  famille,
+  generation,
+  construction
+) {
+  const entree = {
+    version: CONFIG_CACHES_CIBLES_ACCUEIL_.versionContenu,
+    famille: famille,
+    generation: generation,
+    dureeLectureSheetsMs: Math.max(
+      0,
+      Number(construction.dureeLectureSheetsMs || 0)
+    ),
+    donnees: construction.donnees
+  };
+  let contenu;
+
+  try {
+    contenu = JSON.stringify(entree);
+  } catch (erreurSerialisation) {
+    return false;
+  }
+
+  if (
+    !contenu ||
+    contenu.length > CONFIG_CACHES_CIBLES_ACCUEIL_.tailleMaxJson
+  ) {
+    return false;
+  }
+
+  try {
+    CacheService.getScriptCache().put(
+      configuration.cleCache,
+      contenu,
+      CONFIG_CACHES_CIBLES_ACCUEIL_.expirationSecondes
+    );
+    return true;
+  } catch (erreurPublication) {
+    return false;
+  }
+}
+
+
+function validerDonneesCacheCibleAccueil_(famille, donnees) {
+  if (!donnees || typeof donnees !== 'object' || Array.isArray(donnees)) {
+    return false;
+  }
+
+  return Object.keys(donnees).every(function (cle) {
+    if (!cle || cle.length > 500) return false;
+    if (famille === 'FORMATEURS') {
+      return typeof donnees[cle] === 'string';
+    }
+    return famille === 'REFERENTIEL' &&
+      Array.isArray(donnees[cle]) &&
+      donnees[cle].every(function (idItem) {
+        return typeof idItem === 'string';
+      });
+  });
+}
+
+
+function clonerIndexFormateursCacheAccueil_(valeur) {
+  const resultat = {};
+  Object.keys(valeur || {}).forEach(function (idFormateur) {
+    resultat[idFormateur] = String(valeur[idFormateur] || '');
+  });
+  return resultat;
+}
+
+
+function obtenirConfigurationCacheCibleAccueil_(famille) {
+  const configuration =
+    CONFIG_CACHES_CIBLES_ACCUEIL_.familles[String(famille || '')];
+  if (!configuration) {
+    throw new Error('Famille de cache Accueil inconnue.');
+  }
+  return configuration;
+}
+
+
+function lireGenerationsCachesCiblesAccueil_() {
+  let contenu = '';
+  let valeur = null;
+  try {
+    contenu = PropertiesService
+      .getScriptProperties()
+      .getProperty(CONFIG_CACHES_CIBLES_ACCUEIL_.cleGenerations) || '';
+    valeur = contenu ? JSON.parse(contenu) : null;
+  } catch (erreurLecture) {
+    contenu = '__LECTURE_EN_ECHEC__';
+    valeur = null;
+  }
+  const conforme = !contenu || Boolean(valeur &&
+    Number(valeur.version) ===
+      CONFIG_CACHES_CIBLES_ACCUEIL_.versionGenerations);
+  const resultat = { __etatValide: conforme };
+
+  Object.keys(CONFIG_CACHES_CIBLES_ACCUEIL_.familles).forEach(
+    function (famille) {
+      resultat[famille] = conforme && valeur &&
+        typeof valeur[famille] === 'string' &&
+        valeur[famille]
+        ? valeur[famille]
+        : 'GENERATION_INITIALE';
+    }
+  );
+  return resultat;
+}
+
+
+/**
+ * Invalidation ciblée après mutation réussie. La génération rend toute
+ * ancienne entrée inutilisable, même si CacheService refuse sa suppression.
+ */
+function invaliderCachesCiblesAccueil_(familles, motif) {
+  const demandees = Array.isArray(familles) ? familles : [familles];
+  const cibles = Array.from(new Set(demandees.map(function (famille) {
+    return String(famille || '').trim().toUpperCase();
+  }).filter(function (famille) {
+    return Object.prototype.hasOwnProperty.call(
+      CONFIG_CACHES_CIBLES_ACCUEIL_.familles,
+      famille
+    );
+  })));
+
+  if (!cibles.length) return {};
+
+  const verrou = LockService.getScriptLock();
+  const verrouDejaDetenu = typeof verrou.hasLock === 'function' &&
+    verrou.hasLock();
+  if (!verrouDejaDetenu && !verrou.tryLock(10000)) {
+    throw new Error('Les caches Accueil sont momentanément indisponibles.');
+  }
+
+  const nouvellesGenerations = {};
+  try {
+    const proprietes = PropertiesService.getScriptProperties();
+    const generations = lireGenerationsCachesCiblesAccueil_();
+    const famillesAActualiser = generations.__etatValide === true
+      ? cibles
+      : Object.keys(CONFIG_CACHES_CIBLES_ACCUEIL_.familles);
+    famillesAActualiser.forEach(function (famille) {
+      const generation = 'GEN_' + Utilities.getUuid();
+      generations[famille] = generation;
+      nouvellesGenerations[famille] = generation;
+    });
+    proprietes.setProperty(
+      CONFIG_CACHES_CIBLES_ACCUEIL_.cleGenerations,
+      JSON.stringify({
+        version: CONFIG_CACHES_CIBLES_ACCUEIL_.versionGenerations,
+        FORMATEURS: generations.FORMATEURS,
+        REFERENTIEL: generations.REFERENTIEL
+      })
+    );
+  } finally {
+    if (!verrouDejaDetenu) {
+      verrou.releaseLock();
+    }
+  }
+
+  Object.keys(nouvellesGenerations).forEach(function (famille) {
+    supprimerEntreeCacheCibleAccueilSansBloquer_(
+      CONFIG_CACHES_CIBLES_ACCUEIL_.familles[famille]
+    );
+  });
+
+  return nouvellesGenerations;
+}
+
+
+function invaliderCacheFormateursAccueil_(motif) {
+  return invaliderCachesCiblesAccueil_('FORMATEURS', motif);
+}
+
+
+function invaliderCacheReferentielAccueil_(motif) {
+  return invaliderCachesCiblesAccueil_('REFERENTIEL', motif);
+}
+
+
+function invaliderTousCachesCiblesAccueil_(motif) {
+  return invaliderCachesCiblesAccueil_(
+    ['FORMATEURS', 'REFERENTIEL'],
+    motif
+  );
+}
+
+
+function supprimerEntreeCacheCibleAccueilSansBloquer_(configuration) {
+  try {
+    CacheService.getScriptCache().remove(configuration.cleCache);
+  } catch (erreurSuppression) {
+    // La génération persistante suffit à refuser une ancienne entrée.
+  }
+}
+
+
+function renseignerDiagnosticCacheCibleAccueil_(diagnostic, mesure) {
+  if (!diagnostic) return;
+  if (!Array.isArray(diagnostic.cachesCibles)) {
+    diagnostic.cachesCibles = [];
+  }
+  diagnostic.cachesCibles.push({
+    cache: String(mesure.cache || ''),
+    statut: String(mesure.statut || 'MISS'),
+    origine: String(mesure.origine || 'MISS'),
+    generationCache: String(mesure.generationCache || ''),
+    generationSource: String(mesure.generationSource || ''),
+    dureeCacheMs: Math.max(0, Number(mesure.dureeCacheMs || 0)),
+    dureeLectureSheetsEviteeMs: Math.max(
+      0,
+      Number(mesure.dureeLectureSheetsEviteeMs || 0)
+    ),
+    lecturesSheetsEvitees: Math.max(
+      0,
+      Number(mesure.lecturesSheetsEvitees || 0)
+    )
+  });
+  diagnostic.nombreLecturesSheetsEviteesCaches = Number(
+    diagnostic.nombreLecturesSheetsEviteesCaches || 0
+  ) + Math.max(0, Number(mesure.lecturesSheetsEvitees || 0));
+}
+
+
+/**
+ * Les éditions humaines dans les feuilles sources n'empruntent pas les
  * services métier. Le simple trigger couvre ces éditions. Les écritures Apps
  * Script n'activent pas onEdit et conservent donc leurs invalidations
  * explicites dans les services concernés.
@@ -453,13 +1011,25 @@ function onEdit(e) {
     const nom = feuille && feuille.getName
       ? String(feuille.getName() || '')
       : '';
+    let invalide = false;
     if (
-      !CONFIG_FRAICHEUR_STATUTS_ACCUEIL_.feuillesSources.includes(nom)
+      CONFIG_FRAICHEUR_STATUTS_ACCUEIL_.feuillesSources.includes(nom)
     ) {
-      return false;
+      invaliderGenerationSourcesStatuts_(
+        nom,
+        'EDITION_DIRECTE_SHEETS'
+      );
+      invalide = true;
     }
-    invaliderGenerationSourcesStatuts_(nom, 'EDITION_DIRECTE_SHEETS');
-    return true;
+    if (nom === 'FORMATEURS') {
+      invaliderCacheFormateursAccueil_('EDITION_DIRECTE_SHEETS');
+      invalide = true;
+    }
+    if (['CATEGORIES', 'REFERENTIEL'].includes(nom)) {
+      invaliderCacheReferentielAccueil_('EDITION_DIRECTE_SHEETS');
+      invalide = true;
+    }
+    return invalide;
   } catch (erreur) {
     // Un simple trigger ne doit jamais empêcher l'édition de la cellule.
     return false;

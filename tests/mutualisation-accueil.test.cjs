@@ -594,7 +594,7 @@ function normaliserReponse(reponse) {
 assert(sourceStagiaires.includes(
   'function synchroniserStatutsStagiairesPourAccueil_('
 ));
-assert(!sourceAccueil.includes('CacheService'));
+assert(sourceAccueil.includes("typeof CacheService !== 'undefined'"));
 assert(!sourceStagiaires.includes('instantanesAccueil.diagnostic'));
 
 console.log(

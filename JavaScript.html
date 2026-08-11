@@ -503,6 +503,7 @@ function normaliserDiagnosticServeurAccueil_(diagnosticServeur) {
     'constructionHtmlMs',
     'constructionReponseMs',
     'nombreLecturesSheetsEvitees',
+    'nombreLecturesSheetsEviteesCaches',
     'feuillesLuesUneSeuleFois',
     'totalServeurMs'
   ].forEach(function (cle) {
@@ -532,6 +533,42 @@ function normaliserDiagnosticServeurAccueil_(diagnosticServeur) {
     }
     return { feuille: feuille, mode: mode };
   }).filter(Boolean);
+  resultat.cachesCibles = (source.cachesCibles || []).map(
+    function (cache) {
+      const nom = String(cache && cache.cache || '').trim();
+      const statut = String(cache && cache.statut || '').trim();
+      const origine = String(cache && cache.origine || '').trim();
+      if (
+        !['FORMATEURS', 'REFERENTIEL'].includes(nom) ||
+        !['HIT', 'MISS', 'RECONSTRUIT'].includes(statut) ||
+        !/^[A-Z0-9_]{1,80}$/.test(origine)
+      ) {
+        return null;
+      }
+      const mesure = {
+        cache: nom,
+        statut: statut,
+        origine: origine
+      };
+      [
+        'dureeCacheMs',
+        'dureeLectureSheetsEviteeMs',
+        'lecturesSheetsEvitees'
+      ].forEach(function (cle) {
+        const valeur = Number(cache[cle]);
+        mesure[cle] = Number.isFinite(valeur) && valeur >= 0
+          ? Math.round(valeur * 100) / 100
+          : 0;
+      });
+      ['generationCache', 'generationSource'].forEach(function (cle) {
+        const valeur = String(cache[cle] || '');
+        mesure[cle] = /^[A-Za-z0-9_-]{0,80}$/.test(valeur)
+          ? valeur
+          : '';
+      });
+      return mesure;
+    }
+  ).filter(Boolean);
   const statutSynchronisation = String(
     source.statutSynchronisation || ''
   );
@@ -14036,6 +14073,49 @@ function creerOperationDiagnosticAccueilAdministration_(operation) {
         <span>Feuilles lues une seule fois</span>
         <strong>${Number(
           serveur.feuillesLuesUneSeuleFois || 0
+        )}</strong>
+      </div>
+    `);
+  }
+  if ((serveur.cachesCibles || []).length) {
+    details.push(`
+      <h5>Caches ciblés</h5>
+      ${(serveur.cachesCibles || []).map(function (cache) {
+        const libelleStatut = cache.statut === 'RECONSTRUIT'
+          ? cache.origine + ' → Reconstruit'
+          : cache.statut === 'HIT'
+            ? 'HIT'
+            : 'MISS (' + cache.origine + ')';
+        return `
+          <div>
+            <span>${echapperHtml(cache.cache)}</span>
+            <strong>${echapperHtml(libelleStatut)}</strong>
+          </div>
+          <div>
+            <span>Génération cache / source</span>
+            <strong>${echapperHtml(
+              String(cache.generationCache || '—') + ' / ' +
+              String(cache.generationSource || '—')
+            )}</strong>
+          </div>
+          <div>
+            <span>Accès cache</span>
+            <strong>${formaterDureeDiagnosticConnexion_(
+              cache.dureeCacheMs
+            )}</strong>
+          </div>
+          <div>
+            <span>Lecture Sheets évitée</span>
+            <strong>${formaterDureeDiagnosticConnexion_(
+              cache.dureeLectureSheetsEviteeMs
+            )}</strong>
+          </div>
+        `;
+      }).join('')}
+      <div>
+        <span>Lectures Sheets évitées par cache</span>
+        <strong>${Number(
+          serveur.nombreLecturesSheetsEviteesCaches || 0
         )}</strong>
       </div>
     `);

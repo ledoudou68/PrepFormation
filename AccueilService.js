@@ -62,9 +62,6 @@ function getDonneesTableauBordAccueil(
     'SESSIONS',
     'PRESENCES_STAGIAIRES',
     'PRESTATIONS_FORMATEURS',
-    'FORMATEURS',
-    'CATEGORIES',
-    'REFERENTIEL',
     'EVALUATIONS'
   ].forEach(function (nomFeuille) {
     const instantane = instantanesAccueil[nomFeuille];
@@ -134,9 +131,15 @@ function getDonneesTableauBordAccueil(
   );
 
   debutEtape = diagnostic ? Date.now() : 0;
-  const formateursParId = lireFormateursAccueil_(
-    tables.FORMATEURS
-  );
+  const cachesCiblesDisponibles =
+    typeof CacheService !== 'undefined' &&
+    typeof obtenirIndexFormateursCacheAccueil_ === 'function' &&
+    typeof obtenirReferentielActifCacheAccueil_ === 'function';
+  const formateursParId = cachesCiblesDisponibles
+    ? obtenirIndexFormateursCacheAccueil_(classeur, diagnostic)
+    : lireFormateursAccueil_(
+      lireTableAccueil_(classeur, 'FORMATEURS', diagnostic)
+    );
   ajouterDureeDiagnosticAccueil_(
     diagnostic,
     'transformationsMs',
@@ -195,10 +198,12 @@ function getDonneesTableauBordAccueil(
 
   debutEtape = diagnostic ? Date.now() : 0;
   const itemsActifsParFormation =
-    lireItemsActifsParFormationAccueil_(
-      tables.CATEGORIES,
-      tables.REFERENTIEL
-    );
+    cachesCiblesDisponibles
+      ? obtenirReferentielActifCacheAccueil_(classeur, diagnostic)
+      : lireItemsActifsParFormationAccueil_(
+        lireTableAccueil_(classeur, 'CATEGORIES', diagnostic),
+        lireTableAccueil_(classeur, 'REFERENTIEL', diagnostic)
+      );
   ajouterDureeDiagnosticAccueil_(
     diagnostic,
     'transformationsMs',
@@ -783,8 +788,10 @@ function creerDiagnosticServeurChargementAccueil_(operation) {
     constructionReponseMs: 0,
     totalServeurMs: 0,
     nombreLecturesSheetsEvitees: 0,
+    nombreLecturesSheetsEviteesCaches: 0,
     feuillesLuesUneSeuleFois: 0,
     mutualisationLectures: [],
+    cachesCibles: [],
     lecturesFeuilles: [],
     appelsAutresServices: [],
     etapesTraitement: []

@@ -300,6 +300,9 @@ function importerReferentielXlsx(
         donnees.feuilleItems,
         feuilleHistorique
       );
+      if (typeof invaliderCacheReferentielAccueil_ === 'function') {
+        invaliderCacheReferentielAccueil_('IMPORT_REFERENTIEL');
+      }
       supprimerObjetImportReferentiel_(
         PREFIXE_CACHE_PLAN_IMPORT_REFERENTIEL_,
         idPlan

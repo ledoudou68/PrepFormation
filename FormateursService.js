@@ -174,6 +174,14 @@ function enregistrerFormateurInterne_(donnees, sessionUtilisateur) {
     invaliderSessionsFormateurParIdFormateur_(idFormateur);
   }
 
+  if (typeof invaliderCacheFormateursAccueil_ === 'function') {
+    invaliderCacheFormateursAccueil_(
+      donnees.idFormateur
+        ? 'MODIFICATION_FORMATEUR'
+        : 'CREATION_FORMATEUR'
+    );
+  }
+
   journaliserActionSensible_(
     donnees.idFormateur
       ? 'FORMATEUR_MODIFICATION'

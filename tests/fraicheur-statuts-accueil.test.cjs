@@ -22,6 +22,7 @@ function creerEnvironnement() {
   let verrouDetenu = false;
   let verrouScriptDetenu = false;
   let avantAcquisition = null;
+  const cache = {};
 
   const scriptProperties = {
     getProperties() { return Object.assign({}, proprietes); },
@@ -76,6 +77,15 @@ function creerEnvironnement() {
             return true;
           },
           releaseLock() { verrouScriptDetenu = false; }
+        };
+      }
+    },
+    CacheService: {
+      getScriptCache() {
+        return {
+          get(cle) { return cache[cle] || null; },
+          put(cle, valeur) { cache[cle] = String(valeur); },
+          remove(cle) { delete cache[cle]; }
         };
       }
     },
@@ -303,7 +313,7 @@ function creerEnvironnement() {
         }
       }
     }),
-    false
+    true
   );
   assert.strictEqual(
     environnement.lireEtatPersistant().generationCourante,
@@ -397,7 +407,9 @@ assert(sourcesMutations.ReinitialisationProductionService.includes(
   "'ROLLBACK_REINITIALISATION_PRODUCTION'"
 ));
 assert(!source.includes('.getProperties()'));
-assert(!source.includes('CacheService'));
+assert(source.includes('CacheService'));
+assert(source.includes('PF_ACCUEIL_FORMATEURS_V1'));
+assert(source.includes('PF_ACCUEIL_REFERENTIEL_V1'));
 
 console.log(
   '✓ fraîcheur Accueil : génération, invalidations, reprise et concurrence'
